@@ -185,3 +185,40 @@ func test_last_player_with_cards_lie_gets_shot():
 	var gunshot := _find(result["events"], "gunshot")
 	assert_eq(gunshot["pid"], pid)
 	assert_has(_types(result["events"]), "round_started")
+
+
+# —— 断线淘汰 ——
+
+func test_eliminate_player_advances_turn_and_voids_their_play():
+	var gs := _make_gs()
+	var a = gs.current_pid
+	gs.play_cards(a, [0])
+	var b = gs.current_pid
+	var events := gs.eliminate_player(a)
+	assert_has(_types(events), "eliminated")
+	assert_true(gs.last_play.is_empty())
+	assert_eq(gs.current_pid, b)
+	assert_false(gs.alive[a])
+
+
+func test_eliminate_current_player_passes_turn():
+	var gs := _make_gs()
+	var a = gs.current_pid
+	var events := gs.eliminate_player(a)
+	assert_has(_types(events), "turn")
+	assert_ne(gs.current_pid, a)
+
+
+func test_eliminate_down_to_one_wins_match():
+	var gs := _make_gs([1, 2], 8)
+	var loser = gs.current_pid
+	var winner = _seat_after(gs, loser)
+	var events := gs.eliminate_player(loser)
+	assert_has(_types(events), "match_over")
+	assert_eq(gs.winner_pid, winner)
+
+
+func test_eliminate_dead_or_after_match_over_is_noop():
+	var gs := _make_gs([1, 2], 8)
+	gs.eliminate_player(gs.current_pid)
+	assert_eq(gs.eliminate_player(gs.winner_pid).size(), 0)
