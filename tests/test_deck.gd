@@ -37,3 +37,9 @@ func test_pick_target_is_never_joker():
 	for i in 50:
 		var target := Deck.pick_target(rng)
 		assert_true(target in [Card.QUEEN, Card.KING, Card.ACE])
+
+
+func test_deal_supports_max_four_players():
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6
+	assert_eq(Deck.deal([1, 2, 3, 4], rng).size(), 4)

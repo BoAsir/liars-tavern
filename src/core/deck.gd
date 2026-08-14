@@ -16,6 +16,8 @@ static func build() -> Array[int]:
 
 static func deal(player_ids: Array, rng: RandomNumberGenerator) -> Dictionary:
 	# 返回 {player_id: Array 五张手牌},Fisher-Yates 洗牌。
+	assert(not player_ids.is_empty(), "player_ids must not be empty")
+	assert(player_ids.size() * HAND_SIZE <= build().size(), "not enough cards for this many players")
 	var cards := build()
 	for i in range(cards.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
