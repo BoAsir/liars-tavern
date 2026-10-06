@@ -5,7 +5,7 @@ extends Node
 
 
 const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
-const INTRO_MOVE := 1.7           # 开局运镜到越肩机位的时长
+const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到越肩机位的时长(须在房主给的开场预算之内)
 
 var screen: Node        # TableScreen
 var app: Node

@@ -391,6 +391,4 @@ func _submit_challenge() -> void:
 
 func _confirm_leave() -> void:
 	var overlay: ConfirmOverlay = app.confirm("离开牌桌会被判出局,确定吗?" if not Net.is_host else "你是房主,离开会解散整桌,确定吗?", "离开")
-	overlay.confirmed.connect(func():
-		Net.leave()
-		Net.left_lobby.emit(""))
+	overlay.confirmed.connect(func(): Net.end_session())

@@ -285,6 +285,4 @@ func _on_ready_toggled() -> void:
 
 func _on_leave_pressed() -> void:
 	var overlay: ConfirmOverlay = app.confirm("确定离开房间吗?" + ("\n你是房主,离开后房间会解散。" if Net.is_host else ""), "离开")
-	overlay.confirmed.connect(func():
-		Net.leave()
-		Net.left_lobby.emit(""))
+	overlay.confirmed.connect(func(): Net.end_session())

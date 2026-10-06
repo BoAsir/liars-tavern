@@ -94,7 +94,8 @@ func _process(delta: float) -> void:
 
 
 func _bot_act(screen: Node) -> void:
-	var can_challenge: bool = not screen.pub.get("last_play", {}).is_empty()
+	# 与界面同一规则:不能质疑自己的出牌(断线后轮转可能回到出牌者)
+	var can_challenge: bool = screen._can_challenge()
 	var hand_size: int = screen.cards.my_cards.size()
 	if can_challenge and (randf() < CHALLENGE_CHANCE or hand_size == 0):
 		screen._submit_challenge()

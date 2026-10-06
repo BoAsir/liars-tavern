@@ -137,6 +137,9 @@ func _play_intro(panel: PanelContainer) -> void:
 # —— 焦点 ——
 
 func _focus_default() -> void:
+	# 延迟调用:切屏可能已把本面板移出场景树
+	if not is_inside_tree():
+		return
 	# 说明书/确认框正拿着焦点时不抢:否则回车会在它们背后按下结算按钮
 	var focused := get_viewport().gui_get_focus_owner()
 	if focused == null or not focused.is_visible_in_tree():
@@ -149,5 +152,4 @@ func _is_focus_key(event: InputEvent) -> bool:
 
 func _on_leave() -> void:
 	Sfx.play("ui_click")
-	Net.leave()
-	Net.left_lobby.emit("")
+	Net.end_session()
