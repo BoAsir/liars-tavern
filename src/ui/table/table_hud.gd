@@ -2,6 +2,7 @@ class_name TableHud
 extends Control
 # 牌桌 HUD:左上目标牌与局数、右上说明书按钮、顶部回合横幅与环形倒计时、底部出牌/质疑按钮与快捷键提示、
 # 右侧事件日志、左下自己的弹巢、屏幕中央的大字宣告与自己的对话气泡。
+# 按钮都不抢键盘焦点:回车/空格/C 由牌桌的快捷键统一处理,焦点留在按钮上会在松键时再触发一次。
 
 
 signal play_pressed
@@ -9,6 +10,7 @@ signal challenge_pressed
 signal rules_pressed
 
 const LOG_LINES := 6
+const MY_BUBBLE_GAP := 2.0   # 自己气泡的小三角尖与出牌按钮行之间的留白
 
 var _target_tex: TextureRect
 var _target_name: Label
@@ -54,11 +56,12 @@ func _build_target_panel() -> void:
 	_target_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_target_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_target_tex.texture = CardFaces.texture(CardFaces.BACK)
+	_center_pivot(_target_tex)
 	row.add_child(_target_tex)
 	var info := VBoxContainer.new()
 	info.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(info)
-	_round_label = UiTheme.label("准备开局", 14, UiTheme.MUTED)
+	_round_label = UiTheme.label("准备开局", 15, UiTheme.MUTED)
 	info.add_child(_round_label)
 	info.add_child(UiTheme.label("本局目标", 15, UiTheme.PARCHMENT_DIM))
 	_target_name = UiTheme.label("?", 34, UiTheme.BRASS_BRIGHT, UiTheme.display_font())
@@ -88,6 +91,7 @@ func _build_turn_banner() -> void:
 	_turn_panel = PanelContainer.new()
 	_turn_panel.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL, Color(UiTheme.BRASS, 0.6), 1, 22))
 	_turn_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_center_pivot(_turn_panel)
 	holder.add_child(_turn_panel)
 	_turn_label = UiTheme.label("", 22, UiTheme.PARCHMENT, UiTheme.display_font())
 	_turn_panel.add_child(_turn_label)
@@ -118,14 +122,16 @@ func _build_actions() -> void:
 	_challenge_button = UiTheme.button("质疑!")
 	_challenge_button.custom_minimum_size = Vector2(150, 54)
 	_challenge_button.add_theme_font_size_override("font_size", 26)
+	_challenge_button.focus_mode = Control.FOCUS_NONE
 	_challenge_button.pressed.connect(func(): challenge_pressed.emit())
 	row.add_child(_challenge_button)
 	_play_button = UiTheme.button("出牌", true)
 	_play_button.custom_minimum_size = Vector2(180, 54)
 	_play_button.add_theme_font_size_override("font_size", 26)
+	_play_button.focus_mode = Control.FOCUS_NONE
 	_play_button.pressed.connect(func(): play_pressed.emit())
 	row.add_child(_play_button)
-	_hint = UiTheme.label("", 14, UiTheme.MUTED)
+	_hint = UiTheme.label("", 15, UiTheme.MUTED)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	holder.add_child(_hint)
 	set_actions(false, false, 0, false)
@@ -153,7 +159,8 @@ func _build_my_status() -> void:
 	box.add_child(_my_name)
 	_my_dots = ChamberDots.new(6.0)
 	box.add_child(_my_dots)
-	_my_status = UiTheme.label("", 13, UiTheme.MUTED)
+	# 下一枪中弹概率只在这里显示:最小窗口(缩放 0.8)下也要看得清
+	_my_status = UiTheme.label("", 16, UiTheme.MUTED)
 	box.add_child(_my_status)
 
 
@@ -165,6 +172,7 @@ func _build_announce() -> void:
 	_announce_box.position.y -= 90
 	_announce_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_announce_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_center_pivot(_announce_box)
 	add_child(_announce_box)
 	_announce = UiTheme.label("", 76, UiTheme.BRASS_BRIGHT, UiTheme.title_font())
 	_announce.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -190,6 +198,11 @@ func _corner_panel(preset: int, offset: Vector2) -> PanelContainer:
 	return panel
 
 
+func _center_pivot(control: Control) -> void:
+	# 弹跳/缩放绕控件中心:尺寸随文字变,要等布局完成(resized)后再定支点,不能用改文字那一刻的旧尺寸
+	control.resized.connect(func(): control.pivot_offset = control.size / 2.0)
+
+
 # —— 更新 ——
 
 func set_target(kind: int, round_number: int) -> void:
@@ -197,7 +210,6 @@ func set_target(kind: int, round_number: int) -> void:
 	_target_name.text = "「%s」" % Card.NAMES.get(kind, "?")
 	_round_label.text = "第 %d 局" % round_number
 	var tween := create_tween()
-	_target_tex.pivot_offset = _target_tex.size / 2.0
 	tween.tween_property(_target_tex, "scale", Vector2(1.25, 1.25), 0.12)
 	tween.tween_property(_target_tex, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
@@ -210,7 +222,6 @@ func set_turn(text: String, mine: bool) -> void:
 	style.border_color = UiTheme.BRASS_BRIGHT if mine else Color(UiTheme.BRASS, 0.6)
 	style.set_border_width_all(2 if mine else 1)
 	if mine:
-		_turn_panel.pivot_offset = _turn_panel.size / 2.0
 		var tween := create_tween()
 		tween.tween_property(_turn_panel, "scale", Vector2(1.12, 1.12), 0.12)
 		tween.tween_property(_turn_panel, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
@@ -270,7 +281,6 @@ func announce(text: String, color: Color, sub := "", hold := 1.0) -> void:
 	_announce.text = text
 	_announce.add_theme_color_override("font_color", color)
 	_announce_sub.text = sub
-	_announce_box.pivot_offset = _announce_box.size / 2.0
 	_announce_box.scale = Vector2(1.6, 1.6)
 	_announce_box.modulate.a = 0.0
 	_announce_tween = create_tween()
@@ -282,6 +292,14 @@ func announce(text: String, color: Color, sub := "", hold := 1.0) -> void:
 
 
 func my_bubble(text: String, color := UiTheme.INK) -> void:
+	# 自己的声称 /「骗子!」:越肩镜头下自己头顶在画面外,改在出牌按钮行上方居中弹出;新的一句顶掉旧的
+	for old in _bubble_anchor.get_children():
+		_bubble_anchor.remove_child(old)
+		old.queue_free()
 	var bubble := SpeechBubble.new(text, color)
 	_bubble_anchor.add_child(bubble)
-	bubble.position = Vector2(-60, -10)
+	# 底边中点贴住锚点底边(留出小三角),随文字宽度向两侧、向上长
+	bubble.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE,
+		int(SpeechBubble.TAIL_LENGTH + MY_BUBBLE_GAP))
+	bubble.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	bubble.grow_vertical = Control.GROW_DIRECTION_BEGIN

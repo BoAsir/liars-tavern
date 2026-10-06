@@ -26,7 +26,8 @@ func _init(display_name: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
 	box.add_child(row)
-	_cards = UiTheme.label("", 14, UiTheme.PARCHMENT_DIM)
+	# 对手手牌数只在这里显示:最小窗口(缩放 0.8)下也要看得清
+	_cards = UiTheme.label("", 15, UiTheme.PARCHMENT_DIM)
 	row.add_child(_cards)
 	_dots = ChamberDots.new(4.0)
 	row.add_child(_dots)

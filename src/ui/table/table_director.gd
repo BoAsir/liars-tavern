@@ -4,6 +4,9 @@ extends Node
 # 每段演出时长须不超过 Pacing 中的预算(房主据此延长回合计时)。
 
 
+const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
+const INTRO_MOVE := 1.7           # 开局运镜到越肩机位的时长
+
 var screen: Node        # TableScreen
 var app: Node
 var world: TableWorld
@@ -28,8 +31,8 @@ func _init(p_screen: Node, p_app: Node, p_hud: TableHud) -> void:
 func intro() -> void:
 	rig.parallax_enabled = false
 	Sfx.play("whoosh")
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, 1.7)
-	await rig.move_to(world.third_person_view(screen.my_pid), 1.7, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
+	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, INTRO_MOVE)
+	await rig.move_to(world.third_person_view(screen.my_pid), INTRO_MOVE, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
 	rig.parallax_enabled = true
 	_at_seat = true
 
@@ -56,6 +59,7 @@ func play(ev: Dictionary) -> void:
 
 func _round_started(ev: Dictionary) -> void:
 	screen.set_current(null)
+	screen.begin_round()
 	if not _at_seat:
 		# 强制验证为真话时没有开枪段,镜头还停在翻牌机位
 		await back_to_seat(0.45)
@@ -264,10 +268,14 @@ func _leave_seat() -> void:
 
 
 func _bubble(pid: int, text: String, color := UiTheme.INK) -> void:
+	if pid == screen.my_pid:
+		# 越肩镜头在自己头顶正上方,挂在自己头顶的气泡永远出画:改由 HUD 在出牌按钮上方显示
+		hud.my_bubble(text, color)
+		return
 	if not world.patrons.has(pid):
 		return
 	var patron: Patron = world.patrons[pid]
-	app.labels.track("bubble:%d" % pid, SpeechBubble.new(text, color),
+	app.labels.track(BUBBLE_KEY % pid, SpeechBubble.new(text, color),
 		func(): return patron.nameplate_anchor() + Vector3(0, 0.24, 0) if is_instance_valid(patron) else Vector3.ZERO)
 
 

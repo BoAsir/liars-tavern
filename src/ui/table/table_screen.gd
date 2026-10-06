@@ -3,6 +3,8 @@ extends Control
 # 演出结束后按最新状态对账。负责手牌拾取、快捷键、意图提交、倒计时与铭牌。
 
 
+const PLATE_KEY := "plate:%d"   # WorldLabels 里对手铭牌的键
+
 var app: Node
 var my_pid := 0
 var hud: TableHud
@@ -14,8 +16,8 @@ var pub := {}
 var names := {}
 var animating := true
 var current_pid = null
-var turn_deadline := 0.0
 
+var _clock := TurnClock.new()
 var _queue: Array = []
 var _intro_done := false
 var _initial_hands := {}    # round -> 该局初始手牌(发牌动画使用)
@@ -74,18 +76,26 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	app.labels.clear()
+	# 只收走自己挂的铭牌与气泡:切屏时新屏幕先 _ready、旧屏幕帧末才退场,
+	# 再来一局回到等待厅时,等待厅已经挂好了它自己的铭牌,不能整层清空
+	for pid in names:
+		app.labels.untrack(PLATE_KEY % pid)
+		app.labels.untrack(TableDirector.BUBBLE_KEY % pid)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# delta 随 Engine.time_scale 缩放,与房主的回合 Timer 同速(--fast 时圆环也对得上)
+	_clock.tick(delta)
 	var show_ring: bool = current_pid != null and not animating and not pub.is_empty()
-	hud.set_countdown(turn_deadline - _now(), Protocol.TURN_TIMEOUT, show_ring)
+	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
 
 
 # —— 网络输入 ——
 
 func _on_public(state: Dictionary) -> void:
 	pub = state
+	# 房主权威的回合剩余时间(含演出补时);旧版房主没有这个字段(-1)时退回本地计时
+	_clock.sync_from_host(state.get("turn_time_left", -1.0))
 	if not animating:
 		_reconcile()
 
@@ -170,9 +180,17 @@ func take_submitted() -> Array:
 	return indices
 
 
+func begin_round() -> void:
+	# 导演在收牌前调用。新一局发的是一套新手牌,旧下标会落到别的牌上,
+	# 预选一律作废(牌的视觉由 CardTable.sweep 一起收走)
+	_selected = {}
+	_hovered = -1
+	_refresh_actions()
+
+
 func set_current(pid) -> void:
 	current_pid = pid
-	turn_deadline = _now() + Protocol.TURN_TIMEOUT
+	_clock.restart_turn()
 	_awaiting_intent = false
 	# 所有人盯着当前行动者,行动者自己看桌心
 	var focus := cards.stand_position()
@@ -239,7 +257,7 @@ func _build_nameplates() -> void:
 		if pid == my_pid or not world.patrons.has(pid):
 			continue
 		var patron: Patron = world.patrons[pid]
-		app.labels.track("plate:%d" % pid, Nameplate.new(seat["name"]), patron.nameplate_anchor)
+		app.labels.track(PLATE_KEY % pid, Nameplate.new(seat["name"]), patron.nameplate_anchor)
 	_update_nameplates()
 
 
@@ -250,7 +268,7 @@ func _update_nameplates() -> void:
 			counts[p["pid"]] = p["hand_count"]
 	for seat in Net.seats:
 		var pid: int = seat["pid"]
-		var plate: Nameplate = app.labels.get_node_for("plate:%d" % pid)
+		var plate: Nameplate = app.labels.get_node_for(PLATE_KEY % pid)
 		if plate == null:
 			continue
 		var held: int = cards.held.get(pid, []).size() if animating else counts.get(pid, 0)
@@ -320,13 +338,24 @@ func _my_turn() -> bool:
 	return current_pid == my_pid and not animating and not _awaiting_intent and _settlement == null
 
 
+static func is_challengeable(last_play: Dictionary, viewer_pid: int) -> bool:
+	# 只能质疑别人的出牌:出牌者之后的人都断线或打空手牌时,轮转可能回到出牌者本人
+	if last_play.is_empty():
+		return false
+	var by = last_play.get("pid")
+	return not (by is int and by == viewer_pid)
+
+
+func _can_challenge() -> bool:
+	return _my_turn() and is_challengeable(pub.get("last_play", {}), my_pid)
+
+
 func _refresh_actions() -> void:
 	if hud == null:
 		return
 	var mine := _my_turn()
 	var can_play := mine and _selected.size() >= Rules.MIN_PLAY and _selected.size() <= Rules.MAX_PLAY
-	var can_challenge: bool = mine and not pub.get("last_play", {}).is_empty()
-	hud.set_actions(can_play, can_challenge, _selected.size(), mine)
+	hud.set_actions(can_play, _can_challenge(), _selected.size(), mine)
 
 
 func _submit_play() -> void:
@@ -342,9 +371,12 @@ func _submit_play() -> void:
 
 
 func _submit_challenge() -> void:
-	if not _my_turn() or pub.get("last_play", {}).is_empty():
+	if not _can_challenge():
 		return
 	_awaiting_intent = true
+	# 选了质疑就不出这些牌:预选的牌放回牌扇
+	_selected = {}
+	cards.set_selection(_selected, _hovered)
 	Sfx.play("ui_click")
 	Net.submit_challenge()
 	_refresh_actions()
@@ -355,7 +387,3 @@ func _confirm_leave() -> void:
 	overlay.confirmed.connect(func():
 		Net.leave()
 		Net.left_lobby.emit(""))
-
-
-func _now() -> float:
-	return Time.get_ticks_msec() / 1000.0
