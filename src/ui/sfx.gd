@@ -6,6 +6,8 @@ extends Node
 const RATE := 22050
 const POOL_SIZE := 12
 const BUS := "SFX"
+const AMBIENCE_SECONDS := 6.0
+const AMBIENCE_CROSSFADE := 0.4
 const VOLUMES := {
 	"deal": -10.0, "slide": -8.0, "slap": -6.0, "flip": -8.0, "sweep": -9.0, "slam": -2.0,
 	"bell": -6.0, "cock": -4.0, "spin": -5.0, "click": -2.0, "bang": 0.0, "heartbeat": -3.0,
@@ -14,6 +16,7 @@ const VOLUMES := {
 }
 
 var muted := false
+var _headless := false
 var _cache := {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
@@ -32,7 +35,8 @@ func _ready() -> void:
 	_ambience.volume_db = -20.0
 	add_child(_ambience)
 	if DisplayServer.get_name() == "headless":
-		# 无头模式没有音频输出(哑驱动也不回收回放对象),直接静音并跳过合成
+		# 无头模式没有音频输出(哑驱动也不回收回放对象),始终静音并跳过合成
+		_headless = true
 		muted = true
 		return
 	_warm_up()
@@ -65,8 +69,11 @@ func start_ambience() -> void:
 
 
 func set_muted(value: bool) -> void:
-	muted = value
-	AudioServer.set_bus_mute(0, value)
+	# 无头模式忽略取消静音。静音启动时环境音没开过,取消静音时补上
+	muted = value or _headless
+	AudioServer.set_bus_mute(0, muted)
+	if not muted:
+		start_ambience()
 
 
 func _setup_bus() -> void:
@@ -142,12 +149,17 @@ func _synth(sound: String) -> AudioStreamWAV:
 		"thud":
 			return _wav(_mix([_thump(60.0, 0.35, 1.0), _noise_burst(0.2, 0.2, 0.01)]))
 		"ambience":
-			var wav := _wav(_ambience_loop(6.0))
-			wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-			wav.loop_end = int(6.0 * RATE)
-			return wav
+			return _ambience_stream()
 	push_warning("未知音效:" + sound)
 	return _wav(PackedFloat32Array([0.0]))
+
+
+func _ambience_stream() -> AudioStreamWAV:
+	var loop := _ambience_loop(AMBIENCE_SECONDS)
+	var wav := _wav(loop)
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_end = loop.size()  # 末尾已交叉淡化进开头并截掉:整段采样正好一圈
+	return wav
 
 
 func _noise_burst(duration: float, cutoff: float, attack: float) -> PackedFloat32Array:
@@ -280,7 +292,7 @@ func _whoosh(duration: float) -> PackedFloat32Array:
 
 
 func _ambience_loop(duration: float) -> PackedFloat32Array:
-	# 房间底噪(褐噪声)+ 壁炉噼啪;首尾交叉淡化保证无缝循环
+	# 房间底噪(褐噪声)+ 壁炉噼啪,再做成首尾无缝的循环
 	var n := int(duration * RATE)
 	var out := PackedFloat32Array()
 	out.resize(n)
@@ -294,10 +306,19 @@ func _ambience_loop(duration: float) -> PackedFloat32Array:
 		var gain := _rng.randf_range(0.15, 0.6)
 		for i in length:
 			out[start + i] += _rng.randf_range(-1.0, 1.0) * gain * pow(1.0 - float(i) / length, 3.0)
-	var fade := int(0.4 * RATE)
-	for i in fade:
-		var w := float(i) / fade
-		out[i] = out[i] * w + out[n - fade + i] * (1.0 - w)
+	return seamless_loop(out, int(AMBIENCE_CROSSFADE * RATE))
+
+
+static func seamless_loop(samples: PackedFloat32Array, fade: int) -> PackedFloat32Array:
+	# 把末尾 fade 个采样交叉淡化进开头,再截掉末尾:播完最后一个采样跳回开头时,
+	# 开头正是原本紧接着的那个采样,循环点没有跳变(否则每圈都会咔哒一声)
+	var n := samples.size()
+	var overlap := clampi(fade, 0, floori(n / 2.0))
+	var out := samples.duplicate()
+	for i in overlap:
+		var w := float(i) / overlap
+		out[i] = samples[i] * w + samples[n - overlap + i] * (1.0 - w)
+	out.resize(n - overlap)
 	return out
 
 

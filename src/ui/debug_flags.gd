@@ -25,9 +25,19 @@ var _match_finished := false
 
 func _init(p_app: Node) -> void:
 	app = p_app
-	for arg in OS.get_cmdline_user_args():
+	opts = parse_user_args()
+
+
+static func parse_user_args(args: PackedStringArray = OS.get_cmdline_user_args()) -> Dictionary:
+	# "--key=value" → {key: value};不带值的 "--flag" → {flag: "true"};空键忽略。
+	# 注意:以 -s 启动的工具脚本编译时 autoload(Net/Discovery)还没注册,引用本类会编译失败,
+	# 所以 tools/*.gd 不能直接调用这里
+	var out := {}
+	for arg in args:
 		var kv := arg.trim_prefix("--").split("=", true, 1)
-		opts[kv[0]] = kv[1] if kv.size() > 1 else "true"
+		if kv[0] != "":
+			out[kv[0]] = kv[1] if kv.size() > 1 else "true"
+	return out
 
 
 func _ready() -> void:

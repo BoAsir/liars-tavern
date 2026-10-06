@@ -10,11 +10,12 @@ const PARCHMENT := Color(0.93, 0.86, 0.72)
 const PARCHMENT_DIM := Color(0.72, 0.64, 0.52)
 const BRASS := Color(0.82, 0.62, 0.28)
 const BRASS_BRIGHT := Color(1.0, 0.8, 0.42)
-const OXBLOOD := Color(0.5, 0.1, 0.1)
 const BLOOD := Color(0.86, 0.22, 0.16)
 const TRUTH := Color(0.42, 0.86, 0.48)
 const LIE := Color(0.95, 0.3, 0.22)
 const MUTED := Color(0.55, 0.5, 0.45)
+
+const SCROLLBAR_WIDTH := 6.0
 
 const FONT_TITLE_NAMES := ["Xingkai SC", "STXingkai", "Weibei SC", "STKaiti", "KaiTi", "Kaiti SC", "serif"]
 const FONT_DISPLAY_NAMES := ["Weibei SC", "STKaiti", "Kaiti SC", "KaiTi", "Songti SC", "SimSun", "serif"]
@@ -60,10 +61,11 @@ static func theme() -> Theme:
 	_input_styles()
 	_theme.set_stylebox("panel", "PanelContainer", panel_box(PANEL, BRASS, 2, 10))
 	_theme.set_stylebox("panel", "Panel", panel_box(PANEL, BRASS, 2, 10))
-	var scroll_grabber := flat(Color(BRASS, 0.5), 4)
-	_theme.set_stylebox("grabber", "VScrollBar", scroll_grabber)
-	_theme.set_stylebox("grabber_highlight", "VScrollBar", flat(BRASS, 4))
-	_theme.set_stylebox("scroll", "VScrollBar", flat(Color(0, 0, 0, 0.25), 4))
+	# 滚动条要有宽度:平面样式默认没有内容边距,宽度会是 0,列表能滚却看不见滚动条
+	_theme.set_stylebox("grabber", "VScrollBar", _scroll_part(Color(BRASS, 0.5)))
+	_theme.set_stylebox("grabber_highlight", "VScrollBar", _scroll_part(BRASS))
+	_theme.set_stylebox("grabber_pressed", "VScrollBar", _scroll_part(BRASS_BRIGHT))
+	_theme.set_stylebox("scroll", "VScrollBar", _scroll_part(Color(0, 0, 0, 0.25)))
 	_theme.set_color("font_color", "TooltipLabel", PARCHMENT)
 	_theme.set_stylebox("panel", "TooltipPanel", panel_box(INK, BRASS, 1, 6))
 	return _theme
@@ -146,10 +148,55 @@ static func panel_box(bg: Color, border: Color, border_width: int, radius: int) 
 	return box
 
 
+static func screen_panel(bg_alpha: float, margins: Vector2, border := Color(BRASS, 0.7)) -> StyleBoxFlat:
+	# 屏幕主面板(主菜单 / 等待厅 / 结算):暗木底 + 黄铜描边 + 柔和投影;margins = (左右, 上下)
+	var box := panel_box(Color(INK, bg_alpha), border, 2, 14)
+	box.content_margin_left = margins.x
+	box.content_margin_right = margins.x
+	box.content_margin_top = margins.y
+	box.content_margin_bottom = margins.y
+	box.shadow_color = Color(0, 0, 0, 0.55)
+	box.shadow_size = 24
+	return box
+
+
+static func side_column(host: Control, at_right: bool, side_margin: int, edge_margin: int) -> VBoxContainer:
+	# 屏幕侧边面板的外框:贴左/右边、竖直居中;窗口放不下时整列滚动,底部的控件永远不会被裁掉。
+	# 返回的列里放面板;列的父节点就是 ScrollContainer
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_right" if at_right else "margin_left", side_margin)
+	margin.add_theme_constant_override("margin_top", edge_margin)
+	margin.add_theme_constant_override("margin_bottom", edge_margin)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(margin)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_SHRINK_END if at_right else Control.SIZE_SHRINK_BEGIN
+	scroll.follow_focus = true
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	# 不裁剪:面板投影与入场滑动都会超出滚动区;真放不下而滚动时,多出的部分只会画进上下留白
+	scroll.clip_contents = false
+	margin.add_child(scroll)
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll.add_child(column)
+	return column
+
+
 static func flat(color: Color, radius: int) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = color
 	box.set_corner_radius_all(radius)
+	return box
+
+
+static func _scroll_part(color: Color) -> StyleBoxFlat:
+	var box := flat(color, 4)
+	box.content_margin_left = SCROLLBAR_WIDTH / 2.0
+	box.content_margin_right = SCROLLBAR_WIDTH / 2.0
 	return box
 
 
