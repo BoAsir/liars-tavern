@@ -2,6 +2,8 @@ class_name WorldLabels
 extends Control
 # 3D 锚定的 2D 控件:每帧把控件投影到世界坐标点上方(铭牌、对话气泡)。
 # 锚点在相机背后或屏幕外时隐藏。
+# 条目里的控件可能已自行释放(气泡淡出后 queue_free):取出时先用无类型变量判有效,
+# 已释放的实例赋给 Control 类型变量或作为 Control 返回值本身就是脚本错误。
 
 
 var camera: Camera3D
@@ -22,19 +24,23 @@ func track(key: String, node: Control, anchor: Callable, offset := Vector2.ZERO)
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(node)
 	_entries[key] = {"node": node, "anchor": anchor, "offset": offset}
-	_place(_entries[key])
+	_place(node, _entries[key])
 
 
 func untrack(key: String) -> void:
-	if _entries.has(key):
-		var node: Control = _entries[key]["node"]
-		if is_instance_valid(node):
-			node.queue_free()
-		_entries.erase(key)
+	if not _entries.has(key):
+		return
+	var node = _entries[key]["node"]
+	_entries.erase(key)
+	if is_instance_valid(node):
+		node.queue_free()
 
 
 func get_node_for(key: String) -> Control:
-	return _entries[key]["node"] if _entries.has(key) else null
+	if not _entries.has(key):
+		return null
+	var node = _entries[key]["node"]
+	return node if is_instance_valid(node) else null
 
 
 func clear() -> void:
@@ -45,14 +51,14 @@ func clear() -> void:
 func _process(_delta: float) -> void:
 	for key in _entries.keys():
 		var entry: Dictionary = _entries[key]
-		if not is_instance_valid(entry["node"]):
+		var node = entry["node"]
+		if not is_instance_valid(node):
 			_entries.erase(key)
 			continue
-		_place(entry)
+		_place(node, entry)
 
 
-func _place(entry: Dictionary) -> void:
-	var node: Control = entry["node"]
+func _place(node: Control, entry: Dictionary) -> void:
 	var anchor: Callable = entry["anchor"]
 	if not anchor.is_valid() or camera == null or not camera.is_inside_tree():
 		node.visible = false
