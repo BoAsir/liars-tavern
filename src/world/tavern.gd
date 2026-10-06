@@ -66,10 +66,6 @@ func kick_lamp(strength: float) -> void:
 	_lamp_swing = maxf(_lamp_swing, strength)
 
 
-func table_top() -> float:
-	return SeatLayout.TABLE_TOP
-
-
 # —— 环境 ——
 
 func _build_environment() -> void:

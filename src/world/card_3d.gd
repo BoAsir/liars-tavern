@@ -12,7 +12,6 @@ const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 static var _materials := {}
 
 var kind := CardFaces.BACK     # 正面牌型;BACK 表示未知(他人的牌)
-var face_up := false
 var _front: MeshInstance3D
 var _back: MeshInstance3D
 var _glow_tween: Tween = null
@@ -100,7 +99,6 @@ func fly_to(target: Transform3D, duration: float, arc_height := 0.12, spin := 0.
 
 func flip_to_face(duration: float, lift := 0.05) -> Tween:
 	# 抬起 → 绕牌的纵轴翻转 180° → 落下
-	face_up = true
 	var start := transform
 	var tween := create_tween()
 	tween.tween_method(func(t: float):

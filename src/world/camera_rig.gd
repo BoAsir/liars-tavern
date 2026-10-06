@@ -129,10 +129,6 @@ func shake(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
 
-func is_moving() -> bool:
-	return _move_tween != null and _move_tween.is_running()
-
-
 static func _look(pos: Vector3, target: Vector3) -> Transform3D:
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 

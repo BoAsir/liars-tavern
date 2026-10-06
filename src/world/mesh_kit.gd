@@ -89,8 +89,3 @@ static func prism(size: Vector3) -> PrismMesh:
 	var mesh := PrismMesh.new()
 	mesh.size = size
 	return mesh
-
-
-static func look_basis(forward: Vector3, up := Vector3.UP) -> Basis:
-	# -Z 朝向 forward 的基
-	return Basis.looking_at(forward.normalized(), up)

@@ -6,6 +6,7 @@ class_name CardFaces
 const SIZE := Vector2i(360, 520)
 const BACK := -1
 const CORNER_RADIUS := 26
+const FONT_WEIGHT_BOLD := 700
 
 const ACCENTS := {
 	Card.QUEEN: Color(0.62, 0.11, 0.13),
@@ -85,16 +86,19 @@ static func _fallback(kind: int) -> Texture2D:
 
 
 static func letter_font() -> SystemFont:
-	var font := SystemFont.new()
-	font.font_names = PackedStringArray(["Big Caslon", "Bodoni 72", "Didot", "Georgia", "Times New Roman", "serif"])
-	font.font_weight = 700
-	return font
+	# Q/K/A 字母:与界面的西文衬线体同一组回退字体
+	return _bold_font(UiTheme.FONT_LATIN_NAMES)
 
 
 static func glyph_font() -> SystemFont:
+	# 鬼牌汉字:与界面的展示用楷体同一组回退字体
+	return _bold_font(UiTheme.FONT_DISPLAY_NAMES)
+
+
+static func _bold_font(names: Array) -> SystemFont:
 	var font := SystemFont.new()
-	font.font_names = PackedStringArray(["Weibei SC", "STKaiti", "Kaiti SC", "KaiTi", "SimSun", "serif"])
-	font.font_weight = 700
+	font.font_names = PackedStringArray(names)
+	font.font_weight = FONT_WEIGHT_BOLD
 	return font
 
 
