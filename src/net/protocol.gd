@@ -14,6 +14,10 @@ const GAME_PORT_ATTEMPTS := 10
 const BROADCAST_INTERVAL := 1.0
 const ROOM_TTL := 3.0
 const JOIN_TIMEOUT := 8.0
+# ENet 断线判定(毫秒):默认最长 30 秒才发现对方崩溃,缩短到数秒内
+const PEER_TIMEOUT_LIMIT := 32
+const PEER_TIMEOUT_MIN_MS := 3000
+const PEER_TIMEOUT_MAX_MS := 8000
 const MIN_PLAYERS := 2
 const MAX_PLAYERS := 4
 # ENet 传输层多留几个槽位,满员时仍能完成握手并收到"房间已满"的明确提示
