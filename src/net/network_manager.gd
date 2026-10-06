@@ -61,10 +61,6 @@ func my_pid() -> int:
 	return multiplayer.get_unique_id()
 
 
-func is_match_over() -> bool:
-	return not last_public.is_empty() and last_public.get("phase") == GameState.Phase.MATCH_OVER
-
-
 # —— 建房 / 加入 / 离开 ——
 
 func host_game(pname: String, room_name: String, preferred_port := 0) -> Error:
@@ -127,6 +123,12 @@ func leave() -> void:
 	seats = []
 	last_public = {}
 	last_private = {}
+
+
+func end_session(reason := "") -> void:
+	# 结束联机并让界面回到主菜单;reason 非空时主菜单会弹出说明(主动离开传空串)
+	leave()
+	left_lobby.emit(reason)
 
 
 func _create_server(preferred_port: int) -> Dictionary:
@@ -198,7 +200,7 @@ func _on_host_disconnected() -> void:
 	if _joining:
 		_fail_join("房主断开了连接")
 	else:
-		_end_session("与房主断开连接,房间已解散")
+		end_session("与房主断开连接,房间已解散")
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -215,11 +217,6 @@ func _on_peer_disconnected(id: int) -> void:
 func _fail_join(reason: String) -> void:
 	leave()
 	join_failed.emit(reason)
-
-
-func _end_session(reason: String) -> void:
-	leave()
-	left_lobby.emit(reason)
 
 
 # —— 加入握手 ——
@@ -291,7 +288,7 @@ func kick(id: int) -> void:
 @rpc("authority", "call_remote", "reliable")
 func rpc_kicked() -> void:
 	if _session_active:
-		_end_session("你被房主请出了房间")
+		end_session("你被房主请出了房间")
 
 
 func can_start() -> bool:
