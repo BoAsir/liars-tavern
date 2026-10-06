@@ -19,7 +19,7 @@ func _init(message: String, confirm_text := "确定", cancel_text := "取消") -
 
 func _ready() -> void:
 	color = Color(0, 0, 0, 0.55)
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)

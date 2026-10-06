@@ -16,7 +16,7 @@ func _init(winner_name: String, ranking: Array, mine: bool) -> void:
 
 func _ready() -> void:
 	color = Color(0, 0, 0, 0.0)
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)

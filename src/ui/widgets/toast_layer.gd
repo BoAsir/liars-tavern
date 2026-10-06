@@ -8,7 +8,7 @@ const MAX_TOASTS := 4
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_CENTER_TOP)
+	set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	position.y = 18
 	grow_horizontal = Control.GROW_DIRECTION_BOTH
 	alignment = BoxContainer.ALIGNMENT_BEGIN
