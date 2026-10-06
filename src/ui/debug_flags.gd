@@ -1,0 +1,162 @@
+class_name DebugFlags
+extends Node
+# 命令行调试开关(写在 -- 之后),用于联机冒烟测试与截图检查:
+#   --name=甲            自动填写昵称
+#   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
+#   --autojoin=IP[:端口] 自动直连
+#   --discover           自动加入局域网发现的第一个房间
+#   --bot                自动准备/选牌/出牌/质疑(走真实界面路径)
+#   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
+#   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
+#   --shots=目录         在关键时刻截图
+
+
+const BOT_THINK := Vector2(0.6, 1.6)
+const CHALLENGE_CHANCE := 0.35
+
+var app: Node
+var opts := {}
+var _think_timer := 0.0
+var _shot_counts := {}
+var _match_finished := false
+
+
+func _init(p_app: Node) -> void:
+	app = p_app
+	for arg in OS.get_cmdline_user_args():
+		var kv := arg.trim_prefix("--").split("=", true, 1)
+		opts[kv[0]] = kv[1] if kv.size() > 1 else "true"
+
+
+func _ready() -> void:
+	if opts.is_empty():
+		set_process(false)
+		return
+	print("[debug] flags: ", opts)
+	if opts.has("fast"):
+		Engine.time_scale = float(opts["fast"]) if opts["fast"] != "true" else 3.0
+	Net.joined_lobby.connect(_on_joined)
+	Net.lobby_updated.connect(_on_lobby)
+	Net.game_events.connect(_on_events)
+	Net.join_failed.connect(_fail.bind("join_failed"))
+	Net.left_lobby.connect(_on_left)
+	if opts.has("shots"):
+		DirAccess.make_dir_recursive_absolute(opts["shots"])
+		_capture_later("menu", 2.5)
+	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
+	if opts.has("autohost"):
+		var err := Net.host_game(player_name, "%s 的酒馆" % player_name)
+		print("[debug] host_game -> ", error_string(err))
+		if err != OK:
+			_fail("host_failed")
+	elif opts.has("autojoin"):
+		Net.join_game(player_name, opts["autojoin"])
+	elif opts.has("discover"):
+		Discovery.rooms_updated.connect(func(rooms: Array):
+			if not rooms.is_empty() and not Net.in_game and Net.lobby_players.is_empty() and rooms[0]["open"]:
+				print("[debug] discovered ", rooms[0]["room"], " at ", rooms[0]["ip"])
+				Net.join_game(player_name, Protocol.format_address(rooms[0]["ip"], rooms[0]["port"])))
+
+
+func _process(delta: float) -> void:
+	if not opts.has("bot"):
+		return
+	var screen: Node = app.current_screen()
+	if screen == null or not screen.has_method("_my_turn") or not screen._my_turn():
+		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
+		return
+	_think_timer -= delta
+	if _think_timer > 0.0:
+		return
+	_think_timer = 999.0
+	_bot_act(screen)
+
+
+func _bot_act(screen: Node) -> void:
+	var can_challenge: bool = not screen.pub.get("last_play", {}).is_empty()
+	var hand_size: int = screen.cards.my_cards.size()
+	if can_challenge and (randf() < CHALLENGE_CHANCE or hand_size == 0):
+		screen._submit_challenge()
+		return
+	var indices := range(hand_size)
+	indices.shuffle()
+	for i in indices.slice(0, randi_range(1, mini(3, hand_size))):
+		screen._toggle(i)
+	screen._submit_play()
+
+
+func _on_joined() -> void:
+	print("[debug] joined lobby as ", Net.my_pid())
+	if opts.has("shots"):
+		_capture_later("lobby", 3.0)
+	if opts.has("bot") and not Net.is_host:
+		await get_tree().create_timer(0.8).timeout
+		var screen: Node = app.current_screen()
+		if screen != null and screen.has_method("_on_ready_toggled"):
+			screen._on_ready_toggled()
+
+
+func _on_lobby(players: Array) -> void:
+	if not Net.is_host or not opts.has("autohost"):
+		return
+	var want := int(opts["autohost"]) if opts["autohost"] != "true" else 2
+	if players.size() >= want and Net.can_start():
+		print("[debug] starting game with ", players.size(), " players")
+		await get_tree().create_timer(1.0).timeout
+		if Net.can_start():
+			Net.start_game()
+
+
+func _on_events(events: Array) -> void:
+	for ev in events:
+		match ev["type"]:
+			"round_started":
+				_capture_once("deal", 3.4)
+			"played":
+				_capture_once("played", 0.5)
+			"reveal":
+				_capture_once("reveal", 2.4)
+			"gunshot":
+				_capture_once("suspense", 2.3)
+				_capture_once("shot_result", 3.25)
+			"match_over":
+				print("[debug] MATCH_OVER winner=", ev["winner"])
+				_match_finished = true
+				_capture_once("victory", 1.6)
+				_capture_once("settlement", 3.6)
+				if opts.has("quit-after-match"):
+					await get_tree().create_timer(5.0 if Net.is_host else 4.0).timeout
+					app.quit_game(0)
+
+
+func _on_left(reason: String) -> void:
+	if opts.has("quit-after-match") and not _match_finished:
+		_fail("left_lobby: " + reason)
+
+
+func _fail(reason: String, detail := "") -> void:
+	push_error("[debug] FAIL %s %s" % [reason, detail])
+	if opts.has("quit-after-match") or opts.has("autojoin") or opts.has("autohost"):
+		app.quit_game(1)
+
+
+# —— 截图 ——
+
+func _capture_once(tag: String, delay: float) -> void:
+	if not opts.has("shots") or _shot_counts.has(tag):
+		return
+	_shot_counts[tag] = true
+	_capture_later(tag, delay)
+
+
+func _capture_later(tag: String, delay: float) -> void:
+	if not opts.has("shots"):
+		return
+	await get_tree().create_timer(delay).timeout
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	if image == null or image.is_empty():
+		return
+	var path := "%s/%s_%s.png" % [opts["shots"], opts.get("name", "p"), tag]
+	image.save_png(path)
+	print("[debug] shot ", path)

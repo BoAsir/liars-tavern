@@ -3,12 +3,20 @@ config_version=5
 
 [application]
 config/name="骗子酒馆"
+run/main_scene="res://src/ui/main.tscn"
 
 [autoload]
 
 Discovery="*res://src/net/discovery.gd"
 Net="*res://src/net/network_manager.gd"
+Sfx="*res://src/ui/sfx.gd"
 
 [display]
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
