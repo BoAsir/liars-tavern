@@ -1,6 +1,6 @@
 class_name CardTable
 extends Node3D
-# 卡牌层:自己的手牌(相机前扇形)、他人手中的牌背、出牌区、翻牌区、桌心目标牌立牌。
+# 卡牌层:自己的手牌(自己角色举在胸前、牌面朝镜头)、他人手中的牌背、出牌区、翻牌区、桌心目标牌立牌。
 # 动画方法均为协程(await 到动画结束);音效通过 sfx 信号交给上层播放。
 
 
@@ -10,9 +10,6 @@ const DEAL_STAGGER := 0.055
 const DEAL_FLIGHT := 0.32
 const PLAY_FLIGHT := 0.42
 const SWEEP_FLIGHT := 0.4
-const HAND_OFFSET := Vector3(0, -0.215, -0.46)
-const HAND_LOWERED := Vector3(0, -0.55, -0.46)
-const HAND_TILT_DEG := 14.0
 const LIFT_HOVER := 0.012
 const LIFT_SELECTED := 0.032
 const REVEAL_Z := 0.38
@@ -22,7 +19,7 @@ const STAND_SPIN := 0.45
 const FAN_BASIS := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
 
 var world: TableWorld
-var hand_root: Node3D
+var hand_root: Node3D        # 自己角色的牌扇节点(第三人称)
 var my_cards: Array = []     # Card3D,下标与私有手牌一致
 var held := {}               # pid -> Array[Card3D](他人牌背)
 var pile: Array = []
@@ -35,6 +32,7 @@ var target_kind := CardFaces.BACK
 var _stand: Node3D
 var _target_card: Card3D
 var _pile_seed := 0
+var _my_holding := false
 
 
 func _init(p_world: TableWorld) -> void:
@@ -84,22 +82,8 @@ func stand_position() -> Vector3:
 
 # —— 自己的手牌 ——
 
-func attach_hand(camera: Camera3D) -> void:
-	if hand_root != null:
-		hand_root.queue_free()
-	hand_root = Node3D.new()
-	hand_root.name = "Hand"
-	camera.add_child(hand_root)
-	hand_root.position = HAND_OFFSET
-	hand_root.basis = FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(-HAND_TILT_DEG))
-
-
-func lower_hand(lowered: bool, duration := 0.35) -> void:
-	if hand_root == null:
-		return
-	var tween := create_tween()
-	tween.tween_property(hand_root, "position", HAND_LOWERED if lowered else HAND_OFFSET, duration) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+func attach_hand(fan_root: Node3D) -> void:
+	hand_root = fan_root
 
 
 func my_kinds() -> Array:
@@ -130,6 +114,10 @@ func _layout_mine(duration: float) -> void:
 		_move_local(card, fan_slot(i, my_cards.size(), lift), duration)
 		var glow := 0.75 if selected.has(i) else (0.3 if i == hovered else 0.0)
 		card.set_glow(glow)
+	var holding := not my_cards.is_empty()
+	if holding != _my_holding and world.patrons.has(world.my_pid):
+		_my_holding = holding
+		world.patrons[world.my_pid].set_holding(holding)
 
 
 # —— 他人手牌 ——
@@ -295,10 +283,11 @@ func sweep() -> void:
 	my_cards = []
 	selected = {}
 	hovered = -1
-	for pid in held:
+	for pid in held.keys() + [world.my_pid]:
 		if world.patrons.has(pid):
 			world.patrons[pid].set_holding(false)
 	held = {}
+	_my_holding = false
 	_pile_seed += 1
 	if all.is_empty():
 		return

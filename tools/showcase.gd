@@ -10,8 +10,10 @@ func build(tavern: Tavern) -> void:
 	var players := []
 	for pid in [1, 2, 3, 4]:
 		players.append({"pid": pid})
-	world.arrange(players, 1, false, true)
-	world.cards.attach_hand(tavern.camera_rig.camera)
+	world.arrange(players, 1, true, true)
+	var me: Patron = world.patrons[1]
+	me.present_hand_to(world.third_person_view(1).origin)
+	world.cards.attach_hand(me.fan)
 	world.cards.set_target(Card.KING, false)
 	await get_tree().create_timer(0.7).timeout
 	var counts := {1: 5, 2: 5, 3: 4, 4: 3}

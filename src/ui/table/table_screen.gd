@@ -45,8 +45,11 @@ func _ready() -> void:
 	world.revive_all()
 	cards.clear_all()
 	app.labels.clear()
-	world.arrange(Net.seats, my_pid, false, true)
-	cards.attach_hand(app.tavern.camera_rig.camera)
+	# 第三人称:自己的角色也坐在桌边,手牌由自己的角色举在胸前、牌面朝向越肩镜头
+	world.arrange(Net.seats, my_pid, true, true)
+	var me: Patron = world.patrons[my_pid]
+	me.present_hand_to(world.third_person_view(my_pid).origin)
+	cards.attach_hand(me.fan)
 	hud = TableHud.new()
 	add_child(hud)
 	hud.play_pressed.connect(_submit_play)
@@ -170,11 +173,9 @@ func set_current(pid) -> void:
 	current_pid = pid
 	turn_deadline = _now() + Protocol.TURN_TIMEOUT
 	_awaiting_intent = false
-	# 所有人盯着当前行动者(轮到自己时盯着镜头),行动者自己看桌心
+	# 所有人盯着当前行动者,行动者自己看桌心
 	var focus := cards.stand_position()
-	if pid == my_pid:
-		focus = app.tavern.camera_rig.camera.global_position
-	elif pid != null:
+	if pid != null:
 		focus = world.head_position(pid)
 	for patron_pid in world.patrons:
 		var patron: Patron = world.patrons[patron_pid]

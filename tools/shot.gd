@@ -42,7 +42,11 @@ func _place_camera(rig: CameraRig, view: String) -> void:
 	var top := SeatLayout.TABLE_TOP
 	match view:
 		"seat":
-			rig.snap(Vector3(0, 1.36, 1.4), Vector3(0, top - 0.06, -0.3))
+			# 与 TableWorld.third_person_view(本机座位)一致的越肩机位
+			rig.snap(Vector3(0.55, 1.92, 2.1), Vector3(0, top, -0.12))
+			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
+		"selfshot":
+			rig.snap(Vector3(-0.35, 1.42, 0.15), Vector3(0, 1.19, 1.37))
 		"gun":
 			rig.snap(Vector3(0.1, 1.42, 0.3), Vector3(1.25, 1.25, 0.0))
 		"menu":

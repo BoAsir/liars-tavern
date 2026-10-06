@@ -12,12 +12,14 @@ const PARALLAX_YAW := 0.05
 const PARALLAX_PITCH := 0.03
 
 var camera: Camera3D
+var fill_light: OmniLight3D
 var parallax_enabled := false
 
 var _trauma := 0.0
 var _time := 0.0
 var _move_tween: Tween = null
 var _fov_tween: Tween = null
+var _fill_tween: Tween = null
 var _orbit_active := false
 var _orbit_center := Vector3.ZERO
 var _orbit_radius := 3.0
@@ -35,6 +37,16 @@ func _ready() -> void:
 	camera.far = 40.0
 	camera.current = true
 	add_child(camera)
+	# 第三人称补光:跟随镜头,照亮背对主光的自己角色与手牌;只在座位机位开启
+	fill_light = OmniLight3D.new()
+	fill_light.position = Vector3(0.0, 0.25, 0.1)
+	fill_light.light_color = Color(1.0, 0.86, 0.7)
+	fill_light.light_energy = 0.0
+	fill_light.light_specular = 0.25
+	fill_light.omni_range = 3.2
+	fill_light.omni_attenuation = 1.4
+	fill_light.light_volumetric_fog_energy = 0.0
+	camera.add_child(fill_light)
 	_noise.frequency = 2.0
 
 
@@ -99,6 +111,12 @@ func orbit(center: Vector3, radius: float, height: float, speed: float, blend :=
 	var start := center + Vector3(sin(_orbit_angle) * radius, height, cos(_orbit_angle) * radius)
 	var tween := look_from(start, center, blend)
 	tween.finished.connect(func(): _orbit_active = true)
+
+
+func set_fill(energy: float, duration := 0.6) -> void:
+	_kill(_fill_tween)
+	_fill_tween = create_tween()
+	_fill_tween.tween_property(fill_light, "light_energy", energy, duration)
 
 
 func set_fov(fov: float, duration: float) -> void:

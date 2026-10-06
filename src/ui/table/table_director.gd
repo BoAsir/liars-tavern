@@ -4,8 +4,6 @@ extends Node
 # 每段演出时长须不超过 Pacing 中的预算(房主据此延长回合计时)。
 
 
-const FIRST_PERSON_GUN := Vector3(0.15, -0.045, -0.24)
-
 var screen: Node        # TableScreen
 var app: Node
 var world: TableWorld
@@ -29,11 +27,10 @@ func _init(p_screen: Node, p_app: Node, p_hud: TableHud) -> void:
 
 func intro() -> void:
 	rig.parallax_enabled = false
-	cards.lower_hand(true, 0.0)
 	Sfx.play("whoosh")
-	await rig.move_to(world.first_person_view(screen.my_pid), 1.7, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
+	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, 1.7)
+	await rig.move_to(world.third_person_view(screen.my_pid), 1.7, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
 	rig.parallax_enabled = true
-	cards.lower_hand(false)
 	_at_seat = true
 
 
@@ -84,12 +81,9 @@ func _round_started(ev: Dictionary) -> void:
 func _played(ev: Dictionary) -> void:
 	var pid: int = ev["pid"]
 	var claim := "%d 张「%s」" % [ev["count"], Card.NAMES.get(cards.target_kind, "?")]
-	if pid == screen.my_pid:
-		hud.my_bubble(claim)
-	else:
-		if world.patrons.has(pid):
-			world.patrons[pid].reach_toward_center()
-		_bubble(pid, claim)
+	if world.patrons.has(pid):
+		world.patrons[pid].reach_toward_center()
+	_bubble(pid, claim)
 	hud.log_event("%s 打出 %s" % [screen.name_of(pid), claim])
 	world.look_all_at(cards.stand_position())
 	await cards.play(pid, ev["count"], screen.take_submitted() if pid == screen.my_pid else [])
@@ -109,13 +103,10 @@ func _reveal(ev: Dictionary) -> void:
 		await _wait(0.5)
 	else:
 		hud.log_event("%s 质疑 %s!" % [screen.name_of(challenger), screen.name_of(liar)], UiTheme.LIE)
-		if challenger == screen.my_pid:
-			hud.my_bubble("骗子!", UiTheme.BLOOD)
-		else:
-			_bubble(challenger, "骗子!", UiTheme.BLOOD)
-			world.look_all_at(world.head_position(challenger))
-			if world.patrons.has(challenger):
-				await world.patrons[challenger].slam_table()
+		_bubble(challenger, "骗子!", UiTheme.BLOOD)
+		world.look_all_at(world.head_position(challenger))
+		if world.patrons.has(challenger):
+			await world.patrons[challenger].slam_table()
 		Sfx.play("slam")
 		rig.shake(0.45)
 		app.tavern.kick_lamp(0.07)
@@ -144,16 +135,19 @@ func _gunshot(ev: Dictionary) -> void:
 	var shooter: int = ev["pid"]
 	hud.log_event("%s 对自己扣下扳机(第 %d 枪)" % [screen.name_of(shooter), ev["shots_fired"]], UiTheme.PARCHMENT_DIM)
 	fx.set_tension(0.55, 0.8)
-	if shooter == screen.my_pid:
-		await _first_person_shot(ev["hit"])
-	else:
-		await _third_person_shot(shooter, ev["hit"])
+	await _third_person_shot(shooter, ev["hit"])
+	if shooter == screen.my_pid and ev["hit"]:
+		# 自己中弹:画面短暂染红,之后以俯视镜头观战
+		spectator = true
+		await fx.fade_to(Color(0.25, 0.0, 0.0, 0.6), 0.45)
+		fx.flash(Color(0.25, 0.0, 0.0, 0.6), 1.0)
 	fx.set_tension(0.0, 0.7)
 	screen.on_gunshot_resolved(shooter, ev["shots_fired"], ev["hit"])
 	await back_to_seat(0.55)
 
 
 func _third_person_shot(shooter: int, hit: bool) -> void:
+	# 所有人(包括自己)都用同一套演出:镜头转到开枪者正面,角色拿枪抵住太阳穴
 	_leave_seat()
 	rig.move_to(world.focus_view(shooter), 0.7)
 	world.look_all_at(world.head_position(shooter))
@@ -184,44 +178,6 @@ func _third_person_shot(shooter: int, hit: bool) -> void:
 		await patron.lower_gun(gun, world.revolver_rest(shooter), world, 0.3)
 
 
-func _first_person_shot(hit: bool) -> void:
-	_leave_seat()
-	var gun: Revolver3D = world.revolvers.get(screen.my_pid)
-	var cam := rig.camera
-	gun.reparent(cam, true)
-	var aim := Basis.looking_at(Vector3(-1.0, 0.08, 0.5), Vector3.UP)
-	var held := Transform3D(aim, FIRST_PERSON_GUN)
-	var raise := create_tween()
-	raise.tween_property(gun, "transform", held, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	Sfx.play("cock")
-	gun.cock_hammer()
-	rig.set_fov(56.0, 1.6)
-	await raise.finished
-	await _suspense(gun)
-	gun.release_hammer()
-	rig.set_fov(66.0, 0.5)
-	if hit:
-		_bang(gun.muzzle_transform())
-		_announce_shot(screen.my_pid, true)
-		spectator = true
-		_drop_my_gun(gun)
-		fx.flash(Color(1, 0.92, 0.85, 1.0), 0.25)
-		var fall := rig.camera.global_transform
-		fall = fall.rotated_local(Vector3.BACK, 0.9).translated(Vector3(0.3, -0.45, 0.2))
-		rig.move_to(fall, 0.7, Tween.TRANS_BOUNCE, Tween.EASE_OUT)
-		await fx.fade_to(Color(0.25, 0.0, 0.0, 0.85), 0.9)
-		fx.flash(Color(0.25, 0.0, 0.0, 0.85), 1.2)
-	else:
-		Sfx.play("click")
-		rig.shake(0.18)
-		_announce_shot(screen.my_pid, false)
-		await _wait(0.3)
-		gun.reparent(world, true)
-		var back := create_tween()
-		back.tween_property(gun, "global_transform", world.revolver_rest(screen.my_pid), 0.45).set_trans(Tween.TRANS_CUBIC)
-		await back.finished
-
-
 func _suspense(gun: Revolver3D) -> void:
 	# 转轮 + 心跳 + 暗角收紧:整段约 1.4 秒
 	Sfx.play("spin")
@@ -241,13 +197,6 @@ func _bang(muzzle: Transform3D) -> void:
 	fx.flash(Color(1.0, 0.85, 0.7, 0.75), 0.3)
 	rig.shake(0.95)
 	app.tavern.kick_lamp(0.14)
-
-
-func _drop_my_gun(gun: Revolver3D) -> void:
-	gun.reparent(world, true)
-	var rest := world.revolver_rest(screen.my_pid)
-	var tween := create_tween()
-	tween.tween_property(gun, "global_transform", rest, 0.6).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 
 
 func _announce_shot(pid: int, hit: bool) -> void:
@@ -284,12 +233,13 @@ func _match_over(ev: Dictionary) -> void:
 	Sfx.play("win")
 	if winner == screen.my_pid:
 		hud.announce("你赢了!", UiTheme.BRASS_BRIGHT, "活到了最后", 1.8)
-		rig.orbit(Vector3(0, 0.95, 0), 2.4, 0.9, 0.18, 1.4)
 	else:
 		hud.announce("%s 赢了" % screen.name_of(winner), UiTheme.BRASS_BRIGHT, "活到了最后", 1.8)
-		if world.patrons.has(winner):
-			world.patrons[winner].celebrate()
-			rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4)
+	if world.patrons.has(winner):
+		world.patrons[winner].celebrate()
+		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4)
+	else:
+		rig.orbit(Vector3(0, 0.95, 0), 2.4, 0.9, 0.18, 1.4)
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
 	await _wait(2.2)
 	screen.show_settlement(winner)
@@ -302,15 +252,15 @@ func back_to_seat(duration: float) -> void:
 	if spectator:
 		await rig.move_to(world.overview_view(), duration * 1.6).finished
 		return
-	await rig.move_to(world.first_person_view(screen.my_pid), duration).finished
+	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, duration)
+	await rig.move_to(world.third_person_view(screen.my_pid), duration).finished
 	rig.parallax_enabled = true
-	cards.lower_hand(false)
 
 
 func _leave_seat() -> void:
 	_at_seat = false
-	cards.lower_hand(true)
 	rig.parallax_enabled = false
+	rig.set_fill(0.0, 0.5)
 
 
 func _bubble(pid: int, text: String, color := UiTheme.INK) -> void:

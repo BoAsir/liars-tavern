@@ -1,13 +1,15 @@
 class_name TableWorld
 extends Node3D
 # 牌桌上的角色层:按座位摆放酒客与左轮,提供座位几何查询。卡牌交给 CardTable。
-# 等待厅与对局共用:等待厅显示全部玩家(含自己),对局中自己的角色隐藏(第一人称)。
+# 等待厅与对局共用:都显示全部玩家(含自己);对局中镜头在自己角色身后越肩(第三人称)。
 
 
 const REVOLVER_RADIUS := 0.6
 const REVOLVER_SIDE := 0.2
-const FIRST_PERSON_HEIGHT := 1.36
-const FIRST_PERSON_RADIUS := 1.4
+const THIRD_PERSON_BACK := 2.1
+const THIRD_PERSON_HEIGHT := 1.92
+const THIRD_PERSON_SIDE := 0.55
+const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 
 var tavern: Tavern
 var cards: CardTable
@@ -128,11 +130,12 @@ func revolver_rest(pid: int) -> Transform3D:
 	return Transform3D(basis, pos)
 
 
-func first_person_view(pid: int) -> Transform3D:
+func third_person_view(pid: int) -> Transform3D:
+	# 越过右肩看向桌心:自己的角色在画面左下,牌扇在其右侧,对手与桌面在画面中央
 	var angle: float = seat_angles.get(pid, 0.0)
 	var dir := SeatLayout.direction(angle)
-	var pos := dir * FIRST_PERSON_RADIUS + Vector3(0, FIRST_PERSON_HEIGHT, 0)
-	var target := -dir * 0.3 + Vector3(0, SeatLayout.TABLE_TOP - 0.06, 0)
+	var pos := dir * THIRD_PERSON_BACK + seat_right(pid) * THIRD_PERSON_SIDE + Vector3(0, THIRD_PERSON_HEIGHT, 0)
+	var target := -dir * 0.12 + Vector3(0, SeatLayout.TABLE_TOP, 0)
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
 

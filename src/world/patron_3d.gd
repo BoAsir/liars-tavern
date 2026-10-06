@@ -16,6 +16,10 @@ const HAND_SLAM := Vector3(0.12, 0.29, -0.52)
 const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
+# 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头
+const SELF_FAN_POS := Vector3(0.33, 0.6, -0.3)
+const SELF_FAN_SCALE := 1.5
+const SELF_GRIP_OFFSET := Vector3(0.07, -0.08, 0.02)
 const GREY := Color(0.42, 0.42, 0.42)
 
 var species_index := 0
@@ -41,6 +45,8 @@ var _breath_rate := 1.0
 var _lean := 0.0
 var _arms_locked := false
 var _holding := false
+var _hold_left := Vector3(-HAND_HOLD.x, HAND_HOLD.y, HAND_HOLD.z)
+var _hold_right := HAND_HOLD
 var _noise := FastNoiseLite.new()
 
 
@@ -220,9 +226,26 @@ func set_holding(holding: bool, animate := true) -> void:
 	_holding = holding
 	if _arms_locked:
 		return
-	var target := HAND_HOLD if holding else HAND_REST
 	var duration := 0.3 if animate else 0.0
-	pose_arms(_mirror(target, -1.0), target, duration)
+	if holding:
+		pose_arms(_hold_left, _hold_right, duration)
+	else:
+		pose_arms(_mirror(HAND_REST, -1.0), HAND_REST, duration)
+
+
+func present_hand_to(viewer: Vector3) -> void:
+	# 第三人称:把牌扇移到右胸前并放大,牌面法线指向镜头、牌顶朝上,越肩即可看清点数
+	# 按座位的静止姿态计算(登场缩放动画期间 global 坐标不可靠)
+	var seat_basis := global_basis.orthonormalized()
+	var fan_world := global_position + seat_basis * (HIP + SELF_FAN_POS)
+	var normal := (viewer - fan_world).normalized()
+	var bottom := -(Vector3.UP - normal * Vector3.UP.dot(normal)).normalized()
+	var world_basis := Basis(normal.cross(bottom), normal, bottom)
+	fan.transform = Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), SELF_FAN_POS)
+	_hold_left = SELF_FAN_POS + Vector3(-SELF_GRIP_OFFSET.x, SELF_GRIP_OFFSET.y, SELF_GRIP_OFFSET.z)
+	_hold_right = SELF_FAN_POS + SELF_GRIP_OFFSET
+	if _holding:
+		set_holding(true, false)
 
 
 func pose_arms(left_target: Vector3, right_target: Vector3, duration: float) -> Tween:
