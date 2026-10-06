@@ -209,6 +209,28 @@ func test_eliminate_current_player_passes_turn():
 	assert_ne(gs.current_pid, a)
 
 
+func test_turn_back_to_last_player_after_disconnect_cannot_challenge_own_play():
+	# A 出牌后,当前行动者 B 断线,C 已没有手牌 → 回合绕回 A;A 不能质疑自己那手牌
+	var gs := _make_gs()
+	var a = gs.current_pid
+	var b = _seat_after(gs, a)
+	var c = _seat_after(gs, b)
+	gs.hands[c] = []
+	gs.play_cards(a, [0])
+	assert_eq(gs.current_pid, b)
+	assert_eq(_types(gs.eliminate_player(b)), ["eliminated", "turn"])
+	assert_eq(gs.current_pid, a)
+	var result := gs.challenge(a)
+	assert_false(result["ok"])
+	assert_eq(result["error"], "nothing_to_challenge")
+	assert_eq(gs.last_play["pid"], a)
+	assert_eq(gs.revolvers[a].shots_fired(), 0)
+	# A 只能继续出牌,场上只剩他有手牌 → 强制验证(无质疑者)
+	var forced := gs.play_cards(a, [0])
+	assert_true(forced["ok"])
+	assert_eq(_find(forced["events"], "reveal")["challenger"], null)
+
+
 func test_eliminate_down_to_one_wins_match():
 	var gs := _make_gs([1, 2], 8)
 	var loser = gs.current_pid

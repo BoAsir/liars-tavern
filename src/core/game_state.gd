@@ -63,7 +63,8 @@ func challenge(pid) -> Dictionary:
 		return {"ok": false, "error": "match_over"}
 	if pid != current_pid:
 		return {"ok": false, "error": "not_your_turn"}
-	if last_play.is_empty():
+	# 上一手是自己出的也不能质疑:其他人断线、手牌出完后回合会绕回出牌者
+	if last_play.is_empty() or last_play["pid"] == pid:
 		return {"ok": false, "error": "nothing_to_challenge"}
 	return {"ok": true, "events": _resolve_reveal(pid)}
 
