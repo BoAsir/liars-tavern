@@ -12,8 +12,8 @@ const PLAY_FLIGHT := 0.42
 const SWEEP_FLIGHT := 0.4
 const LIFT_HOVER := 0.012
 const LIFT_SELECTED := 0.032
-const REVEAL_Z := 0.38
-const STAND_HEIGHT := 0.085
+const REVEAL_Z := 0.44
+const STAND_HEIGHT := 0.1
 const STAND_SPIN := 0.45
 # 卡牌本地系(+Y 法线, -Z 牌顶)→ 竖立面向持牌者:X→右,Y→朝向持牌者,Z→向下
 const FAN_BASIS := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))

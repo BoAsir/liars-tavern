@@ -6,8 +6,8 @@ class_name SeatLayout
 const TABLE_RADIUS := 0.95
 const TABLE_TOP := 0.78
 const SEAT_RADIUS := 1.25
-const PILE_INNER := 0.09
-const PILE_OUTER := 0.27
+const PILE_INNER := 0.13
+const PILE_OUTER := 0.31
 
 
 static func seat_angle(seat_index: int, my_index: int, count: int) -> float:
@@ -22,7 +22,7 @@ static func seat_position(angle: float, radius := SEAT_RADIUS) -> Vector3:
 	return direction(angle) * radius
 
 
-static func fan_slots(count: int, spread_deg := 7.0, spacing := 0.052, drop := 0.006) -> Array:
+static func fan_slots(count: int, spread_deg := 7.0, spacing := 0.068, drop := 0.008) -> Array:
 	# 返回 [{"x", "y", "rot"}]:x 横向偏移,y 纵向下沉(外侧更低),rot 为绕视线轴旋转(弧度,左正)
 	var slots := []
 	var mid := (count - 1) / 2.0
@@ -48,7 +48,7 @@ static func pile_offset(index: int, seed: int) -> Dictionary:
 	}
 
 
-static func reveal_slots(count: int, spacing := 0.105) -> Array:
+static func reveal_slots(count: int, spacing := 0.14) -> Array:
 	var xs := []
 	var mid := (count - 1) / 2.0
 	for i in count:

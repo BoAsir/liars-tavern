@@ -4,8 +4,8 @@ extends Node3D
 # 支持翻面、弧线飞行、悬停抬起、选中高亮,以及射线拾取(纯数学,无需物理体)。
 
 
-const WIDTH := 0.09
-const HEIGHT := 0.13
+const WIDTH := 0.12
+const HEIGHT := 0.1733
 const GAP := 0.0007
 const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 

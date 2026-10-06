@@ -17,8 +17,8 @@ const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
 # 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头
-const SELF_FAN_POS := Vector3(0.33, 0.6, -0.3)
-const SELF_FAN_SCALE := 1.5
+const SELF_FAN_POS := Vector3(0.36, 0.62, -0.3)
+const SELF_FAN_SCALE := 1.4
 const SELF_GRIP_OFFSET := Vector3(0.07, -0.08, 0.02)
 const GREY := Color(0.42, 0.42, 0.42)
 

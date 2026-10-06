@@ -13,6 +13,14 @@ const FIREPLACE_X := -1.5
 const WINDOW_Z := -0.9
 const WINDOW_SIZE := Vector2(1.3, 1.25)
 const WINDOW_BOTTOM := 1.15
+const SCONCE_HEIGHT := 2.15
+# 壁灯:[墙内表面上的位置, 朝向房间的偏航角]。补亮房间四周,避免只有牌桌一圈亮
+const SCONCES := [
+	[Vector3(-1.7, SCONCE_HEIGHT, 4.4), 0.0], [Vector3(1.7, SCONCE_HEIGHT, 4.4), 0.0],
+	[Vector3(1.4, SCONCE_HEIGHT, -4.4), PI], [Vector3(3.2, SCONCE_HEIGHT, -4.4), PI],
+	[Vector3(-4.4, SCONCE_HEIGHT, 2.0), -PI / 2.0], [Vector3(-4.4, SCONCE_HEIGHT, -3.1), -PI / 2.0],
+	[Vector3(4.4, SCONCE_HEIGHT, 1.7), PI / 2.0],
+]
 
 var camera_rig: CameraRig
 var table_root: Node3D
@@ -36,6 +44,7 @@ func _ready() -> void:
 	_build_bar()
 	_build_window()
 	_build_barrels()
+	_build_sconces()
 	_build_dust()
 	table_root = MeshKit.pivot(self, Vector3.ZERO, "TableRoot")
 	camera_rig = CameraRig.new()
@@ -69,10 +78,10 @@ func _build_environment() -> void:
 	environment.background_color = Color(0.008, 0.006, 0.005)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	# 暖色主光 + 冷色环境补光:避免整屏单一橘色
-	environment.ambient_light_color = Color(0.22, 0.24, 0.32)
-	environment.ambient_light_energy = 0.38
+	environment.ambient_light_color = Color(0.27, 0.26, 0.3)
+	environment.ambient_light_energy = 0.62
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	environment.tonemap_exposure = 1.05
+	environment.tonemap_exposure = 1.32
 	environment.tonemap_white = 6.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.85
@@ -190,7 +199,7 @@ func _build_lamp() -> void:
 	spot.position = Vector3(0, shade_y - 0.05, 0)
 	spot.rotation_degrees = Vector3(-90, 0, 0)
 	spot.light_color = Color(1.0, 0.84, 0.66)
-	spot.light_energy = 3.6
+	spot.light_energy = 4.4
 	spot.spot_range = 3.4
 	spot.spot_angle = 52.0
 	spot.spot_angle_attenuation = 0.7
@@ -201,8 +210,8 @@ func _build_lamp() -> void:
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(0, shade_y + 0.05, 0)
 	fill.light_color = Color(1.0, 0.72, 0.45)
-	fill.light_energy = 0.7
-	fill.omni_range = 5.0
+	fill.light_energy = 1.2
+	fill.omni_range = 7.0
 	fill.light_volumetric_fog_energy = 0.3
 	_lamp_pivot.add_child(fill)
 	_flickers.append({"light": spot, "base": spot.light_energy, "speed": 0.7, "depth": 0.04, "seed": 3.0})
@@ -232,8 +241,8 @@ func _candle(parent: Node3D, offset: Vector3, height: float, seed: float) -> voi
 	var light := OmniLight3D.new()
 	light.position = offset + Vector3(0, flame_y + 0.02, 0)
 	light.light_color = Color(1.0, 0.74, 0.48)
-	light.light_energy = 0.3
-	light.omni_range = 1.9
+	light.light_energy = 0.42
+	light.omni_range = 2.2
 	light.light_volumetric_fog_energy = 0.4
 	parent.add_child(light)
 	_flickers.append({"light": light, "base": light.light_energy, "speed": 6.0, "depth": 0.35, "seed": seed * 13.0})
@@ -264,8 +273,8 @@ func _build_fireplace() -> void:
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 0.5, 0.75)
 	light.light_color = Color(1.0, 0.56, 0.3)
-	light.light_energy = 2.2
-	light.omni_range = 6.5
+	light.light_energy = 2.7
+	light.omni_range = 7.0
 	light.shadow_enabled = true
 	light.light_volumetric_fog_energy = 0.6
 	fp.add_child(light)
@@ -302,8 +311,8 @@ func _build_bar() -> void:
 	var light := OmniLight3D.new()
 	light.position = Vector3(0.9, 2.5, 0)
 	light.light_color = Color(1.0, 0.7, 0.4)
-	light.light_energy = 0.9
-	light.omni_range = 3.2
+	light.light_energy = 1.4
+	light.omni_range = 3.8
 	bar.add_child(light)
 
 
@@ -370,6 +379,34 @@ func _build_barrels() -> void:
 				Vector3.ZERO, Vector3(1, 0.6, 1))
 	MeshKit.add(self, MeshKit.cylinder(0.27, 0.27, 0.8, 24), WorldMaterials.wood("barrel"),
 		Vector3(3.4, 0.27, -3.0), Vector3(90, 30, 0))
+
+
+# —— 壁灯 ——
+
+func _build_sconces() -> void:
+	for i in SCONCES.size():
+		_sconce(SCONCES[i][0], SCONCES[i][1], 60.0 + i)
+
+
+func _sconce(wall_point: Vector3, yaw: float, seed: float) -> void:
+	# 本地 -Z 指向房间内:黄铜底板 + 弯臂 + 玻璃灯罩里的一簇火苗
+	var root := MeshKit.pivot(self, wall_point, "Sconce")
+	root.rotation.y = yaw
+	MeshKit.add(root, MeshKit.box(Vector3(0.1, 0.22, 0.02)), WorldMaterials.brass(), Vector3(0, 0, -0.01))
+	MeshKit.add(root, MeshKit.cylinder(0.008, 0.008, 0.14, 8), WorldMaterials.brass(), Vector3(0, -0.04, -0.08),
+		Vector3(90, 0, 0))
+	MeshKit.add(root, MeshKit.cylinder(0.04, 0.022, 0.035, 16), WorldMaterials.brass(), Vector3(0, -0.03, -0.15))
+	MeshKit.add(root, MeshKit.cylinder(0.032, 0.036, 0.12, 16), WorldMaterials.glass(Color(1.0, 0.92, 0.8)),
+		Vector3(0, 0.045, -0.15))
+	MeshKit.add(root, MeshKit.quad(Vector2(0.035, 0.07)), WorldMaterials.flame(3.5, seed), Vector3(0, 0.03, -0.15))
+	var light := OmniLight3D.new()
+	light.position = Vector3(0, 0.05, -0.2)
+	light.light_color = Color(1.0, 0.74, 0.48)
+	light.light_energy = 1.0
+	light.omni_range = 4.6
+	light.light_volumetric_fog_energy = 0.5
+	root.add_child(light)
+	_flickers.append({"light": light, "base": light.light_energy, "speed": 4.0, "depth": 0.12, "seed": seed})
 
 
 # —— 浮尘 ——
