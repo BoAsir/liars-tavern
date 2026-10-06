@@ -30,6 +30,14 @@ static func species(index: int) -> Dictionary:
 	return SPECIES[posmod(index, SPECIES.size())]
 
 
+static func first_free_species(used: Array) -> int:
+	# 新酒客取第一个没人用的物种,同桌不撞脸;物种全被占用(人数超过物种数)时才轮流重复
+	for i in SPECIES.size():
+		if not used.has(i):
+			return i
+	return posmod(used.size(), SPECIES.size())
+
+
 static func build_chair(parent: Node3D) -> void:
 	var wood := WorldMaterials.wood("dark")
 	MeshKit.add(parent, MeshKit.box(Vector3(0.48, 0.05, 0.44)), wood, Vector3(0, 0.45, 0.14))

@@ -52,7 +52,7 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 		seat_angles[pid] = angle
 		var visible_patron: bool = show_self or pid != my_pid
 		if visible_patron:
-			_place_patron(pid, i, angle)
+			_place_patron(pid, angle)
 		elif patrons.has(pid):
 			patrons[pid].queue_free()
 			patrons.erase(pid)
@@ -60,17 +60,26 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 			_place_revolver(pid, angle)
 
 
-func _place_patron(pid: int, seat_index: int, angle: float) -> void:
+func _place_patron(pid: int, angle: float) -> void:
 	var xform := seat_transform(angle)
 	if patrons.has(pid):
 		var tween := create_tween()
 		tween.tween_property(patrons[pid], "transform", xform, 0.6).set_trans(Tween.TRANS_CUBIC)
 		return
-	var patron := Patron.new(seat_index)
+	# 物种跟人走:新来的取第一个没人用的物种,之后一直沿用(换座、复活都不变)
+	var used := patrons.values().map(func(p: Patron) -> int: return p.species_index)
+	var patron := Patron.new(PatronParts.first_free_species(used))
 	patron.transform = xform
 	add_child(patron)
 	patron.appear()
 	patrons[pid] = patron
+
+
+func species_of(pid: int) -> Dictionary:
+	# 该玩家角色的物种外观(等待厅名单据此显示动物,与 3D 角色一致);还没有角色时返回 {}
+	if not patrons.has(pid):
+		return {}
+	return PatronParts.species(patrons[pid].species_index)
 
 
 func _place_revolver(pid: int, angle: float) -> void:
@@ -82,10 +91,11 @@ func _place_revolver(pid: int, angle: float) -> void:
 
 
 func revive_all() -> void:
-	# 新一局开始前:倒下的酒客换成新的(带登场动画),帽子等散落物一并清理
+	# 新一局开始前:倒下的酒客换成新的(带登场动画),活着的复位姿势(如胜者的庆祝),帽子等散落物一并清理
 	for pid in patrons.keys():
 		var old: Patron = patrons[pid]
 		if old.alive:
+			old.reset_pose()
 			continue
 		var fresh := Patron.new(old.species_index)
 		fresh.transform = old.transform
@@ -93,9 +103,7 @@ func revive_all() -> void:
 		add_child(fresh)
 		fresh.appear()
 		patrons[pid] = fresh
-	for child in get_children():
-		if child.name.begins_with("Hat"):
-			child.queue_free()
+	_clear_debris()
 
 
 func clear() -> void:
@@ -107,6 +115,14 @@ func clear() -> void:
 	revolvers = {}
 	seat_angles = {}
 	cards.clear_all()
+	_clear_debris()
+
+
+func _clear_debris() -> void:
+	# 出局时打飞的帽子等:Patron 把它们挂到本节点下并打上 DEBRIS_GROUP 标记
+	for child in get_children():
+		if child.is_in_group(Patron.DEBRIS_GROUP):
+			child.queue_free()
 
 
 # —— 几何查询 ——

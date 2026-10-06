@@ -16,10 +16,18 @@ const HAND_SLAM := Vector3(0.12, 0.29, -0.52)
 const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
+# 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线
+const FAN_TILT_DEG := -18.0
 # 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头
 const SELF_FAN_POS := Vector3(0.36, 0.62, -0.3)
 const SELF_FAN_SCALE := 1.4
 const SELF_GRIP_OFFSET := Vector3(0.07, -0.08, 0.02)
+# 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
+const CHEER_BOUNCES := 3
+const CHEER_BOUNCE_TIME := 0.22
+const CHEER_JUMP := 0.08
+# 出局时打飞的帽子等散落物:挂到父节点(TableWorld)下并打上此标记,由 TableWorld 回收
+const DEBRIS_GROUP := &"patron_debris"
 const GREY := Color(0.42, 0.42, 0.42)
 
 var species_index := 0
@@ -44,6 +52,7 @@ var _blink_in := 2.0
 var _breath_rate := 1.0
 var _lean := 0.0
 var _arms_locked := false
+var _cheer_tweens: Array[Tween] = []   # 庆祝中的蹦跳与举手,复位时中止
 var _holding := false
 var _hold_left := Vector3(-HAND_HOLD.x, HAND_HOLD.y, HAND_HOLD.z)
 var _hold_right := HAND_HOLD
@@ -98,7 +107,7 @@ func _build() -> void:
 	_arm_r = _build_arm(1.0, mats)
 	right_hand = _arm_r.get_node("Hand")
 	fan = MeshKit.pivot(body, Vector3(0, 0.44, -0.37), "Fan")
-	fan.basis = Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)) * Basis(Vector3.RIGHT, deg_to_rad(-18))
+	fan.basis = CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG))
 	_set_arm(_arm_l, _mirror(HAND_REST, -1.0))
 	_set_arm(_arm_r, HAND_REST)
 
@@ -329,12 +338,6 @@ func relief() -> void:
 	tween.tween_property(body, "position:y", HIP.y, 0.4).set_trans(Tween.TRANS_SINE)
 
 
-func flinch() -> void:
-	var tween := create_tween()
-	tween.tween_property(body, "position:z", HIP.z + 0.04, 0.06)
-	tween.tween_property(body, "position:z", HIP.z, 0.3).set_trans(Tween.TRANS_ELASTIC)
-
-
 # —— 出局 / 庆祝 / 进出场 ——
 
 func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
@@ -367,6 +370,8 @@ func _knock_hat_off() -> void:
 	_hat = null
 	var start := hat.global_position
 	var landing := global_transform * Vector3(-0.35, 0.05, 0.45)
+	# 重名的节点在 reparent 后会被改名,不能靠名字找回:打上散落物标记
+	hat.add_to_group(DEBRIS_GROUP)
 	hat.reparent(get_parent(), true)
 	var tween := hat.create_tween()
 	tween.tween_method(func(t: float):
@@ -376,14 +381,31 @@ func _knock_hat_off() -> void:
 
 
 func celebrate() -> void:
+	# 举起双手、原地蹦几下;蹦完解除动作锁(双手仍举着,直到下次持牌或 reset_pose)
 	if not alive:
 		return
 	_arms_locked = true
 	set_expression("happy")
-	var tween := create_tween().set_loops(3)
-	tween.tween_property(body, "position:y", HIP.y + 0.08, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(body, "position:y", HIP.y, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3)
+	var bounce := create_tween().set_loops(CHEER_BOUNCES)
+	bounce.tween_property(body, "position:y", HIP.y + CHEER_JUMP, CHEER_BOUNCE_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	bounce.tween_property(body, "position:y", HIP.y, CHEER_BOUNCE_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_cheer_tweens = [bounce, pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3)]
+	await bounce.finished
+	_arms_locked = false
+
+
+func reset_pose() -> void:
+	# 回到等待厅 / 新一局开始:停下庆祝,解除动作锁,恢复中性表情、坐正、空手
+	for tween in _cheer_tweens:
+		if tween.is_valid():
+			tween.kill()
+	_cheer_tweens = []
+	_arms_locked = false
+	set_expression("neutral")
+	body.position = HIP
+	set_holding(false, false)
 
 
 func appear() -> void:
