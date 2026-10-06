@@ -1,0 +1,56 @@
+class_name SeatLayout
+# 牌桌布局数学(纯函数):座位环形分布、手牌扇形、出牌区散落、翻牌排列。
+# 角度约定:0 = 本机座位(+Z,靠近相机),角度增大按俯视顺时针转到本机左手边(-X)。
+
+
+const TABLE_RADIUS := 0.95
+const TABLE_TOP := 0.78
+const SEAT_RADIUS := 1.25
+const PILE_INNER := 0.09
+const PILE_OUTER := 0.27
+
+
+static func seat_angle(seat_index: int, my_index: int, count: int) -> float:
+	return wrapf(float(seat_index - my_index) * TAU / count, 0.0, TAU)
+
+
+static func direction(angle: float) -> Vector3:
+	return Vector3(-sin(angle), 0.0, cos(angle))
+
+
+static func seat_position(angle: float, radius := SEAT_RADIUS) -> Vector3:
+	return direction(angle) * radius
+
+
+static func fan_slots(count: int, spread_deg := 7.0, spacing := 0.052, drop := 0.006) -> Array:
+	# 返回 [{"x", "y", "rot"}]:x 横向偏移,y 纵向下沉(外侧更低),rot 为绕视线轴旋转(弧度,左正)
+	var slots := []
+	var mid := (count - 1) / 2.0
+	for i in count:
+		var k := float(i) - mid
+		slots.append({
+			"x": k * spacing,
+			"y": -absf(k) * absf(k) * drop,
+			"rot": -k * deg_to_rad(spread_deg),
+		})
+	return slots
+
+
+static func pile_offset(index: int, seed: int) -> Dictionary:
+	# 出牌区散落位置:确定性伪随机,保证所有客户端同一张牌落点一致
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([index, seed])
+	var angle := rng.randf() * TAU
+	var radius := rng.randf_range(PILE_INNER, PILE_OUTER)
+	return {
+		"pos": Vector2(cos(angle), sin(angle)) * radius,
+		"rot": rng.randf_range(-PI, PI),
+	}
+
+
+static func reveal_slots(count: int, spacing := 0.105) -> Array:
+	var xs := []
+	var mid := (count - 1) / 2.0
+	for i in count:
+		xs.append((float(i) - mid) * spacing)
+	return xs
