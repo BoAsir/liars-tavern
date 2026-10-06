@@ -60,9 +60,9 @@ func is_match_over() -> bool:
 
 # —— 建房 / 加入 / 离开 ——
 
-func host_game(pname: String, room_name: String) -> Error:
+func host_game(pname: String, room_name: String, preferred_port := 0) -> Error:
 	leave()
-	var created := _create_server()
+	var created := _create_server(preferred_port)
 	if created["error"] != OK:
 		return created["error"]
 	multiplayer.multiplayer_peer = created["peer"]
@@ -121,11 +121,16 @@ func leave() -> void:
 	last_private = {}
 
 
-func _create_server() -> Dictionary:
-	var last_err := ERR_CANT_CREATE
+func _create_server(preferred_port: int) -> Dictionary:
+	# preferred_port > 0 时优先绑定它(测试隔离用),失败再走默认端口段
+	var candidates: Array[int] = []
+	if preferred_port > 0:
+		candidates.append(preferred_port)
 	for i in Protocol.GAME_PORT_ATTEMPTS:
+		candidates.append(Protocol.GAME_PORT + i)
+	var last_err := ERR_CANT_CREATE
+	for port in candidates:
 		var peer := ENetMultiplayerPeer.new()
-		var port := Protocol.GAME_PORT + i
 		last_err = peer.create_server(port, Protocol.MAX_TRANSPORT_CLIENTS)
 		if last_err == OK:
 			return {"error": OK, "peer": peer, "port": port}

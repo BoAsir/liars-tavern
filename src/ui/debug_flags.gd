@@ -3,8 +3,10 @@ extends Node
 # 命令行调试开关(写在 -- 之后),用于联机冒烟测试与截图检查:
 #   --name=甲            自动填写昵称
 #   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
+#   --port=端口          房主优先绑定的游戏端口(并行测试互不串房)
+#   --room=房名          房主的房间名
 #   --autojoin=IP[:端口] 自动直连
-#   --discover           自动加入局域网发现的第一个房间
+#   --discover[=房名]    自动加入局域网发现的(指定名字的)房间
 #   --bot                自动准备/选牌/出牌/质疑(走真实界面路径)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
@@ -45,17 +47,26 @@ func _ready() -> void:
 		_capture_later("menu", 2.5)
 	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
 	if opts.has("autohost"):
-		var err := Net.host_game(player_name, "%s 的酒馆" % player_name)
+		var room: String = opts.get("room", "%s 的酒馆" % player_name)
+		var err := Net.host_game(player_name, room, int(opts.get("port", "0")))
 		print("[debug] host_game -> ", error_string(err))
 		if err != OK:
 			_fail("host_failed")
 	elif opts.has("autojoin"):
 		Net.join_game(player_name, opts["autojoin"])
 	elif opts.has("discover"):
-		Discovery.rooms_updated.connect(func(rooms: Array):
-			if not rooms.is_empty() and not Net.in_game and Net.lobby_players.is_empty() and rooms[0]["open"]:
-				print("[debug] discovered ", rooms[0]["room"], " at ", rooms[0]["ip"])
-				Net.join_game(player_name, Protocol.format_address(rooms[0]["ip"], rooms[0]["port"])))
+		Discovery.rooms_updated.connect(_join_discovered.bind(player_name))
+
+
+func _join_discovered(rooms: Array, player_name: String) -> void:
+	if Net.in_game or not Net.lobby_players.is_empty() or Net.player_name != "":
+		return
+	var wanted: String = opts["discover"]
+	for room in rooms:
+		if room["open"] and (wanted == "true" or room["room"] == wanted):
+			print("[debug] discovered ", room["room"], " at ", room["ip"], ":", room["port"])
+			Net.join_game(player_name, Protocol.format_address(room["ip"], room["port"]))
+			return
 
 
 func _process(delta: float) -> void:

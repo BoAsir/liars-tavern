@@ -15,13 +15,16 @@ run_capped() {
 }
 
 COMMON=(--headless --path "$ROOT" -- --bot --fast="$SPEED" --quit-after-match)
+# 每次运行用独立的游戏端口与房名:同机并行跑多份冒烟时,直连与发现都只会进自己的房间
+PORT="${PORT:-$((47830 + RANDOM % 150))}"
+ROOM="冒烟$$"
 
-run_capped "$GODOT" "${COMMON[@]}" --autohost=3 --name=房主 >"$LOG_DIR/host.log" 2>&1 &
+run_capped "$GODOT" "${COMMON[@]}" --autohost=3 --port="$PORT" --room="$ROOM" --name=房主 >"$LOG_DIR/host.log" 2>&1 &
 HOST=$!
 sleep 2
-run_capped "$GODOT" "${COMMON[@]}" --discover --name=发现 >"$LOG_DIR/discover.log" 2>&1 &
+run_capped "$GODOT" "${COMMON[@]}" --discover="$ROOM" --name=发现 >"$LOG_DIR/discover.log" 2>&1 &
 DISCOVER=$!
-run_capped "$GODOT" "${COMMON[@]}" --autojoin=127.0.0.1 --name=直连 >"$LOG_DIR/direct.log" 2>&1 &
+run_capped "$GODOT" "${COMMON[@]}" --autojoin="127.0.0.1:$PORT" --name=直连 >"$LOG_DIR/direct.log" 2>&1 &
 DIRECT=$!
 
 status=0
