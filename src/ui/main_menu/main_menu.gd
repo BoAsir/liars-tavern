@@ -155,11 +155,17 @@ func _build_direct(box: VBoxContainer) -> void:
 
 func _build_footer(box: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
 	var version := UiTheme.label("协议 v%d · 本机 %s" % [Protocol.VERSION, ", ".join(Lan.local_private_ipv4s())],
 		13, UiTheme.MUTED)
 	version.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(version)
+	var rules := UiTheme.button("游戏规则")
+	rules.add_theme_font_size_override("font_size", 15)
+	rules.tooltip_text = "翻开说明书(%s)" % OS.get_keycode_string(Rulebook.HOTKEY)
+	rules.pressed.connect(func(): app.show_rules())
+	row.add_child(rules)
 	_mute_button = UiTheme.button("声音:开")
 	_mute_button.add_theme_font_size_override("font_size", 15)
 	_mute_button.pressed.connect(_toggle_mute)

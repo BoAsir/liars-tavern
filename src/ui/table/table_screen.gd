@@ -54,6 +54,7 @@ func _ready() -> void:
 	add_child(hud)
 	hud.play_pressed.connect(_submit_play)
 	hud.challenge_pressed.connect(_submit_challenge)
+	hud.rules_pressed.connect(func(): app.show_rules())
 	hud.set_my_status(names.get(my_pid, ""), 0, true)
 	director = TableDirector.new(self, app, hud)
 	add_child(director)
@@ -186,6 +187,9 @@ func set_current(pid) -> void:
 	elif pid == my_pid:
 		hud.set_turn("轮到你了", true)
 		Sfx.play("join")
+		if app.is_rules_open():
+			# 说明书挡住了牌桌,而回合计时不会暂停
+			app.toast("轮到你了!按 %s 合上说明书" % OS.get_keycode_string(Rulebook.HOTKEY), UiTheme.BRASS_BRIGHT)
 	else:
 		hud.set_turn("等待 %s 行动…" % name_of(pid), false)
 	_update_nameplates()

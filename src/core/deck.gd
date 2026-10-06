@@ -4,6 +4,7 @@ class_name Deck
 
 const HAND_SIZE := 5
 const COMPOSITION := {Card.QUEEN: 6, Card.KING: 6, Card.ACE: 6, Card.JOKER: 2}
+const TARGETS := [Card.QUEEN, Card.KING, Card.ACE]
 
 
 static func build() -> Array[int]:
@@ -33,4 +34,4 @@ static func deal(player_ids: Array, rng: RandomNumberGenerator) -> Dictionary:
 
 
 static func pick_target(rng: RandomNumberGenerator) -> int:
-	return [Card.QUEEN, Card.KING, Card.ACE][rng.randi_range(0, 2)]
+	return TARGETS[rng.randi_range(0, TARGETS.size() - 1)]

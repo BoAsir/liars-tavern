@@ -91,6 +91,10 @@ func _build() -> void:
 	var leave := UiTheme.button("离开")
 	leave.pressed.connect(_on_leave_pressed)
 	buttons.add_child(leave)
+	var rules := UiTheme.button("规则")
+	rules.tooltip_text = "翻开说明书(%s)" % OS.get_keycode_string(Rulebook.HOTKEY)
+	rules.pressed.connect(func(): app.show_rules())
+	buttons.add_child(rules)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buttons.add_child(spacer)

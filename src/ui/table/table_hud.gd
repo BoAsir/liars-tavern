@@ -1,11 +1,12 @@
 class_name TableHud
 extends Control
-# 牌桌 HUD:左上目标牌与局数、顶部回合横幅与环形倒计时、底部出牌/质疑按钮与快捷键提示、
+# 牌桌 HUD:左上目标牌与局数、右上说明书按钮、顶部回合横幅与环形倒计时、底部出牌/质疑按钮与快捷键提示、
 # 右侧事件日志、左下自己的弹巢、屏幕中央的大字宣告与自己的对话气泡。
 
 
 signal play_pressed
 signal challenge_pressed
+signal rules_pressed
 
 const LOG_LINES := 6
 
@@ -30,9 +31,10 @@ var _bubble_anchor: Control
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_target_panel()
+	_build_rules_button()
 	_build_turn_banner()
 	_build_actions()
 	_build_log()
@@ -61,6 +63,17 @@ func _build_target_panel() -> void:
 	info.add_child(UiTheme.label("本局目标", 15, UiTheme.PARCHMENT_DIM))
 	_target_name = UiTheme.label("?", 34, UiTheme.BRASS_BRIGHT, UiTheme.display_font())
 	info.add_child(_target_name)
+
+
+func _build_rules_button() -> void:
+	var button := UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
+	button.add_theme_font_size_override("font_size", 15)
+	# 不抢焦点:否则点过之后空格/回车会再次触发它,而不是质疑/出牌
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func(): rules_pressed.emit())
+	add_child(button)
+	button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 
 
 func _build_turn_banner() -> void:
@@ -218,7 +231,7 @@ func set_actions(can_play: bool, can_challenge: bool, selected: int, my_turn: bo
 	elif selected > 0:
 		_hint.text = "已预选 %d 张,轮到你时按 Enter 出牌" % selected
 	else:
-		_hint.text = "可以先点选手牌预选 · Esc 离开"
+		_hint.text = "可以先点选手牌预选 · %s 规则 · Esc 离开" % OS.get_keycode_string(RulebookContent.HOTKEY)
 
 
 func set_actions_visible(visible_actions: bool) -> void:

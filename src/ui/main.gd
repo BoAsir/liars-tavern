@@ -16,6 +16,9 @@ var flags: DebugFlags
 
 var _ui: Control
 var _screen: Control = null
+var _rules_root: Control
+var _rulebook: Rulebook = null
+var _rules_page := 0
 
 
 func _ready() -> void:
@@ -28,26 +31,13 @@ func _ready() -> void:
 	world.cards.sfx.connect(Sfx.play)
 	post_fx = PostFx.new()
 	add_child(post_fx)
-	var layer := CanvasLayer.new()
-	layer.layer = 5
-	add_child(layer)
-	_ui = Control.new()
-	_ui.theme = UiTheme.theme()
-	_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(_ui)
+	_ui = _ui_layer(5)
 	labels = WorldLabels.new(tavern.camera_rig.camera)
 	_ui.add_child(labels)
+	# 说明书单独一层:压在所有屏幕之上(切换屏幕也不会被盖住),提示条仍在它上面
+	_rules_root = _ui_layer(10)
 	toasts = ToastLayer.new()
-	var toast_layer := CanvasLayer.new()
-	toast_layer.layer = 20
-	add_child(toast_layer)
-	var toast_root := Control.new()
-	toast_root.theme = UiTheme.theme()
-	toast_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	toast_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast_layer.add_child(toast_root)
-	toast_root.add_child(toasts)
+	_ui_layer(20).add_child(toasts)
 	Net.joined_lobby.connect(_show_lobby)
 	Net.returned_to_lobby.connect(_show_lobby)
 	Net.left_lobby.connect(_back_to_menu)
@@ -58,6 +48,13 @@ func _ready() -> void:
 	_show_menu()
 	flags = DebugFlags.new(self)
 	add_child(flags)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# 任何屏幕下按 F1 翻开说明书(合上由说明书自己处理)
+	if Rulebook.is_hotkey(event):
+		get_viewport().set_input_as_handled()
+		show_rules()
 
 
 func _notification(what: int) -> void:
@@ -88,6 +85,9 @@ func toast(text: String, color := UiTheme.PARCHMENT) -> void:
 
 
 func confirm(message: String, confirm_text := "确定", cancel_text := "取消") -> ConfirmOverlay:
+	# 确认框在界面层,低于说明书;先合上说明书,免得确认框(如「房主已解散」)被挡在后面
+	if is_rules_open():
+		_rulebook.close()
 	var overlay := ConfirmOverlay.new(message, confirm_text, cancel_text)
 	_ui.add_child(overlay)
 	return overlay
@@ -95,6 +95,23 @@ func confirm(message: String, confirm_text := "确定", cancel_text := "取消")
 
 func current_screen() -> Control:
 	return _screen
+
+
+func show_rules() -> void:
+	# 翻开说明书,停在上次读到的那一章
+	if is_rules_open():
+		return
+	_rulebook = Rulebook.new(Net.in_game)
+	_rulebook.closed.connect(func():
+		_rules_page = _rulebook.current_section()
+		_rulebook = null)
+	_rules_root.add_child(_rulebook)
+	_rulebook.show_section(_rules_page)
+
+
+func is_rules_open() -> bool:
+	# is_instance_valid:说明书若没走 close() 就被释放,引用不会卡住
+	return is_instance_valid(_rulebook)
 
 
 # —— 屏幕切换 ——
@@ -122,6 +139,18 @@ func _back_to_menu(reason: String) -> void:
 	_show_menu()
 	if reason != "":
 		confirm(reason, "知道了", "")
+
+
+func _ui_layer(index: int) -> Control:
+	var layer := CanvasLayer.new()
+	layer.layer = index
+	add_child(layer)
+	var root := Control.new()
+	root.theme = UiTheme.theme()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root)
+	return root
 
 
 func _switch_to(screen: Control) -> void:
