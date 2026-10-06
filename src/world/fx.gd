@@ -77,12 +77,7 @@ static func smoke_puff(parent: Node3D, pos: Vector3, amount := 18, tint := Color
 	particles.process_material = pm
 	particles.draw_pass_1 = _lit_quad(0.12, Color.WHITE)
 	parent.add_child(particles)
-	particles.emitting = true
-	particles.finished.connect(particles.queue_free)
-
-
-static func sparks(parent: Node3D, pos: Vector3, direction: Vector3, color := Color(1.0, 0.8, 0.35)) -> void:
-	parent.add_child(_burst(pos, direction, 20, 0.5, color))
+	_emit_once(particles)
 
 
 static func _burst(pos: Vector3, direction: Vector3, amount: int, lifetime: float, color: Color) -> GPUParticles3D:
@@ -93,15 +88,23 @@ static func _burst(pos: Vector3, direction: Vector3, amount: int, lifetime: floa
 	pm.color_ramp = _ramp([color, Color(color, 0.0)])
 	particles.process_material = pm
 	particles.draw_pass_1 = _additive_quad(0.01, 6.0)
+	_emit_once(particles)
+	return particles
+
+
+static func _emit_once(particles: GPUParticles3D) -> void:
+	# 开始一轮一次性发射,结束(finished)后节点自行释放
 	particles.emitting = true
 	particles.finished.connect(particles.queue_free)
-	return particles
 
 
 # —— 构件 ——
 
 static func _particles(pos: Vector3, amount: int, lifetime: float, one_shot: bool) -> GPUParticles3D:
 	var particles := GPUParticles3D.new()
+	# 新建节点默认就在发射:一次性粒子要先停下,之后 _emit_once 才会开启新的一轮并在结束时发出 finished;
+	# 否则那次 emitting = true 被当成"发射中重开",finished 信号被取消,节点永远不会释放
+	particles.emitting = not one_shot
 	particles.position = pos
 	particles.amount = amount
 	particles.lifetime = lifetime

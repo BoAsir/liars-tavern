@@ -1,7 +1,8 @@
 // 全屏后处理:暗角(紧张时收紧)、去饱和、色差、闪光染色、胶片颗粒。
 shader_type canvas_item;
 
-uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
+// 按 1:1 像素采样,不需要 mipmap(mipmap 过滤会让渲染器每帧额外生成一整条模糊链)
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
 uniform float vignette = 0.35;       // 0..1 暗角收紧程度
 uniform float vignette_darkness = 0.75;
 uniform float desaturate = 0.0;

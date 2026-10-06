@@ -7,6 +7,7 @@ const FELT_SHADER := preload("res://src/world/shaders/felt.gdshader")
 const STONE_SHADER := preload("res://src/world/shaders/stone.gdshader")
 const FLAME_SHADER := preload("res://src/world/shaders/flame.gdshader")
 const PARTICLE_SHADER := preload("res://src/world/shaders/soft_particle.gdshader")
+const PARTICLE_ADD_SHADER := preload("res://src/world/shaders/soft_particle_add.gdshader")
 
 # 木材预设:颜色 + 纹理参数
 const WOOD_PRESETS := {
@@ -104,10 +105,10 @@ static func flame(intensity: float, seed: float) -> ShaderMaterial:
 
 
 static func particle(additive: bool, boost: float, softness: float) -> ShaderMaterial:
+	# 混合模式是着色器的编译期 render_mode,只能换着色器而不能用 uniform 切换
 	var mat := ShaderMaterial.new()
-	mat.shader = PARTICLE_SHADER
+	mat.shader = PARTICLE_ADD_SHADER if additive else PARTICLE_SHADER
 	mat.render_priority = 1
-	mat.set_shader_parameter("additive", additive)
 	mat.set_shader_parameter("emission_boost", boost)
 	mat.set_shader_parameter("softness", softness)
 	return mat
@@ -123,28 +124,6 @@ static func brass() -> StandardMaterial3D:
 
 static func iron() -> StandardMaterial3D:
 	return _cached("iron", func(): return _standard(Color(0.09, 0.09, 0.1), 0.8, 0.55))
-
-
-static func cloth(color: Color) -> StandardMaterial3D:
-	return _cached("cloth:" + color.to_html(), func():
-		var mat := _standard(color, 0.0, 0.85)
-		mat.rim_enabled = true
-		mat.rim = 0.35
-		mat.rim_tint = 0.6
-		return mat)
-
-
-static func skin(color: Color) -> StandardMaterial3D:
-	return _cached("skin:" + color.to_html(), func():
-		var mat := _standard(color, 0.0, 0.6)
-		mat.rim_enabled = true
-		mat.rim = 0.25
-		mat.rim_tint = 0.4
-		return mat)
-
-
-static func glossy(color: Color) -> StandardMaterial3D:
-	return _cached("glossy:" + color.to_html(), func(): return _standard(color, 0.0, 0.15))
 
 
 static func glass(color: Color) -> StandardMaterial3D:
@@ -169,11 +148,6 @@ static func emissive(color: Color, energy: float) -> StandardMaterial3D:
 
 static func clear_cache() -> void:
 	_cache = {}
-
-
-static func unique(base: Material) -> Material:
-	# 需要单独改色/淡出的物件(如出局变灰)使用独立副本
-	return base.duplicate()
 
 
 static func _standard(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
