@@ -83,7 +83,8 @@ func _build_environment() -> void:
 	environment.glow_intensity = 0.85
 	environment.glow_strength = 1.0
 	environment.glow_bloom = 0.04
-	environment.glow_hdr_threshold = 0.9
+	# 阈值高于漫反射能达到的亮度:只有火焰、灯泡等自发光会泛光,平放在灯下的牌不会糊成一团白
+	environment.glow_hdr_threshold = 1.3
 	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	environment.ssao_enabled = true
 	environment.ssao_radius = 0.9
@@ -195,7 +196,7 @@ func _build_lamp() -> void:
 	spot.position = Vector3(0, shade_y - 0.05, 0)
 	spot.rotation_degrees = Vector3(-90, 0, 0)
 	spot.light_color = Color(1.0, 0.84, 0.66)
-	spot.light_energy = 4.4
+	spot.light_energy = 3.5
 	spot.spot_range = 3.4
 	spot.spot_angle = 52.0
 	spot.spot_angle_attenuation = 0.7
@@ -206,8 +207,8 @@ func _build_lamp() -> void:
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(0, shade_y + 0.05, 0)
 	fill.light_color = Color(1.0, 0.72, 0.45)
-	fill.light_energy = 1.2
-	fill.omni_range = 7.0
+	fill.light_energy = 1.5
+	fill.omni_range = 7.5
 	fill.light_volumetric_fog_energy = 0.3
 	_lamp_pivot.add_child(fill)
 	_flickers.append({"light": spot, "base": spot.light_energy, "speed": 0.7, "depth": 0.04, "seed": 3.0})

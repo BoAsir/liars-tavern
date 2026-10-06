@@ -50,6 +50,7 @@ func _ready() -> void:
 	Net.joined_lobby.connect(_on_joined)
 	Net.lobby_updated.connect(_on_lobby)
 	Net.game_events.connect(_on_events)
+	Net.game_started.connect(_on_game_started)
 	Net.join_failed.connect(_fail.bind("join_failed"))
 	Net.left_lobby.connect(_on_left)
 	if opts.has("shots"):
@@ -131,24 +132,37 @@ func _on_lobby(players: Array) -> void:
 
 func _on_events(events: Array) -> void:
 	for ev in events:
-		match ev["type"]:
-			"round_started":
-				_capture_once("deal", 3.4)
-			"played":
-				_capture_once("played", 0.5)
-			"reveal":
-				_capture_once("reveal", 2.4)
-			"gunshot":
-				_capture_once("suspense", 2.3)
-				_capture_once("shot_result", 3.25)
-			"match_over":
-				print("[debug] MATCH_OVER winner=", ev["winner"])
-				_match_finished = true
-				_capture_once("victory", 1.6)
-				_capture_once("settlement", 3.6)
-				if opts.has("quit-after-match"):
-					await get_tree().create_timer(5.0 if Net.is_host else 4.0).timeout
-					app.quit_game(0)
+		if ev["type"] == "match_over":
+			print("[debug] MATCH_OVER winner=", ev["winner"])
+			_match_finished = true
+
+
+func _on_game_started(_seats: Array) -> void:
+	# 截图与退出按演出进度触发:事件批到达时前面的动画可能还要播好几秒
+	await get_tree().process_frame
+	var screen: Node = app.current_screen()
+	var director = screen.get("director") if screen != null else null
+	if director is TableDirector:
+		director.event_started.connect(_on_director_event)
+
+
+func _on_director_event(ev: Dictionary) -> void:
+	match ev["type"]:
+		"round_started":
+			_capture_once("deal", 3.0)
+		"played":
+			_capture_once("played", 0.55)
+		"reveal":
+			_capture_once("reveal", 1.2 + 0.68 * ev.get("cards", []).size())
+		"gunshot":
+			_capture_once("suspense", 2.0)
+			_capture_once("shot_result", 3.0)
+		"match_over":
+			_capture_once("victory", 1.5)
+			_capture_once("settlement", 3.3)
+			if opts.has("quit-after-match"):
+				await get_tree().create_timer(5.0 if Net.is_host else 4.0).timeout
+				app.quit_game(0)
 
 
 func _on_left(reason: String) -> void:

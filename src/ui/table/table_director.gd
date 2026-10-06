@@ -4,7 +4,10 @@ extends Node
 # 每段演出时长须不超过 Pacing 中的预算(房主据此延长回合计时)。
 
 
+signal event_started(ev: Dictionary)   # 每段演出开始时发出(调试截图按演出节点取景)
+
 const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
+const BUBBLE_ABOVE_PLATE := -66.0  # 他人气泡挂在铭牌正上方(屏幕像素),不压住名字
 const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到越肩机位的时长(须在房主给的开场预算之内)
 
 var screen: Node        # TableScreen
@@ -38,6 +41,7 @@ func intro() -> void:
 
 
 func play(ev: Dictionary) -> void:
+	event_started.emit(ev)
 	match ev["type"]:
 		"round_started":
 			await _round_started(ev)
@@ -115,7 +119,7 @@ func _reveal(ev: Dictionary) -> void:
 		rig.shake(0.45)
 		app.tavern.kick_lamp(0.07)
 	_leave_seat()
-	rig.move_to(world.reveal_view(), 0.55)
+	rig.move_to(world.reveal_view(liar), 0.55)
 	await cards.gather_for_reveal(kinds.size())
 	world.look_all_at(Vector3(0, SeatLayout.TABLE_TOP, CardTable.REVEAL_Z))
 	for i in kinds.size():
@@ -138,6 +142,7 @@ func _reveal(ev: Dictionary) -> void:
 func _gunshot(ev: Dictionary) -> void:
 	var shooter: int = ev["pid"]
 	hud.log_event("%s 对自己扣下扳机(第 %d 枪)" % [screen.name_of(shooter), ev["shots_fired"]], UiTheme.PARCHMENT_DIM)
+	hud.hide_announce()
 	fx.set_tension(0.55, 0.8)
 	await _third_person_shot(shooter, ev["hit"])
 	if shooter == screen.my_pid and ev["hit"]:
@@ -206,10 +211,12 @@ func _bang(muzzle: Transform3D) -> void:
 func _announce_shot(pid: int, hit: bool) -> void:
 	var mine: bool = pid == screen.my_pid
 	if hit:
-		hud.announce("砰!", UiTheme.BLOOD, "你中弹了……" if mine else "%s 倒下了" % screen.name_of(pid), 1.0)
+		hud.announce("砰!", UiTheme.BLOOD, "你中弹了……" if mine else "%s 倒下了" % screen.name_of(pid), 1.0,
+			TableHud.ANNOUNCE_Y_LOW)
 		hud.log_event("砰!%s 出局" % screen.name_of(pid), UiTheme.BLOOD)
 	else:
-		hud.announce("咔哒……", UiTheme.PARCHMENT, "空枪!你活下来了" if mine else "空枪!%s 逃过一劫" % screen.name_of(pid), 0.8)
+		hud.announce("咔哒……", UiTheme.PARCHMENT, "空枪!你活下来了" if mine else "空枪!%s 逃过一劫" % screen.name_of(pid), 0.8,
+			TableHud.ANNOUNCE_Y_LOW)
 		hud.log_event("咔哒,%s 是空枪" % screen.name_of(pid), UiTheme.PARCHMENT_DIM)
 
 
@@ -235,13 +242,15 @@ func _match_over(ev: Dictionary) -> void:
 	fx.set_tension(0.0, 0.6)
 	_leave_seat()
 	Sfx.play("win")
-	if winner == screen.my_pid:
-		hud.announce("你赢了!", UiTheme.BRASS_BRIGHT, "活到了最后", 1.8)
-	else:
-		hud.announce("%s 赢了" % screen.name_of(winner), UiTheme.BRASS_BRIGHT, "活到了最后", 1.8)
+	var title := "你赢了!" if winner == screen.my_pid else "%s 赢了" % screen.name_of(winner)
+	hud.announce(title, UiTheme.BRASS_BRIGHT, "活到了最后", 1.8, TableHud.ANNOUNCE_Y_LOW)
 	if world.patrons.has(winner):
 		world.patrons[winner].celebrate()
-		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4)
+		# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),并给一点补光看清表情
+		var toward_table := -SeatLayout.direction(world.seat_angles.get(winner, 0.0))
+		rig.set_fill(TableWorld.SEAT_FILL_LIGHT * 0.6, 1.0)
+		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4,
+			atan2(toward_table.x, toward_table.z))
 	else:
 		rig.orbit(Vector3(0, 0.95, 0), 2.4, 0.9, 0.18, 1.4)
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
@@ -255,14 +264,18 @@ func back_to_seat(duration: float) -> void:
 	_at_seat = true
 	if spectator:
 		await rig.move_to(world.overview_view(), duration * 1.6).finished
+		hud.set_away_from_seat(false)
 		return
 	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, duration)
 	await rig.move_to(world.third_person_view(screen.my_pid), duration).finished
+	# 镜头回到座位后再露出按钮行,免得特写还没切走就挡住角色
+	hud.set_away_from_seat(false)
 	rig.parallax_enabled = true
 
 
 func _leave_seat() -> void:
 	_at_seat = false
+	hud.set_away_from_seat(true)
 	rig.parallax_enabled = false
 	rig.set_fill(0.0, 0.5)
 
@@ -276,7 +289,8 @@ func _bubble(pid: int, text: String, color := UiTheme.INK) -> void:
 		return
 	var patron: Patron = world.patrons[pid]
 	app.labels.track(BUBBLE_KEY % pid, SpeechBubble.new(text, color),
-		func(): return patron.nameplate_anchor() + Vector3(0, 0.24, 0) if is_instance_valid(patron) else Vector3.ZERO)
+		func(): return patron.nameplate_anchor() if is_instance_valid(patron) else Vector3.ZERO,
+		Vector2(0, BUBBLE_ABOVE_PLATE))
 
 
 func _wait(seconds: float) -> void:

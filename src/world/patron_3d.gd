@@ -29,6 +29,7 @@ const CHEER_JUMP := 0.08
 # 出局时打飞的帽子等散落物:挂到父节点(TableWorld)下并打上此标记,由 TableWorld 回收
 const DEBRIS_GROUP := &"patron_debris"
 const GREY := Color(0.42, 0.42, 0.42)
+const LAPEL_DARKEN := 0.35
 
 var species_index := 0
 var alive := true
@@ -93,8 +94,10 @@ func _build() -> void:
 		MeshKit.add(body, MeshKit.prism(Vector3(0.05, 0.05, 0.02)), mats["accent"], Vector3(0.026 * side, 0.535, -0.175),
 			Vector3(-10, 0, -90 * side))
 	MeshKit.add(body, MeshKit.sphere(0.013, 8), mats["accent"], Vector3(0, 0.535, -0.18))
+	# 翻领用压暗的外套色:浅色强调色做翻领会在胸前拼出一个突兀的「A」字
+	var lapel := _mat(spec["coat"].darkened(LAPEL_DARKEN), 0.8)
 	for side in [-1.0, 1.0]:
-		MeshKit.add(body, MeshKit.box(Vector3(0.05, 0.24, 0.02)), mats["accent"], Vector3(0.06 * side, 0.43, -0.17),
+		MeshKit.add(body, MeshKit.box(Vector3(0.05, 0.24, 0.02)), lapel, Vector3(0.06 * side, 0.43, -0.17),
 			Vector3(-8, 0, 18 * side))
 	for y in [0.3, 0.2, 0.1]:
 		MeshKit.add(body, MeshKit.sphere(0.014, 8), WorldMaterials.brass(), Vector3(0, y, -0.205 + (0.3 - y) * 0.15))

@@ -36,7 +36,7 @@ func _ready() -> void:
 	app.world.cards.clear_all()
 	app.world.revive_all()
 	app.labels.clear()
-	app.tavern.camera_rig.move_to(app.world.overview_view(), 1.8)
+	app.tavern.camera_rig.move_to(app.world.lobby_view(), 1.8)
 	_refresh(Net.lobby_players)
 	_focus_default.call_deferred()
 
@@ -128,7 +128,8 @@ func _address_row() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	row.add_child(UiTheme.label("房主地址", 15, UiTheme.MUTED))
-	_address = UiTheme.label("", 20, UiTheme.PARCHMENT, UiTheme.latin_font())
+	# 用正文字体:等宽衬线字体的旧式数字会把 1/0 写得像 I/o,地址要让人照着输入
+	_address = UiTheme.label("", 20, UiTheme.PARCHMENT, UiTheme.body_font())
 	_address.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_address)
 	var copy := UiTheme.button("复制")

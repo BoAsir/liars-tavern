@@ -100,14 +100,15 @@ func snap(pos: Vector3, target: Vector3) -> void:
 	global_transform = _look(pos, target)
 
 
-func orbit(center: Vector3, radius: float, height: float, speed: float, blend := 2.0) -> void:
-	# 先平滑移到环绕轨道上的当前角度,再开始匀速环绕
+func orbit(center: Vector3, radius: float, height: float, speed: float, blend := 2.0,
+		start_angle := NAN) -> void:
+	# 先平滑移到环绕轨道上的起始角度(默认 = 镜头当前所在方位),再开始匀速环绕
 	_orbit_center = center
 	_orbit_radius = radius
 	_orbit_height = height
 	_orbit_speed = speed
 	var rel := global_position - center
-	_orbit_angle = atan2(rel.x, rel.z)
+	_orbit_angle = atan2(rel.x, rel.z) if is_nan(start_angle) else start_angle
 	var start := center + Vector3(sin(_orbit_angle) * radius, height, cos(_orbit_angle) * radius)
 	var tween := look_from(start, center, blend)
 	tween.finished.connect(func(): _orbit_active = true)

@@ -6,6 +6,8 @@ extends Control
 # 已释放的实例赋给 Control 类型变量或作为 Control 返回值本身就是脚本错误。
 
 
+const EDGE_MARGIN := 4.0   # 控件离屏幕边缘的最小距离
+
 var camera: Camera3D
 var _entries := {}   # key -> {"node": Control, "anchor": Callable, "offset": Vector2}
 
@@ -71,4 +73,7 @@ func _place(node: Control, entry: Dictionary) -> void:
 	# unproject 返回视口坐标;换算到本控件所在画布层的本地坐标
 	var pos := get_global_transform_with_canvas().affine_inverse() * screen
 	node.visible = get_rect().grow(80).has_point(pos)
-	node.position = (pos - Vector2(node.size.x / 2.0, node.size.y) + entry["offset"]).round()
+	var top_left: Vector2 = pos - Vector2(node.size.x / 2.0, node.size.y) + entry["offset"]
+	# 贴边时收进屏幕内(画面上缘的对手气泡不被裁掉)
+	var limit := (size - node.size - Vector2(EDGE_MARGIN, EDGE_MARGIN)).max(Vector2(EDGE_MARGIN, EDGE_MARGIN))
+	node.position = top_left.clamp(Vector2(EDGE_MARGIN, EDGE_MARGIN), limit).round()

@@ -1,7 +1,7 @@
 class_name TableHud
 extends Control
-# 牌桌 HUD:左上目标牌与局数、右上说明书按钮、顶部回合横幅与环形倒计时、底部出牌/质疑按钮与快捷键提示、
-# 右侧事件日志、左下自己的弹巢、屏幕中央的大字宣告与自己的对话气泡。
+# 牌桌 HUD:左上目标牌与局数、右上说明书按钮、底部(自下而上)快捷键提示/出牌质疑按钮/回合横幅与环形倒计时/
+# 自己的对话气泡、右下事件日志、左下自己的弹巢、大字宣告。画面上方留给对手的铭牌与气泡,不放常驻控件。
 # 按钮都不抢键盘焦点:回车/空格/C 由牌桌的快捷键统一处理,焦点留在按钮上会在松键时再触发一次。
 
 
@@ -10,7 +10,9 @@ signal challenge_pressed
 signal rules_pressed
 
 const LOG_LINES := 6
-const MY_BUBBLE_GAP := 2.0   # 自己气泡的小三角尖与出牌按钮行之间的留白
+const MY_BUBBLE_GAP := 2.0   # 自己气泡的小三角尖与下方控件之间的留白
+const ANNOUNCE_Y := -90.0     # 默认宣告位置(相对画面中心)
+const ANNOUNCE_Y_LOW := 150.0 # 开枪/胜利特写时压到角色胸口以下,不挡住脸
 
 var _target_tex: TextureRect
 var _target_name: Label
@@ -30,6 +32,9 @@ var _announce: Label
 var _announce_sub: Label
 var _announce_tween: Tween = null
 var _bubble_anchor: Control
+var _action_row: HBoxContainer
+var _actions_enabled := true       # 自己出局后永久隐藏
+var _away_from_seat := false       # 镜头离开座位(翻牌/开枪/结算特写)时暂时隐藏
 
 
 func _ready() -> void:
@@ -37,7 +42,6 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_target_panel()
 	_build_rules_button()
-	_build_turn_banner()
 	_build_actions()
 	_build_log()
 	_build_my_status()
@@ -79,26 +83,27 @@ func _build_rules_button() -> void:
 	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 
 
-func _build_turn_banner() -> void:
-	var holder := HBoxContainer.new()
-	holder.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	holder.position.y = 18
-	holder.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	holder.alignment = BoxContainer.ALIGNMENT_CENTER
-	holder.add_theme_constant_override("separation", 12)
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(holder)
+func _build_turn_row() -> HBoxContainer:
+	# 回合横幅 + 环形倒计时:紧贴在出牌/质疑按钮上方,不再压住画面上方对手的铭牌
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_turn_panel = PanelContainer.new()
-	_turn_panel.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL, Color(UiTheme.BRASS, 0.6), 1, 22))
+	var style := UiTheme.panel_box(UiTheme.PANEL, Color(UiTheme.BRASS, 0.6), 1, 22)
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	_turn_panel.add_theme_stylebox_override("panel", style)
 	_turn_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_center_pivot(_turn_panel)
-	holder.add_child(_turn_panel)
+	row.add_child(_turn_panel)
 	_turn_label = UiTheme.label("", 22, UiTheme.PARCHMENT, UiTheme.display_font())
 	_turn_panel.add_child(_turn_label)
 	_ring = CountdownRing.new()
-	holder.add_child(_ring)
+	row.add_child(_ring)
 	_turn_panel.visible = false
 	_ring.visible = false
+	return row
 
 
 func _build_actions() -> void:
@@ -115,10 +120,12 @@ func _build_actions() -> void:
 	_bubble_anchor.custom_minimum_size = Vector2(0, 40)
 	_bubble_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(_bubble_anchor)
+	holder.add_child(_build_turn_row())
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 18)
 	holder.add_child(row)
+	_action_row = row
 	_challenge_button = UiTheme.button("质疑!")
 	_challenge_button.custom_minimum_size = Vector2(150, 54)
 	_challenge_button.add_theme_font_size_override("font_size", 26)
@@ -138,11 +145,12 @@ func _build_actions() -> void:
 
 
 func _build_log() -> void:
+	# 右下角:越肩镜头下那里只有地板与椅腿,不会压住右侧对手的脸
 	_log_box = VBoxContainer.new()
-	_log_box.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	_log_box.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_log_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_log_box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_log_box.position.x -= 24
+	_log_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_log_box.position += Vector2(-24, -20)
 	_log_box.custom_minimum_size = Vector2(300, 0)
 	_log_box.alignment = BoxContainer.ALIGNMENT_END
 	_log_box.add_theme_constant_override("separation", 4)
@@ -165,11 +173,14 @@ func _build_my_status() -> void:
 
 
 func _build_announce() -> void:
+	# 横向铺满、纵向锚在画面中线:改上下偏移即可整体挪动宣告的高度
 	_announce_box = VBoxContainer.new()
-	_announce_box.set_anchors_preset(Control.PRESET_CENTER)
-	_announce_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_announce_box.anchor_left = 0.0
+	_announce_box.anchor_right = 1.0
+	_announce_box.anchor_top = 0.5
+	_announce_box.anchor_bottom = 0.5
 	_announce_box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_announce_box.position.y -= 90
+	_set_announce_y(ANNOUNCE_Y)
 	_announce_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_announce_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_center_pivot(_announce_box)
@@ -246,8 +257,20 @@ func set_actions(can_play: bool, can_challenge: bool, selected: int, my_turn: bo
 
 
 func set_actions_visible(visible_actions: bool) -> void:
-	_play_button.get_parent().visible = visible_actions
-	_hint.visible = visible_actions
+	_actions_enabled = visible_actions
+	_apply_actions_visibility()
+
+
+func set_away_from_seat(away: bool) -> void:
+	# 镜头去拍翻牌/开枪/胜者时收起按钮行,免得挡住特写里角色的身体
+	_away_from_seat = away
+	_apply_actions_visibility()
+
+
+func _apply_actions_visibility() -> void:
+	var show_actions := _actions_enabled and not _away_from_seat
+	_action_row.visible = show_actions
+	_hint.visible = show_actions
 
 
 func set_my_status(display_name: String, shots: int, alive: bool) -> void:
@@ -275,9 +298,10 @@ func log_event(text: String, color := UiTheme.PARCHMENT) -> void:
 		child.self_modulate.a = lerpf(0.35, 1.0, float(i + 1) / _log_box.get_child_count())
 
 
-func announce(text: String, color: Color, sub := "", hold := 1.0) -> void:
+func announce(text: String, color: Color, sub := "", hold := 1.0, y_offset := ANNOUNCE_Y) -> void:
 	if _announce_tween != null and _announce_tween.is_valid():
 		_announce_tween.kill()
+	_set_announce_y(y_offset)
 	_announce.text = text
 	_announce.add_theme_color_override("font_color", color)
 	_announce_sub.text = sub
@@ -289,6 +313,19 @@ func announce(text: String, color: Color, sub := "", hold := 1.0) -> void:
 	_announce_tween.tween_property(_announce_box, "modulate:a", 1.0, 0.18)
 	_announce_tween.chain().tween_interval(hold)
 	_announce_tween.chain().tween_property(_announce_box, "modulate:a", 0.0, 0.4)
+
+
+func hide_announce(duration := 0.15) -> void:
+	# 换到下一个特写前收起还挂着的宣告(例如翻牌判定的「骗子!」别留到开枪镜头上)
+	if _announce_tween != null and _announce_tween.is_valid():
+		_announce_tween.kill()
+	_announce_tween = create_tween()
+	_announce_tween.tween_property(_announce_box, "modulate:a", 0.0, duration)
+
+
+func _set_announce_y(y_offset: float) -> void:
+	_announce_box.offset_top = y_offset
+	_announce_box.offset_bottom = y_offset
 
 
 func my_bubble(text: String, color := UiTheme.INK) -> void:

@@ -11,9 +11,9 @@ var _font: Font
 
 
 func _init() -> void:
-	custom_minimum_size = Vector2(58, 58)
+	custom_minimum_size = Vector2(50, 50)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_font = UiTheme.latin_font()
+	_font = UiTheme.body_font()   # 衬线字体是旧式数字(30 像 3o),倒计时用正文字体的等高数字
 
 
 func set_time(p_remaining: float, p_total: float) -> void:
