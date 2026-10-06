@@ -42,6 +42,22 @@ func test_public_state_players_follow_seat_order_with_names():
 	assert_eq(pub["players"][2]["name"], "3")
 
 
+func test_public_state_reports_host_turn_time_left():
+	# 房主计时器的剩余秒数随公共视图下发,客户端据此显示倒计时
+	var gs := _make_gs()
+	assert_almost_eq(Views.public_state(gs, {}, 12.5)["turn_time_left"], 12.5, 0.001)
+	assert_eq(Views.public_state(gs, {})["turn_time_left"], 0.0)
+	assert_eq(Views.public_state(gs, {}, -3.0)["turn_time_left"], 0.0)
+
+
+func test_public_state_turn_time_left_is_zero_after_match_over():
+	var gs := _make_gs()
+	gs.eliminate_player(1)
+	gs.eliminate_player(2)
+	assert_eq(gs.phase, GameState.Phase.MATCH_OVER)
+	assert_eq(Views.public_state(gs, {}, 9.0)["turn_time_left"], 0.0)
+
+
 func test_public_state_last_play_empty_at_round_start():
 	var gs := _make_gs()
 	var pub := Views.public_state(gs, {})

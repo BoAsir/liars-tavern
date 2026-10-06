@@ -38,6 +38,7 @@ var _room_name := ""
 var _port := Protocol.GAME_PORT
 var _turn_timer: Timer = null
 var _join_timer: Timer = null
+var _anim_left := 0.0              # 仅房主:客户端还要演多久(按 Pacing 预算估),随时间递减
 
 
 func _ready() -> void:
@@ -48,6 +49,12 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_on_host_disconnected)
 	_turn_timer = _make_timer(_on_turn_timeout)
 	_join_timer = _make_timer(_on_join_timeout)
+
+
+func _process(delta: float) -> void:
+	# delta 与 Timer 一样受 Engine.time_scale 影响,两者同步流逝
+	if _anim_left > 0.0:
+		_anim_left = maxf(_anim_left - delta, 0.0)
 
 
 func my_pid() -> int:
@@ -108,6 +115,7 @@ func leave() -> void:
 	Discovery.stop_broadcast()
 	_turn_timer.stop()
 	_join_timer.stop()
+	_anim_left = 0.0
 	var peer := multiplayer.multiplayer_peer
 	if peer is ENetMultiplayerPeer:
 		peer.close()
@@ -355,6 +363,8 @@ func start_game() -> void:
 	_gs.start_match(order, rng)
 	_send_to_members("rpc_game_started", [seats])
 	game_started.emit(seats)
+	# 各端进入牌桌先播开场运镜,第一局的发牌演出排在它后面
+	_anim_left = Pacing.INTRO
 	_after_action([_gs.round_started_event()])
 
 
@@ -368,7 +378,7 @@ func rpc_game_started(p_seats: Array) -> void:
 
 
 func _sync_all() -> void:
-	var pub := Views.public_state(_gs, _match_names)
+	var pub := Views.public_state(_gs, _match_names, _turn_time_left())
 	_apply_public(pub)
 	_send_to_members("rpc_state_public", [pub])
 	for pid in _gs.seat_order:
@@ -445,18 +455,35 @@ func _handle_intent(pid: int, kind: String, indices: Array) -> void:
 		else:
 			rpc_id(pid, "rpc_intent_rejected", result["error"])
 		return
+	# 行动者那一端要先播完排队的演出才能出手(超时代打时预算也早已耗尽):
+	# 之前的预算余量不再顺延,否则玩家出手越快,多给的时间越积越多
+	_anim_left = 0.0
 	_after_action(result["events"])
 
 
 func _after_action(events: Array) -> void:
+	# 先定计时再同步:公共视图里的 turn_time_left 要反映这一批之后的截止时间
+	_schedule_turn_timer(events)
 	game_events.emit(events)
 	_send_to_members("rpc_game_events", [events])
 	_sync_all()
+
+
+func _schedule_turn_timer(events: Array) -> void:
+	# 演出期间玩家无法行动:新回合从客户端演完所有排队事件(含断线时还没播完的上一批)后才计满时间;
+	# 只有断线出局(回合没换人)时保留剩余时间,只补上这段演出,不能把计时重置
+	_anim_left = Pacing.pending_after(_anim_left, events)
 	if _gs.phase == GameState.Phase.MATCH_OVER:
 		_turn_timer.stop()
-	else:
-		# 演出期间玩家无法行动,把演出时长补到回合计时上
-		_turn_timer.start(Protocol.TURN_TIMEOUT + Pacing.estimate(events))
+		return
+	_turn_timer.start(Pacing.turn_timer_after(events, _anim_left, _turn_time_left()))
+
+
+func _turn_time_left() -> float:
+	# 房主计时器剩余秒数;没在计时(未开局/已结束)为 0
+	if _turn_timer.is_stopped() or _gs == null or _gs.phase != GameState.Phase.PLAYING:
+		return 0.0
+	return _turn_timer.time_left
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -484,6 +511,7 @@ func request_rematch_lobby() -> void:
 	_gs = null
 	in_game = false
 	_turn_timer.stop()
+	_anim_left = 0.0
 	_lobby.reset_ready()
 	_send_to_members("rpc_returned_to_lobby", [])
 	returned_to_lobby.emit()

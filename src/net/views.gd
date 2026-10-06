@@ -2,7 +2,8 @@ class_name Views
 # 视图构建:决定每个客户端能看到什么。手牌牌面与弹膛位置永不进入公共视图。
 
 
-static func public_state(gs: GameState, names: Dictionary) -> Dictionary:
+static func public_state(gs: GameState, names: Dictionary, turn_time_left := 0.0) -> Dictionary:
+	# turn_time_left:发送时房主回合计时器的剩余秒数(含客户端要先播完的演出),客户端据此画倒计时
 	var players := []
 	for pid in gs.seat_order:
 		players.append({
@@ -23,6 +24,7 @@ static func public_state(gs: GameState, names: Dictionary) -> Dictionary:
 		"last_play": last_play,
 		"players": players,
 		"winner": gs.winner_pid,
+		"turn_time_left": maxf(turn_time_left, 0.0) if gs.phase == GameState.Phase.PLAYING else 0.0,
 	}
 
 
