@@ -1,0 +1,98 @@
+extends GutTest
+
+
+func _info(id := "r1", room := "老王的酒馆") -> Dictionary:
+	return {
+		"id": id,
+		"room": room,
+		"host": "老王",
+		"players": 2,
+		"max": 4,
+		"version": Protocol.VERSION,
+		"port": Protocol.GAME_PORT,
+		"open": true,
+	}
+
+
+func test_encode_decode_roundtrip_normalizes_numbers():
+	var decoded := RoomList.decode(RoomList.encode(_info()))
+	assert_eq(decoded["id"], "r1")
+	assert_eq(decoded["room"], "老王的酒馆")
+	assert_eq(typeof(decoded["players"]), TYPE_INT)
+	assert_eq(decoded["port"], Protocol.GAME_PORT)
+	assert_true(decoded["open"])
+
+
+func test_decode_rejects_garbage_wrong_version_and_missing_fields():
+	assert_true(RoomList.decode("not json".to_utf8_buffer()).is_empty())
+	assert_true(RoomList.decode("[1,2]".to_utf8_buffer()).is_empty())
+	var wrong_version := _info()
+	wrong_version["version"] = Protocol.VERSION + 1
+	assert_true(RoomList.decode(RoomList.encode(wrong_version)).is_empty())
+	var missing := _info()
+	missing.erase("port")
+	assert_true(RoomList.decode(RoomList.encode(missing)).is_empty())
+	var bad_port := _info()
+	bad_port["port"] = 99999
+	assert_true(RoomList.decode(RoomList.encode(bad_port)).is_empty())
+
+
+func test_decode_truncates_long_text_fields():
+	var info := _info("x".repeat(100), "房".repeat(100))
+	var decoded := RoomList.decode(RoomList.encode(info))
+	assert_lte(decoded["id"].length(), RoomList.MAX_TEXT)
+	assert_lte(decoded["room"].length(), RoomList.MAX_TEXT)
+
+
+func test_ingest_adds_room_with_sender_ip():
+	var list := RoomList.new()
+	assert_true(list.ingest(_info(), "192.168.1.20", 0.0))
+	var rooms := list.rooms()
+	assert_eq(rooms.size(), 1)
+	assert_eq(rooms[0]["ip"], "192.168.1.20")
+	assert_eq(rooms[0]["room"], "老王的酒馆")
+
+
+func test_same_room_from_loopback_and_lan_dedupes_preferring_lan_ip():
+	var list := RoomList.new()
+	list.ingest(_info(), "127.0.0.1", 0.0)
+	list.ingest(_info(), "192.168.1.20", 0.1)
+	list.ingest(_info(), "127.0.0.1", 0.2)
+	var rooms := list.rooms()
+	assert_eq(rooms.size(), 1)
+	assert_eq(rooms[0]["ip"], "192.168.1.20")
+
+
+func test_repeated_identical_packet_is_not_a_change():
+	var list := RoomList.new()
+	list.ingest(_info(), "192.168.1.20", 0.0)
+	assert_false(list.ingest(_info(), "192.168.1.20", 0.5))
+	var updated := _info()
+	updated["players"] = 3
+	assert_true(list.ingest(updated, "192.168.1.20", 0.6))
+
+
+func test_prune_removes_stale_rooms():
+	var list := RoomList.new()
+	list.ingest(_info("a"), "192.168.1.20", 0.0)
+	list.ingest(_info("b", "B"), "192.168.1.21", 2.0)
+	assert_false(list.prune(2.5))
+	assert_true(list.prune(Protocol.ROOM_TTL + 0.1))
+	var rooms := list.rooms()
+	assert_eq(rooms.size(), 1)
+	assert_eq(rooms[0]["id"], "b")
+
+
+func test_rooms_sorted_by_name():
+	var list := RoomList.new()
+	list.ingest(_info("b", "乙"), "192.168.1.21", 0.0)
+	list.ingest(_info("a", "Alpha"), "192.168.1.20", 0.0)
+	var rooms := list.rooms()
+	assert_eq(rooms[0]["room"], "Alpha")
+
+
+func test_clear_empties_list():
+	var list := RoomList.new()
+	list.ingest(_info(), "192.168.1.20", 0.0)
+	list.clear()
+	assert_eq(list.rooms(), [])
