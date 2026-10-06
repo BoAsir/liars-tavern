@@ -59,7 +59,7 @@ func play(ev: Dictionary) -> void:
 
 func _round_started(ev: Dictionary) -> void:
 	screen.set_current(null)
-	screen.begin_round()
+	screen.begin_round(ev["round"])
 	if not _at_seat:
 		# 强制验证为真话时没有开枪段,镜头还停在翻牌机位
 		await back_to_seat(0.45)

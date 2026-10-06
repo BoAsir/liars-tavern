@@ -29,6 +29,8 @@ var _awaiting_intent := false
 var _dead := {}
 var _shots := {}
 var _elimination_order: Array = []
+var _round_now := 0         # 演出进行到的局号(按事件流,不按已领先的公共状态)
+var _out_round := {}        # pid -> 出局时所在的局号(结算显示存活局数)
 var _settlement: Settlement = null
 
 
@@ -180,9 +182,10 @@ func take_submitted() -> Array:
 	return indices
 
 
-func begin_round() -> void:
-	# 导演在收牌前调用。新一局发的是一套新手牌,旧下标会落到别的牌上,
-	# 预选一律作废(牌的视觉由 CardTable.sweep 一起收走)
+func begin_round(round_number: int) -> void:
+	# 导演在收牌前调用。记下局号(结算的存活局数);新一局发的是一套新手牌,
+	# 旧下标会落到别的牌上,预选一律作废(牌的视觉由 CardTable.sweep 一起收走)
+	_round_now = round_number
 	_selected = {}
 	_hovered = -1
 	_refresh_actions()
@@ -228,6 +231,7 @@ func mark_eliminated(pid: int) -> void:
 		return
 	_dead[pid] = true
 	_elimination_order.append(pid)
+	_out_round[pid] = _round_now
 	if pid == my_pid:
 		hud.set_my_status(name_of(my_pid), _shots.get(pid, 0), false)
 		hud.set_actions_visible(false)
@@ -237,13 +241,16 @@ func is_marked_dead(pid: int) -> bool:
 	return _dead.has(pid)
 
 
+func player_stats() -> Dictionary:
+	# 结算用:名字、扣扳机次数、存活局数(出局者算到出局那一局,胜者算到最后一局)
+	var stats := {}
+	for pid in names:
+		stats[pid] = {"name": name_of(pid), "shots": _shots.get(pid, 0), "rounds": _out_round.get(pid, _round_now)}
+	return stats
+
+
 func show_settlement(winner) -> void:
-	var ranking := [{"name": name_of(winner), "shots": _shots.get(winner, 0), "place": 1}]
-	var place := 2
-	for i in range(_elimination_order.size() - 1, -1, -1):
-		var pid = _elimination_order[i]
-		ranking.append({"name": name_of(pid), "shots": _shots.get(pid, 0), "place": place})
-		place += 1
+	var ranking := Settlement.build_ranking(winner, _elimination_order, player_stats())
 	hud.set_actions_visible(false)
 	_settlement = Settlement.new(name_of(winner), ranking, winner == my_pid)
 	add_child(_settlement)

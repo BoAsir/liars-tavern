@@ -1,5 +1,5 @@
 extends GutTest
-# 牌桌控制器里不依赖场景的部分:能否质疑、局界处作废预选。
+# 牌桌控制器里不依赖场景的部分:能否质疑、局界处作废预选、记录出局局号。
 
 
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
@@ -28,6 +28,29 @@ func test_new_round_drops_the_preselection():
 	var screen := _bare_screen()
 	screen._selected = {0: true, 2: true}
 	screen._hovered = 1
-	screen.begin_round()
+	screen.begin_round(3)
 	assert_true(screen._selected.is_empty())
 	assert_eq(screen._hovered, -1)
+
+
+func test_elimination_remembers_the_round_it_happened_in():
+	var screen := _bare_screen()
+	screen.my_pid = 1
+	screen.begin_round(2)
+	screen.mark_eliminated(3)
+	screen.begin_round(5)
+	screen.mark_eliminated(2)
+	assert_eq(screen._out_round, {3: 2, 2: 5})
+	assert_eq(screen._elimination_order, [3, 2])
+
+
+func test_survived_rounds_count_to_the_final_round_for_the_winner():
+	var screen := _bare_screen()
+	screen.names = {1: "甲", 2: "乙"}
+	screen.begin_round(1)
+	screen.mark_eliminated(2)
+	screen.begin_round(4)
+	var stats: Dictionary = screen.player_stats()
+	assert_eq(stats[1]["rounds"], 4)
+	assert_eq(stats[2]["rounds"], 1)
+	assert_eq(stats[2]["name"], "乙")
