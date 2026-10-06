@@ -1,10 +1,14 @@
 extends Control
 # 主菜单:昵称 / 开设房间 / 局域网房间列表(自动发现)/ IP 直连。
-# 左侧木牌面板,右侧是环绕镜头下的酒馆。
+# 左侧木牌面板,右侧是环绕镜头下的酒馆。面板在可滚动的侧栏里:1280x720 逻辑分辨率下整块放得下,
+# 窗口再矮也只是滚动,底部的 IP 直连、状态行与页脚不会被裁掉。
 
 
-const SETTINGS_PATH := "user://settings.cfg"
 const PANEL_WIDTH := 480.0
+const SIDE_MARGIN := 48
+const EDGE_MARGIN := 24
+const ROW_GAP := 6
+const ROOM_LIST_HEIGHT := 80.0   # 正好露出一个房间行,更多房间在列表内滚动
 
 var app: Node
 var _name_edit: LineEdit
@@ -16,6 +20,7 @@ var _status: Label
 var _host_button: Button
 var _join_button: Button
 var _mute_button: Button
+var _scroll: ScrollContainer
 var _panel: PanelContainer
 var _busy := false
 var _scan_dots := 0.0
@@ -30,20 +35,30 @@ func _ready() -> void:
 	_build()
 	Discovery.rooms_updated.connect(_refresh_rooms)
 	Net.join_failed.connect(_on_join_failed)
-	var listening := Discovery.start_listening()
+	# 传 self:旧菜单迟到的 stop_listening 不会关掉这里开的监听
+	var listening := Discovery.start_listening(self)
 	_scan_label.text = "正在搜索局域网房间" if listening else "无法监听局域网广播(端口被占用),请用 IP 直连"
 	_refresh_rooms(Discovery.get_rooms())
-	_panel.modulate.a = 0.0
-	_panel.position.x -= 60
-	var tween := create_tween().set_parallel()
-	tween.tween_property(_panel, "modulate:a", 1.0, 0.6)
-	tween.tween_property(_panel, "position:x", _panel.position.x + 60, 0.7).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_play_intro()
+	_focus_default.call_deferred()
+
+
+func _focus_default() -> void:
+	# 默认焦点:还没有名号就先填名号,有了就落在「开设房间」,纯键盘也能直接操作。
+	# 延迟执行时可能已被切走(如调试开关直接建房),不在树内就不抢
+	if not is_inside_tree():
+		return
 	if _name_edit.text == "":
-		_name_edit.grab_focus.call_deferred()
+		_name_edit.grab_focus()
+	else:
+		_host_button.grab_focus()
 
 
 func _exit_tree() -> void:
-	Discovery.stop_listening()
+	# 切屏时同步调用(main 先移出再释放):立刻断开全局信号,离场的菜单不再响应
+	Discovery.rooms_updated.disconnect(_refresh_rooms)
+	Net.join_failed.disconnect(_on_join_failed)
+	Discovery.stop_listening(self)
 
 
 func _process(delta: float) -> void:
@@ -55,30 +70,15 @@ func _process(delta: float) -> void:
 # —— 布局 ——
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 48)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(margin)
-	var column := VBoxContainer.new()
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(column)
+	var column := UiTheme.side_column(self, false, SIDE_MARGIN, EDGE_MARGIN)
+	_scroll = column.get_parent()
 	_panel = PanelContainer.new()
 	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	var style := UiTheme.panel_box(Color(0.07, 0.05, 0.04, 0.86), Color(UiTheme.BRASS, 0.7), 2, 14)
-	style.content_margin_left = 34
-	style.content_margin_right = 34
-	style.content_margin_top = 26
-	style.content_margin_bottom = 22
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 24
-	_panel.add_theme_stylebox_override("panel", style)
+	_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_panel.add_theme_stylebox_override("panel", UiTheme.screen_panel(0.86, Vector2(34, 22)))
 	column.add_child(_panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
+	box.add_theme_constant_override("separation", ROW_GAP)
 	_panel.add_child(box)
 	_build_title(box)
 	_build_identity(box)
@@ -90,8 +90,16 @@ func _build() -> void:
 	_build_footer(box)
 
 
+func _play_intro() -> void:
+	_panel.modulate.a = 0.0
+	_panel.position.x -= 60
+	var tween := create_tween().set_parallel()
+	tween.tween_property(_panel, "modulate:a", 1.0, 0.6)
+	tween.tween_property(_panel, "position:x", _panel.position.x + 60, 0.7).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
 func _build_title(box: VBoxContainer) -> void:
-	var title := UiTheme.label("骗子酒馆", 84, UiTheme.BRASS_BRIGHT, UiTheme.title_font())
+	var title := UiTheme.label("骗子酒馆", 64, UiTheme.BRASS_BRIGHT, UiTheme.title_font())
 	title.add_theme_color_override("font_shadow_color", Color(0.35, 0.05, 0.03, 0.9))
 	title.add_theme_constant_override("shadow_offset_x", 3)
 	title.add_theme_constant_override("shadow_offset_y", 4)
@@ -106,7 +114,7 @@ func _build_identity(box: VBoxContainer) -> void:
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "输入昵称(最多 %d 字)" % Protocol.MAX_NAME_LENGTH
 	_name_edit.max_length = Protocol.MAX_NAME_LENGTH
-	_name_edit.text = _load_setting("name", "")
+	_name_edit.text = Settings.get_string(Settings.KEY_NAME)
 	box.add_child(_name_edit)
 	box.add_child(_section("开一桌"))
 	var row := HBoxContainer.new()
@@ -125,10 +133,10 @@ func _build_identity(box: VBoxContainer) -> void:
 
 func _build_rooms(box: VBoxContainer) -> void:
 	box.add_child(_section("局域网房间"))
-	_scan_label = UiTheme.label("", 14, UiTheme.MUTED)
+	_scan_label = UiTheme.label("", 15, UiTheme.MUTED)
 	box.add_child(_scan_label)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 168)
+	scroll.custom_minimum_size = Vector2(0, ROOM_LIST_HEIGHT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
 	_room_box = VBoxContainer.new()
@@ -144,7 +152,7 @@ func _build_direct(box: VBoxContainer) -> void:
 	box.add_child(row)
 	_ip_edit = LineEdit.new()
 	_ip_edit.placeholder_text = "房主 IP,如 192.168.1.8 或 IP:端口"
-	_ip_edit.text = _load_setting("last_ip", "")
+	_ip_edit.text = Settings.get_string(Settings.KEY_LAST_IP)
 	_ip_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ip_edit.text_submitted.connect(func(_t): _on_direct_pressed())
 	row.add_child(_ip_edit)
@@ -157,9 +165,11 @@ func _build_footer(box: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
-	var version := UiTheme.label("协议 v%d · 本机 %s" % [Protocol.VERSION, ", ".join(Lan.local_private_ipv4s())],
-		13, UiTheme.MUTED)
+	var addresses := Lan.local_private_ipv4s()
+	var version := UiTheme.label("协议 v%d · %s" % [Protocol.VERSION,
+		"本机 " + ", ".join(addresses) if not addresses.is_empty() else "未检测到局域网地址"], 15, UiTheme.MUTED)
 	version.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	version.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 多网卡时地址很长:换行,不撑宽面板
 	row.add_child(version)
 	var rules := UiTheme.button("游戏规则")
 	rules.add_theme_font_size_override("font_size", 15)
@@ -196,6 +206,16 @@ func _divider() -> ColorRect:
 
 # —— 房间列表 ——
 
+static func clamp_seats(players: int, capacity: int) -> Vector2i:
+	# 人数与上限来自局域网报文,不可信:夹到 0..MAX_PLAYERS 且上限不小于人数,超大数字撑不爆界面
+	var taken := clampi(players, 0, Protocol.MAX_PLAYERS)
+	return Vector2i(taken, clampi(capacity, taken, Protocol.MAX_PLAYERS))
+
+
+static func seat_dots(seats: Vector2i) -> String:
+	return "●".repeat(seats.x) + "○".repeat(seats.y - seats.x)
+
+
 func _refresh_rooms(rooms: Array) -> void:
 	for child in _room_box.get_children():
 		child.queue_free()
@@ -220,23 +240,31 @@ func _room_row(room: Dictionary) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	panel.add_child(row)
-	var info := VBoxContainer.new()
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_theme_constant_override("separation", 0)
-	row.add_child(info)
-	info.add_child(UiTheme.label(room["room"], 20, UiTheme.PARCHMENT, UiTheme.display_font()))
-	info.add_child(UiTheme.label("房主 %s · %s" % [room["host"], Protocol.format_address(room["ip"], room["port"])],
-		13, UiTheme.MUTED))
-	var seats := "●".repeat(room["players"]) + "○".repeat(maxi(room["max"] - room["players"], 0))
-	row.add_child(UiTheme.label(seats, 18, UiTheme.BRASS))
+	row.add_child(_room_info(room))
+	var seats := clamp_seats(room["players"], room["max"])
+	row.add_child(UiTheme.label(seat_dots(seats), 18, UiTheme.BRASS))
 	var join := UiTheme.button("加入")
 	join.add_theme_font_size_override("font_size", 18)
 	if not room["open"]:
 		join.disabled = true
-		join.text = "对局中" if room["players"] < room["max"] else "已满"
+		join.text = "对局中" if seats.x < seats.y else "已满"
 	join.pressed.connect(_join.bind(Protocol.format_address(room["ip"], room["port"])))
 	row.add_child(join)
 	return panel
+
+
+func _room_info(room: Dictionary) -> Control:
+	# 房名与房主名来自局域网报文:过长时省略号截断,不撑宽面板
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 0)
+	var title := UiTheme.label(room["room"], 20, UiTheme.PARCHMENT, UiTheme.display_font())
+	var host := UiTheme.label("房主 %s · %s" % [room["host"], Protocol.format_address(room["ip"], room["port"])],
+		15, UiTheme.MUTED)
+	for label: Label in [title, host]:
+		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		info.add_child(label)
+	return info
 
 
 # —— 操作 ——
@@ -249,21 +277,21 @@ func _on_host_pressed() -> void:
 	var room_name := _room_edit.text.strip_edges()
 	if room_name == "":
 		room_name = "%s 的酒馆" % pname
-	Discovery.stop_listening()
+	Discovery.stop_listening(self)
 	var err := Net.host_game(pname, room_name)
 	if err != OK:
-		_status.text = "开设房间失败:端口 %d-%d 都被占用(%s)" % [
-			Protocol.GAME_PORT, Protocol.GAME_PORT + Protocol.GAME_PORT_ATTEMPTS - 1, error_string(err)]
-		Discovery.start_listening()
+		_show_status("开设房间失败:端口 %d-%d 都被占用(%s)" % [
+			Protocol.GAME_PORT, Protocol.GAME_PORT + Protocol.GAME_PORT_ATTEMPTS - 1, error_string(err)], UiTheme.LIE)
+		Discovery.start_listening(self)
 
 
 func _on_direct_pressed() -> void:
 	var text := _ip_edit.text.strip_edges()
 	var addr := Protocol.parse_address(text)
 	if not addr["ok"]:
-		_status.text = addr["error"]
+		_show_status(addr["error"], UiTheme.LIE)
 		return
-	_save_setting("last_ip", text)
+	Settings.set_value(Settings.KEY_LAST_IP, text)
 	_join(text)
 
 
@@ -273,18 +301,30 @@ func _join(address: String) -> void:
 		return
 	Sfx.play("ui_click")
 	_set_busy(true)
-	_status.add_theme_color_override("font_color", UiTheme.PARCHMENT_DIM)
-	_status.text = "正在连接 %s …" % address
+	_show_status("正在连接 %s …" % address, UiTheme.PARCHMENT_DIM)
 	Net.join_game(pname, address)
 
 
 func _on_join_failed(reason: String) -> void:
 	_set_busy(false)
-	_status.add_theme_color_override("font_color", UiTheme.LIE)
-	_status.text = reason
+	_show_status(reason, UiTheme.LIE)
 	Sfx.play("thud")
 	if not Discovery.is_listening():
-		Discovery.start_listening()
+		Discovery.start_listening(self)
+
+
+func _show_status(text: String, color: Color) -> void:
+	_status.add_theme_color_override("font_color", color)
+	_status.text = text
+	_reveal_status()
+
+
+func _reveal_status() -> void:
+	# 面板高到要滚动时,把状态行(连接中 / 失败原因)滚进可视区;换行后的新尺寸要到下一帧才排好
+	if not is_inside_tree():
+		return
+	await get_tree().process_frame
+	_scroll.ensure_control_visible(_status)
 
 
 func _set_busy(busy: bool) -> void:
@@ -296,35 +336,18 @@ func _set_busy(busy: bool) -> void:
 func _validated_name() -> String:
 	var pname := Protocol.sanitize_name(_name_edit.text)
 	if pname == "":
-		_status.add_theme_color_override("font_color", UiTheme.LIE)
-		_status.text = "先给自己起个名号吧"
+		_show_status("先给自己起个名号吧", UiTheme.LIE)
 		_name_edit.grab_focus()
 		return ""
-	_save_setting("name", pname)
+	Settings.set_value(Settings.KEY_NAME, pname)
 	return pname
 
 
 func _toggle_mute() -> void:
 	Sfx.set_muted(not Sfx.muted)
-	_save_setting("muted", Sfx.muted)
+	Settings.set_value(Settings.KEY_MUTED, Sfx.muted)
 	_update_mute_label()
 
 
 func _update_mute_label() -> void:
 	_mute_button.text = "声音:关" if Sfx.muted else "声音:开"
-
-
-func _load_setting(key: String, default: Variant) -> Variant:
-	var config := ConfigFile.new()
-	if config.load(SETTINGS_PATH) == OK:
-		return config.get_value("player", key, default)
-	return default
-
-
-func _save_setting(key: String, value: Variant) -> void:
-	var config := ConfigFile.new()
-	config.load(SETTINGS_PATH)
-	config.set_value("player", key, value)
-	var err := config.save(SETTINGS_PATH)
-	if err != OK:
-		push_warning("保存设置失败:%s" % error_string(err))

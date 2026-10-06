@@ -11,7 +11,12 @@
 
 1. 安装 [Godot 4.7](https://godotengine.org/)(macOS:`brew install --cask godot`)
 2. 在仓库根目录运行:`godot --path .`(或用编辑器打开项目后按 F5)
-3. 导出桌面包:编辑器 → 项目 → 导出(Windows / macOS 预设)
+3. 导出桌面包:仓库里没有提交导出预设(`export_presets.cfg`),第一次导出前在本机添加:
+   - 编辑器菜单「编辑器 → 管理导出模板」,下载与引擎版本一致的导出模板;
+   - 「项目 → 导出 → 添加…」,按需添加 Windows Desktop / macOS 预设,填好导出路径后导出;
+   - macOS 预设还要在 `application/additional_plist_content`(Application → Additional Plist Content)里填入
+     `<key>NSLocalNetworkUsageDescription</key><string>用于发现并加入局域网房间</string>`:
+     Godot 没有现成的「本地网络」隐私选项,不填的话系统询问本地网络权限时没有用途说明(见下方网络说明)。
 
 ## 联机
 
@@ -28,6 +33,11 @@
 | 游戏通信(ENet) | UDP 47810(被占用时顺延到 47811–47819) |
 
 - 首次运行时系统防火墙若询问是否允许 Godot 接收连接,请选择允许。
+- macOS 15 及以上还有「本地网络」权限:从 Godot 编辑器或导出的 .app 启动后,第一次在局域网收发数据
+  (开房、搜索或加入房间)时系统会询问,请选择允许;之前拒绝过的话,到「系统设置 → 隐私与安全性 → 本地网络」
+  里打开本游戏(或 Godot)后重开游戏。未授权时局域网收发会失败。
+- 房主的房间广播连续几秒都发不出去时(没授权本地网络、网卡/路由异常等),等待厅会出现红字提示:
+  其他人可能在房间列表里看不到这桌,请把等待厅显示的地址告诉他们用「IP 直连」。
 - 同一台电脑可以开多个实例测试:最多 4 个实例都能在列表中发现房间,也可以直连 `127.0.0.1`。
 - 游戏中断线即出局;房主退出则房间解散。
 
@@ -74,8 +84,8 @@ tools/lan_smoke.sh
 $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu --showcase
 ```
 
-调试命令行开关(写在 `--` 之后):`--name=甲`、`--autohost[=人数]`、`--autojoin=IP`、`--discover`、
-`--bot`、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`。
+调试命令行开关(写在 `--` 之后):`--name=甲`、`--autohost[=人数]`、`--port=端口`、`--room=房名`、
+`--autojoin=IP[:端口]`、`--discover[=房名]`、`--bot`、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`。
 
 目录结构:
 

@@ -1,19 +1,24 @@
 extends Control
 # 等待厅:右侧面板(房名、房主地址、玩家列表、准备/开局/踢人/离开),
 # 3D 场景中已加入的玩家以酒客形象落座,头顶显示名字与准备状态。
+# 房主的局域网广播发不出去时,面板里用红字提示大家改用 IP 直连。
 
 
 const PANEL_WIDTH := 440.0
+const SIDE_MARGIN := 44
+const EDGE_MARGIN := 24
 
 var app: Node
 var _title: Label
 var _address: Label
+var _hint: Label
+var _broadcast_warning: Label
 var _list: VBoxContainer
 var _status: Label
 var _ready_button: Button = null
 var _start_button: Button = null
 var _is_ready := false
-var _known := {}
+var _known := {}   # pid -> 名字:上一份名单;为空表示还没有基准
 
 
 func _init(p_app: Node) -> void:
@@ -24,18 +29,30 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build()
 	Net.lobby_updated.connect(_refresh)
+	if Net.is_host:
+		Discovery.broadcast_health_changed.connect(_on_broadcast_health)
+	_on_broadcast_health(Discovery.is_broadcast_healthy())
 	# 从结算回来:收走桌上的牌与左轮,倒下的酒客重新登场
 	app.world.cards.clear_all()
 	app.world.revive_all()
 	app.labels.clear()
 	app.tavern.camera_rig.move_to(app.world.overview_view(), 1.8)
-	_known = {}
-	for p in Net.lobby_players:
-		_known[p["pid"]] = p["name"]
 	_refresh(Net.lobby_players)
+	_focus_default.call_deferred()
+
+
+func _focus_default() -> void:
+	# 默认焦点落在主操作上:房主「开始游戏」(凑齐前是灰的),客人「准备」。
+	# 延迟执行时可能已被切走(同一帧里开局),不在树内就不抢
+	if is_inside_tree():
+		(_start_button if _start_button != null else _ready_button).grab_focus()
 
 
 func _exit_tree() -> void:
+	# 切屏时同步调用(main 先移出再释放):立刻断开全局信号,离场的等待厅不会再改动座位与铭牌
+	Net.lobby_updated.disconnect(_refresh)
+	if Discovery.broadcast_health_changed.is_connected(_on_broadcast_health):
+		Discovery.broadcast_health_changed.disconnect(_on_broadcast_health)
 	for pid in _known:
 		app.labels.untrack("lobby:%d" % pid)
 
@@ -49,45 +66,42 @@ func _unhandled_input(event: InputEvent) -> void:
 # —— 布局 ——
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for side in ["right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 44)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(margin)
-	var column := VBoxContainer.new()
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.size_flags_horizontal = Control.SIZE_SHRINK_END
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(column)
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	var style := UiTheme.panel_box(Color(0.07, 0.05, 0.04, 0.86), Color(UiTheme.BRASS, 0.7), 2, 14)
-	style.content_margin_left = 28
-	style.content_margin_right = 28
-	style.content_margin_top = 22
-	style.content_margin_bottom = 22
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 24
-	panel.add_theme_stylebox_override("panel", style)
-	column.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	panel.add_child(box)
+	var box := _build_panel()
 	box.add_child(UiTheme.label("等待厅", 15, UiTheme.MUTED))
 	_title = UiTheme.label(Net.lobby_meta.get("room", "酒馆"), 34, UiTheme.BRASS_BRIGHT, UiTheme.display_font())
 	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_title)
 	box.add_child(_address_row())
-	box.add_child(UiTheme.label("同一局域网的玩家会在房间列表中看到这里;\n也可以把上面的地址告诉他们直连。", 13, UiTheme.MUTED))
+	_hint = UiTheme.label("同一局域网的玩家会在房间列表中看到这里;\n也可以把上面的地址告诉他们直连。", 15, UiTheme.MUTED)
+	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_hint)
+	_broadcast_warning = UiTheme.label(_broadcast_warning_text(), 15, UiTheme.LIE)
+	_broadcast_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_broadcast_warning)
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 8)
 	box.add_child(_list)
 	_status = UiTheme.label("", 15, UiTheme.PARCHMENT_DIM)
 	box.add_child(_status)
+	box.add_child(_build_buttons())
+
+
+func _build_panel() -> VBoxContainer:
+	var column := UiTheme.side_column(self, true, SIDE_MARGIN, EDGE_MARGIN)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	panel.add_theme_stylebox_override("panel", UiTheme.screen_panel(0.86, Vector2(28, 22)))
+	column.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	return box
+
+
+func _build_buttons() -> HBoxContainer:
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
-	box.add_child(buttons)
 	var leave := UiTheme.button("离开")
 	leave.pressed.connect(_on_leave_pressed)
 	buttons.add_child(leave)
@@ -107,6 +121,7 @@ func _build() -> void:
 		_ready_button = UiTheme.button("准备", true)
 		_ready_button.pressed.connect(_on_ready_toggled)
 		buttons.add_child(_ready_button)
+	return buttons
 
 
 func _address_row() -> Control:
@@ -125,14 +140,18 @@ func _address_row() -> Control:
 	return row
 
 
+static func _broadcast_warning_text() -> String:
+	var text := "局域网广播发不出去:其他人可能看不到这个房间,请让他们用上面的地址 IP 直连。"
+	if OS.get_name() == "macOS":
+		text += "\nmacOS:到 系统设置 → 隐私与安全性 → 本地网络 中允许本游戏。"
+	return text
+
+
 # —— 刷新 ——
 
 func _refresh(players: Array) -> void:
 	_title.text = Net.lobby_meta.get("room", _title.text)
-	var addresses: Array = Net.lobby_meta.get("addresses", [])
-	var port: int = Net.lobby_meta.get("port", Protocol.GAME_PORT)
-	_address.text = "  ".join(addresses.map(func(ip): return Protocol.format_address(ip, port))) \
-		if not addresses.is_empty() else Protocol.format_address("127.0.0.1", port)
+	_address.text = _address_text()
 	_announce_changes(players)
 	app.world.arrange(players, Net.my_pid(), true, false)
 	for child in _list.get_children():
@@ -150,18 +169,47 @@ func _refresh(players: Array) -> void:
 		_start_button.disabled = not Net.can_start()
 
 
-func _announce_changes(players: Array) -> void:
+func _address_text() -> String:
+	var addresses: Array = Net.lobby_meta.get("addresses", [])
+	var port: int = Net.lobby_meta.get("port", Protocol.GAME_PORT)
+	if addresses.is_empty():
+		return Protocol.format_address(Lan.LOOPBACK, port)
+	return "  ".join(addresses.map(func(ip): return Protocol.format_address(ip, port)))
+
+
+func _on_broadcast_health(healthy: bool) -> void:
+	# 只有房主在广播;发不出去时把「会在房间列表中看到这里」换成红字的直连提示
+	_broadcast_warning.visible = Net.is_host and not healthy
+	_hint.visible = not _broadcast_warning.visible
+
+
+static func roster_changes(known: Dictionary, players: Array, my_pid: int) -> Dictionary:
+	# 名单对比:known 为空表示还没有基准——首份名单只当基准,已在房里的人不算新来的;
+	# 自己永远不算「走进了酒馆」。返回 {"now": pid->名字, "joined": [pid], "left": [pid]}
 	var now := {}
 	for p in players:
 		now[p["pid"]] = p["name"]
-		if not _known.has(p["pid"]):
-			app.toast("%s 走进了酒馆" % p["name"], UiTheme.BRASS_BRIGHT)
-			Sfx.play("join")
-	for pid in _known:
-		if not now.has(pid):
-			app.toast("%s 离开了" % _known[pid], UiTheme.MUTED)
-			app.labels.untrack("lobby:%d" % pid)
-	_known = now
+	var joined: Array = []
+	var left: Array = []
+	if not known.is_empty():
+		for pid in now:
+			if not known.has(pid) and pid != my_pid:
+				joined.append(pid)
+		for pid in known:
+			if not now.has(pid):
+				left.append(pid)
+	return {"now": now, "joined": joined, "left": left}
+
+
+func _announce_changes(players: Array) -> void:
+	var changes := roster_changes(_known, players, Net.my_pid())
+	for pid in changes["joined"]:
+		app.toast("%s 走进了酒馆" % changes["now"][pid], UiTheme.BRASS_BRIGHT)
+		Sfx.play("join")
+	for pid in changes["left"]:
+		app.toast("%s 离开了" % _known[pid], UiTheme.MUTED)
+		app.labels.untrack("lobby:%d" % pid)
+	_known = changes["now"]
 
 
 func _player_row(player: Dictionary, index: int) -> Control:
@@ -174,25 +222,31 @@ func _player_row(player: Dictionary, index: int) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
-	var species := PatronParts.species(index)
+	var species := _species_of(player["pid"], index)
 	var name_label := UiTheme.label(player["name"] + ("(你)" if mine else ""), 19, UiTheme.PARCHMENT,
 		UiTheme.display_font())
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(UiTheme.label(species["label"], 14, species["fur"].lightened(0.3)))
+	row.add_child(UiTheme.label(species["label"], 15, species["fur"].lightened(0.3)))
 	row.add_child(name_label)
 	if player["is_host"]:
-		row.add_child(UiTheme.label("房主", 14, UiTheme.BRASS))
+		row.add_child(UiTheme.label("房主", 15, UiTheme.BRASS))
 	var badge := UiTheme.label("已准备" if player["ready"] else "未准备", 15,
 		UiTheme.TRUTH if player["ready"] else UiTheme.MUTED)
 	row.add_child(badge)
 	if Net.is_host and not player["is_host"]:
 		var kick := UiTheme.button("请出")
-		kick.add_theme_font_size_override("font_size", 14)
+		kick.add_theme_font_size_override("font_size", 15)
 		kick.pressed.connect(func():
 			var overlay: ConfirmOverlay = app.confirm("把 %s 请出酒馆?" % player["name"], "请出")
 			overlay.confirmed.connect(Net.kick.bind(player["pid"])))
 		row.add_child(kick)
 	return panel
+
+
+func _species_of(pid: int, index: int) -> Dictionary:
+	# 以 3D 酒客为准:老玩家保留登场时的形象,名单下标会随别人离开而错位
+	var patron: Patron = app.world.patrons.get(pid)
+	return PatronParts.species(patron.species_index if patron != null else index)
 
 
 func _track_nameplate(player: Dictionary) -> void:
@@ -208,7 +262,7 @@ func _track_nameplate(player: Dictionary) -> void:
 	var name_label := UiTheme.label(player["name"], 18, UiTheme.PARCHMENT, UiTheme.display_font())
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(name_label)
-	var state := UiTheme.label("✓ 已准备" if player["ready"] else "…", 13, UiTheme.TRUTH if player["ready"] else UiTheme.MUTED)
+	var state := UiTheme.label("✓ 已准备" if player["ready"] else "…", 15, UiTheme.TRUTH if player["ready"] else UiTheme.MUTED)
 	state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(state)
 	var patron: Patron = app.world.patrons[pid]

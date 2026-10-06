@@ -6,6 +6,7 @@ extends Node
 const MainMenuScreen := preload("res://src/ui/main_menu/main_menu.gd")
 const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
+const VIEW_RESET_TIME := 0.8   # 切换屏幕时紧张度、闪光染色与镜头焦距回到平静的时长
 
 var tavern: Tavern
 var world: TableWorld
@@ -16,6 +17,8 @@ var flags: DebugFlags
 
 var _ui: Control
 var _screen: Control = null
+var _confirms: Array[ConfirmOverlay] = []
+var _default_fov := 0.0
 var _rules_root: Control
 var _rulebook: Rulebook = null
 var _rules_page := 0
@@ -26,6 +29,8 @@ func _ready() -> void:
 	get_tree().auto_accept_quit = false
 	tavern = Tavern.new()
 	add_child(tavern)
+	# 记下镜头的初始焦距:切换屏幕时恢复(被打断的演出可能把焦距留在半路)
+	_default_fov = tavern.camera_rig.camera.fov
 	world = TableWorld.new(tavern)
 	tavern.table_root.add_child(world)
 	world.cards.sfx.connect(Sfx.play)
@@ -44,6 +49,8 @@ func _ready() -> void:
 	Net.game_started.connect(_show_table)
 	await CardFaces.build(self)
 	Card3D.refresh_materials()
+	# 先应用上次保存的静音设置再开环境音:静音启动时环境音等取消静音后才开始
+	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED))
 	Sfx.start_ambience()
 	_show_menu()
 	flags = DebugFlags.new(self)
@@ -90,6 +97,9 @@ func confirm(message: String, confirm_text := "确定", cancel_text := "取消")
 		_rulebook.close()
 	var overlay := ConfirmOverlay.new(message, confirm_text, cancel_text)
 	_ui.add_child(overlay)
+	# 记下来:网络驱动的屏幕切换(开局、回等待厅、被请出)时一并收走,旧确认框已没有意义
+	_confirms.append(overlay)
+	overlay.tree_exited.connect(func(): _confirms.erase(overlay))
 	return overlay
 
 
@@ -119,14 +129,12 @@ func is_rules_open() -> bool:
 func _show_menu() -> void:
 	world.clear()
 	labels.clear()
-	post_fx.set_tension(0.0, 0.8)
 	tavern.camera_rig.parallax_enabled = false
 	tavern.camera_rig.orbit(Vector3(0, 0.9, -0.2), 3.3, 1.15, 0.045, 2.2)
 	_switch_to(MainMenuScreen.new(self))
 
 
 func _show_lobby() -> void:
-	post_fx.set_tension(0.0, 0.8)
 	tavern.camera_rig.parallax_enabled = false
 	_switch_to(LobbyScreen.new(self))
 
@@ -154,8 +162,27 @@ func _ui_layer(index: int) -> Control:
 
 
 func _switch_to(screen: Control) -> void:
-	if _screen != null:
-		_screen.queue_free()
+	_dismiss_confirms()
+	_reset_view()
+	if is_instance_valid(_screen):
+		# 先移出场景树:旧屏幕的 _exit_tree(清铭牌、停监听)在新屏幕 _ready 之前同步跑完。
+		# 用延迟 free 而不是 queue_free:消息队列在本帧计时器与补间之前刷新,旧屏幕停在半路的
+		# 演出协程不会在树外被唤醒(树外 get_tree() 为空,create_tween 也会失败)
+		_ui.remove_child(_screen)
+		_screen.free.call_deferred()
 	_screen = screen
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui.add_child(screen)
+
+
+func _dismiss_confirms() -> void:
+	for overlay in _confirms.duplicate():
+		if is_instance_valid(overlay):
+			overlay.dismiss()
+	_confirms.clear()
+
+
+func _reset_view() -> void:
+	# 旧屏幕的演出可能停在半路(举枪紧张、中弹染红、镜头变焦):共享的后处理与镜头统一回到平静
+	post_fx.reset(VIEW_RESET_TIME)
+	tavern.camera_rig.set_fov(_default_fov, VIEW_RESET_TIME)
