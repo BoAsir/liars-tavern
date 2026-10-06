@@ -5,11 +5,13 @@ extends VBoxContainer
 
 const LIFETIME := 3.2
 const MAX_TOASTS := 4
+# 顶边留白:让开牌桌 HUD 顶部居中的回合横幅与倒计时环(y 18–78),提示不会盖住「轮到你了」
+const TOP_OFFSET := 96.0
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	position.y = 18
+	position.y = TOP_OFFSET
 	grow_horizontal = Control.GROW_DIRECTION_BOTH
 	alignment = BoxContainer.ALIGNMENT_BEGIN
 	add_theme_constant_override("separation", 8)
