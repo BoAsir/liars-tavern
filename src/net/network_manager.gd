@@ -308,11 +308,18 @@ func _disconnect_peer_later(id: int) -> void:
 
 
 func _send_to_members(method: StringName, args: Array) -> void:
-	# 只发给已完成握手的成员;握手中/被拒绝的连接收不到房间与对局数据
-	var peers := multiplayer.get_peers()
+	# 只发给已完成握手且连接仍然有效的成员;握手中/被拒绝/正在断开的连接都跳过
 	for id in _lobby.seat_order():
-		if id != HOST_ID and peers.has(id):
+		if id != HOST_ID and _is_connected(id):
 			callv("rpc_id", [id, method] + args)
+
+
+func _is_connected(id: int) -> bool:
+	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if peer == null or not multiplayer.get_peers().has(id):
+		return false
+	var packet_peer := peer.get_peer(id)
+	return packet_peer != null and packet_peer.get_state() == ENetPacketPeer.STATE_CONNECTED
 
 
 # —— 开局与状态同步 ——
@@ -350,12 +357,11 @@ func _sync_all() -> void:
 	var pub := Views.public_state(_gs, _match_names)
 	_apply_public(pub)
 	_send_to_members("rpc_state_public", [pub])
-	var peers := multiplayer.get_peers()
 	for pid in _gs.seat_order:
 		var priv := Views.private_state(_gs, pid)
 		if pid == HOST_ID:
 			_apply_private(priv)
-		elif peers.has(pid):
+		elif _is_connected(pid):
 			rpc_id(pid, "rpc_state_private", priv)
 
 
