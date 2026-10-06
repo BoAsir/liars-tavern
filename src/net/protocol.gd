@@ -25,6 +25,16 @@ const MAX_TRANSPORT_CLIENTS := MAX_PLAYERS + 2
 const TURN_TIMEOUT := 30.0
 const MAX_NAME_LENGTH := 12
 const MAX_ROOM_NAME_LENGTH := 20
+# 加入请求里的原始昵称超过这个长度直接拒绝(正常客户端只发清洗过的短昵称)
+const MAX_RAW_NAME_LENGTH := 256
+# 清洗文本时最多看原文开头 max_length 的这么多倍:耗时与原文长度无关
+const SANITIZE_SCAN_FACTOR := 4
+
+# 中文输入法常打出的字符(按码位):全角冒号/句号/全角句点/半角句号 → 半角;全角数字按码位换算
+const ADDRESS_PUNCTUATION := {0xFF1A: ":", 0x3002: ".", 0xFF0E: ".", 0xFF61: "."}
+const FULLWIDTH_DIGIT_ZERO := 0xFF10
+# 地址里一律去掉的空白(按码位):空格、制表符、全角空格、不换行空格
+const ADDRESS_SPACES := [0x20, 0x09, 0x3000, 0xA0]
 
 # 意图拒绝错误码(与 GameState 返回的 error 一致)
 const ERR_NOT_YOUR_TURN := "not_your_turn"
@@ -35,7 +45,8 @@ const ERR_MATCH_OVER := "match_over"
 const ERROR_MESSAGES := {
 	ERR_NOT_YOUR_TURN: "还没轮到你",
 	ERR_INVALID_PLAY: "出牌不合法",
-	ERR_NOTHING_TO_CHALLENGE: "本小局还没有人出牌,不能质疑",
+	# 本小局还没人出牌,或上一手正是自己出的(其他人断线后回合绕回)
+	ERR_NOTHING_TO_CHALLENGE: "现在没有可以质疑的出牌",
 	ERR_MATCH_OVER: "对局已结束",
 }
 
@@ -49,16 +60,17 @@ static func discovery_ports() -> Array[int]:
 
 static func parse_address(text: String) -> Dictionary:
 	# 支持 "IP" 与 "IP:端口";返回 {"ok", "ip", "port"} 或 {"ok": false, "error"}
-	var trimmed := text.strip_edges()
-	if trimmed == "":
+	var normalized := normalize_address(text)
+	if normalized == "":
 		return _address_error("请输入房主的 IP 地址")
-	var parts := trimmed.split(":")
+	var parts := normalized.split(":")
 	if parts.size() > 2:
 		return _address_error("地址格式应为 IP 或 IP:端口")
 	var host := parts[0]
-	if host == "localhost":
-		host = "127.0.0.1"
-	if not _is_ipv4(host):
+	if host.to_lower() == "localhost":
+		host = Lan.LOOPBACK
+	var ip_value := Lan.ipv4_to_int(host)
+	if ip_value < 0:
 		return _address_error("IP 地址无效:%s" % parts[0])
 	var port := GAME_PORT
 	if parts.size() == 2:
@@ -67,7 +79,20 @@ static func parse_address(text: String) -> Dictionary:
 		port = parts[1].to_int()
 		if port < 1 or port > 65535:
 			return _address_error("端口超出范围(1-65535)")
-	return {"ok": true, "ip": host, "port": port}
+	# 规范写法(去掉前导零等),免得底层解析出不同的地址
+	return {"ok": true, "ip": Lan.int_to_ipv4(ip_value), "port": port}
+
+
+static func normalize_address(text: String) -> String:
+	# 全角冒号/句号/数字转半角,去掉所有空白:照着等待厅抄地址时常开着中文标点
+	var out := text.strip_edges()
+	for code in ADDRESS_PUNCTUATION:
+		out = out.replace(String.chr(code), ADDRESS_PUNCTUATION[code])
+	for digit in 10:
+		out = out.replace(String.chr(FULLWIDTH_DIGIT_ZERO + digit), str(digit))
+	for code in ADDRESS_SPACES:
+		out = out.replace(String.chr(code), "")
+	return out
 
 
 static func format_address(ip: String, port: int) -> String:
@@ -79,22 +104,10 @@ static func sanitize_name(raw: String) -> String:
 
 
 static func sanitize_text(raw: String, max_length: int) -> String:
-	# 去掉控制字符并截断:昵称/房名会显示在他人屏幕上,来源不可信
-	var cleaned := ""
-	for ch in raw.strip_edges():
-		if ch.unicode_at(0) >= 32:
-			cleaned += ch
-	return cleaned.substr(0, max_length)
-
-
-static func _is_ipv4(host: String) -> bool:
-	var octets := host.split(".")
-	if octets.size() != 4:
-		return false
-	for octet in octets:
-		if not octet.is_valid_int() or octet.to_int() < 0 or octet.to_int() > 255:
-			return false
-	return true
+	# 去掉首尾空白与所有控制字符并截断:昵称/房名会显示在他人屏幕上,来源不可信。
+	# 只处理开头一段(与 max_length 成正比),百万字符的恶意输入也不会卡住房主或客户端
+	var window := raw.substr(0, max_length * SANITIZE_SCAN_FACTOR)
+	return window.strip_edges().strip_escapes().substr(0, max_length)
 
 
 static func _address_error(message: String) -> Dictionary:

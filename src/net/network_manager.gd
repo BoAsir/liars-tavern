@@ -223,7 +223,7 @@ func rpc_join_request(pname: String, version: int) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	if _lobby.has(id):
 		return
-	var deny := _lobby.check_join(version, in_game)
+	var deny := _join_denial(id, pname, version)
 	if deny != "":
 		rpc_id(id, "rpc_join_denied", deny)
 		_disconnect_peer_later(id)
@@ -231,6 +231,15 @@ func rpc_join_request(pname: String, version: int) -> void:
 	_lobby.add_member(id, pname)
 	rpc_id(id, "rpc_join_accepted")
 	_broadcast_lobby()
+
+
+func _join_denial(id: int, pname: String, version: int) -> String:
+	# 昵称来自不可信的对端:超长的在做任何逐字处理前就拒绝
+	if pname.length() > Protocol.MAX_RAW_NAME_LENGTH:
+		push_warning("拒绝连接 %d 的加入请求:昵称长度 %d 超过上限 %d"
+			% [id, pname.length(), Protocol.MAX_RAW_NAME_LENGTH])
+		return "昵称过长"
+	return _lobby.check_join(version, in_game)
 
 
 @rpc("authority", "call_remote", "reliable")

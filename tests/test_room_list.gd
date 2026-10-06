@@ -37,6 +37,29 @@ func test_decode_rejects_garbage_wrong_version_and_missing_fields():
 	assert_true(RoomList.decode(RoomList.encode(bad_port)).is_empty())
 
 
+func test_decode_rejects_out_of_range_player_counts():
+	# 人数/上限会驱动主菜单的座位圆点:越界报文(伪造或故障)整包丢弃
+	var bad_counts := [
+		[-1, 4], [5, 4], [3, 2], [0, 1], [2, 5], [2, 0], [-3, 99999999],
+		[2000000000, 4], [2147483647, 2147483647], [1, -4],
+	]
+	for counts in bad_counts:
+		var info := _info()
+		info["players"] = counts[0]
+		info["max"] = counts[1]
+		assert_true(RoomList.decode(RoomList.encode(info)).is_empty(), "players/max %s" % str(counts))
+
+
+func test_decode_accepts_counts_within_limits():
+	for counts in [[0, Protocol.MIN_PLAYERS], [1, 4], [4, 4], [2, 3]]:
+		var info := _info()
+		info["players"] = counts[0]
+		info["max"] = counts[1]
+		var decoded := RoomList.decode(RoomList.encode(info))
+		assert_eq(decoded.get("players"), counts[0], str(counts))
+		assert_eq(decoded.get("max"), counts[1], str(counts))
+
+
 func test_decode_truncates_long_text_fields():
 	var info := _info("x".repeat(100), "房".repeat(100))
 	var decoded := RoomList.decode(RoomList.encode(info))
@@ -89,6 +112,20 @@ func test_rooms_sorted_by_name():
 	list.ingest(_info("a", "Alpha"), "192.168.1.20", 0.0)
 	var rooms := list.rooms()
 	assert_eq(rooms[0]["room"], "Alpha")
+
+
+func test_ingest_caps_number_of_rooms():
+	# 伪造报文洪泛(每包一个新 id)不能让列表无限增长;已在列表里的房间照常刷新
+	var list := RoomList.new()
+	for i in RoomList.MAX_ROOMS:
+		assert_true(list.ingest(_info("r%d" % i), "192.168.1.20", 0.0))
+	assert_false(list.ingest(_info("flood"), "192.168.1.66", 0.1))
+	assert_eq(list.rooms().size(), RoomList.MAX_ROOMS)
+	var updated := _info("r0")
+	updated["players"] = 3
+	assert_true(list.ingest(updated, "192.168.1.20", 0.2))
+	assert_true(list.prune(Protocol.ROOM_TTL + 0.1))
+	assert_true(list.ingest(_info("late"), "192.168.1.30", Protocol.ROOM_TTL + 0.1))
 
 
 func test_clear_empties_list():
