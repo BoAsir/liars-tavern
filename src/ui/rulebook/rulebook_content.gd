@@ -1,24 +1,41 @@
 class_name RulebookContent
-# 说明书内容:按章节组织的纯数据,由 Rulebook 渲染。
+# 说明书内容:分两本书(骗子酒馆 / 德州扑克),每本按章节组织成纯数据,由 Rulebook 渲染。
+# 本文件是骗子酒馆那本;德州那本在 RulebookPoker(长牌、短牌共用一本)。
 # 文案中的数字全部取自规则常量(牌堆、手牌、出牌张数、左轮、限时),规则改动时说明书自动跟随。
 # 块类型:lead 引言 / text 正文 / bullets 要点 / note 提示条 / cards 牌堆 / pair 二选一对照 /
-#        odds 左轮中弹概率 / keys 操作键位。pair 的 tone 取 brass / truth / lie。
+#        odds 左轮中弹概率 / keys 操作键位 / hands 德州牌型表。pair 的 tone 取 brass / truth / lie。
 
 
-const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys"]
+const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys", "hands"]
 # 翻开说明书的快捷键。放在纯数据模块里,HUD 等引用它时不会把 Rulebook 依赖的自动加载单例拖进来
 const HOTKEY := KEY_F1
 
+const BOOK_LIARS := "liars"
+const BOOK_POKER := "poker"
+const BOOKS := [BOOK_LIARS, BOOK_POKER]   # 页签顺序
+const BOOK_TITLES := {BOOK_LIARS: "骗子酒馆", BOOK_POKER: "德州扑克"}
 
-static func sections() -> Array[Dictionary]:
+
+static func sections(book := BOOK_LIARS) -> Array[Dictionary]:
+	if book == BOOK_POKER:
+		return RulebookPoker.sections()
 	return [_goal(), _deck(), _turn(), _reveal(), _revolver(), _rounds(), _controls()]
 
 
-static func find(section_id: String) -> Dictionary:
-	for section in sections():
+static func find(section_id: String, book := BOOK_LIARS) -> Dictionary:
+	for section in sections(book):
 		if section["id"] == section_id:
 			return section
 	return {}
+
+
+static func book_title(book: String) -> String:
+	return BOOK_TITLES.get(book, BOOK_TITLES[BOOK_LIARS])
+
+
+static func book_for_mode(mode: String) -> String:
+	# 德州长牌与短牌共用一本(牌型表里并列两种名次);未知玩法回退骗子酒馆那本
+	return BOOK_POKER if GameMode.is_poker(mode) else BOOK_LIARS
 
 
 static func hit_chance(shots_fired: int) -> float:
@@ -35,8 +52,9 @@ static func _goal() -> Dictionary:
 		"tagline": "活到最后的人赢",
 		"blocks": [
 			{"type": "lead", "text": "轮流把牌盖着打出,声称它们全是本局的目标牌——可以说真话,也可以吹牛。"},
+			# 人数取骗子酒馆自己的上限:Protocol.MAX_PLAYERS 是所有玩法的绝对上限
 			{"type": "text", "text": "%d–%d 人围坐一桌。下家不信你,就翻牌验证:你说谎被抓,你对自己扣一次左轮扳机;冤枉了你,扣扳机的就是他。"
-				% [Protocol.MIN_PLAYERS, Protocol.MAX_PLAYERS]},
+				% [GameMode.min_players(GameMode.LIARS), GameMode.max_players(GameMode.LIARS)]},
 			{"type": "bullets", "items": [
 				"中弹即出局,最后一个活着的人获胜。",
 				"每次开枪后重新洗牌发牌,开始新的一局。",
