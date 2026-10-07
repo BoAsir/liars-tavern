@@ -120,7 +120,7 @@
 
 ### 3.3 协议、发现与握手
 
-- `Protocol.VERSION = 4`(v4:玩法选择 + 德州扑克)。`Protocol.MAX_PLAYERS = 8`,改为所有玩法的绝对上限(传输层槽位 `MAX_TRANSPORT_CLIENTS = MAX_PLAYERS + 2`、发现报文校验)。各玩法上限一律用 `GameMode.max_players(mode)`。
+- `Protocol.VERSION = 5`(v4 已被「左轮改 5 膛」占用;v5:玩法选择 + 德州扑克)。`Protocol.MAX_PLAYERS = 8`,改为所有玩法的绝对上限(传输层槽位 `MAX_TRANSPORT_CLIENTS = MAX_PLAYERS + 2`、发现报文校验)。各玩法上限一律用 `GameMode.max_players(mode)`。
 - **发现报文兼容旧版本**(已发布的 v3 客户端会丢弃 max > 4 的报文,那样旧玩家就看不到德州房间、也就没法从房主更新):
   - `max = mini(玩法上限, 4)`、`players = mini(实际人数, max)`,保持在旧解析器能接受的范围;
   - 新字段 `cap`(玩法上限 2–8)、`seated`(实际人数 0–cap)、`mode`(String)、`playing`(bool)。
@@ -370,7 +370,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 ### 5.5 机位(德州的确切数值;骗子酒馆的数值不变)
 
-- 越肩:`pos = dir·(seat_radius + 0.85) + right·0.55 + (0, 1.92, 0)`,`target = −dir·0.12 + (0, 0.78, 0)`。德州为 (0.55, 1.92, 2.60) → (0, 0.78, −0.12);半径 0.95 时正好是现在的机位。
+- 越肩:`pos = dir·(seat_radius + THIRD_PERSON_BACK − SEAT_RADIUS) + right·THIRD_PERSON_SIDE + (0, THIRD_PERSON_HEIGHT, 0)`,`target = −dir·0.12 + (0, 0.78, 0)`;常量取 `TableWorld` 现值(上游已把越肩镜头拉远到 2.45 / 2.05 / 0.6,手牌举到右肩外侧),半径 0.95 时正好是骗子酒馆现在的机位。德州按同一公式推远,铭牌不重叠与公共牌大小以无头布局测试和截图为准。
 - 观战(德州):(0, 2.00, 2.60) → (0, 0.78, 0.00)。
 - 等待厅(德州):(1.65, 2.75, 3.35) → (1.35, 0.75, 0.10)。
 - 散局环绕:半径 ≥ 3.0,镜头高约 2.0(现在 2.4 米的环绕会擦过 2.11 米处的椅背)。
@@ -495,5 +495,5 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 ## 11. 发布
 
 - 本功能**不改 `project.godot`**:不加自动加载(`PokerFaces` 等用静态类),快捷键用 `InputEventKey` 的 keycode(同 TableScreen),不改渲染与输入设置。这样旧安装包能经网上或局域网更新拿到德州;协议 v4 本身不需要改 `base_build`(旧客户端收到「版本不匹配」后走更新)。
-- 发布时整体合入 main(连同 `feature/liars-tavern-mvp` 与 `feature/model-detail` 的进度),按 release-update 流程;`build.json` 的 build = 那时 main 的 build + 1,version 0.6.0(新玩法改第二位),base_build 不变。万一必须改 `project.godot`,base_build 设为新 build,README 与 Release 说明写明需要重装。
+- 发布时整体合入 main(连同 `feature/liars-tavern-mvp` 与 `feature/model-detail` 的进度),按 release-update 流程;`build.json` 的 build = 那时 main 的 build + 1,version 0.7.0(0.6.0 已被左轮 5 膛那一版用掉;新玩法改第二位),base_build 不变。万一必须改 `project.godot`,base_build 设为新 build,README 与 Release 说明写明需要重装。
 - README:两种玩法的介绍(骗子酒馆 2–4 人 / 德州 2–8 人)、德州规则摘要、德州操作键、新调试开关、德州冒烟与截图命令、每台机器 4 个发现端口的限制。
