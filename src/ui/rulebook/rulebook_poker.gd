@@ -5,7 +5,7 @@ class_name RulebookPoker
 # 界面字体里没有花色字形(规格 §6.1):文案不写花色符号,具体的牌由 hands 块画成小牌。
 
 
-const STRAIGHT_LENGTH := 5
+const HAND_SIZE := 5                       # 牌型由 5 张牌组成:示例每行 5 张,顺子是 5 个相连的点数
 const AWAY_TIMEOUTS := 2                   # 连续这么多次超时就离座(规格 §2.8);规则引擎有了对应常量后改用它
 # 例子里的金额(以大盲计,不是规则)
 const RAISE_EXAMPLE_BLINDS := 3            # 翻牌前有人加注到 3 个大盲
@@ -256,7 +256,7 @@ static func _lowest_straight(short_deck: bool) -> String:
 	# A 当最小牌的顺子:A 接这副牌最小的四个点数,如 A-2-3-4-5
 	var low := PokerRules.min_rank(short_deck)
 	var labels := [PokerCard.rank_label(PokerCard.ACE)]
-	for r in range(low, low + STRAIGHT_LENGTH - 1):
+	for r in range(low, low + HAND_SIZE - 1):
 		labels.append(PokerCard.rank_label(r))
 	return "-".join(labels)
 

@@ -216,7 +216,7 @@ func test_refresh_card_faces_reloads_the_example_cards_on_the_page():
 	book.show_book(POKER)
 	book.show_section(_index_of(POKER, "hands"))
 	var faces := _content().find_children("*", "TextureRect", true, false)
-	assert_eq(faces.size(), RulebookPoker.hands_block()["items"].size() * RulebookPoker.STRAIGHT_LENGTH)
+	assert_eq(faces.size(), RulebookPoker.hands_block()["items"].size() * RulebookPoker.HAND_SIZE)
 	for face in faces:
 		face.texture = null
 	book.refresh_card_faces()

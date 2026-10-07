@@ -338,5 +338,5 @@ static func _place_cell(cell_name: String, text: String, color: Color) -> Label:
 
 
 static func _hand_cards_width() -> float:
-	var count := RulebookPoker.STRAIGHT_LENGTH
+	var count := RulebookPoker.HAND_SIZE
 	return HAND_CARD_SIZE.x * count + HAND_CARD_GAP * (count - 1)

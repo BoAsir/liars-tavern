@@ -14,12 +14,12 @@ var post_fx: PostFx
 var labels: WorldLabels
 var toasts: ToastLayer
 var flags: DebugFlags
+var settings_path := Settings.PATH   # 本机设置文件;测试换成临时文件
 
 var _ui: Control
 var _screen: Control = null
 var _confirms: Array[ConfirmOverlay] = []
 var _default_fov := 0.0
-var settings_path := Settings.PATH   # 测试换成临时文件
 var _rules_root: Control
 var _rulebook: Rulebook = null
 var _rules_pages := {}   # 每本说明书读到的页 {书: 页码}:合上时记下,下次翻开接着读
