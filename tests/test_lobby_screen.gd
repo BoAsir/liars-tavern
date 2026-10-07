@@ -40,6 +40,12 @@ class StubApp:
 		applied.append(mode)
 
 
+func before_each():
+	# 名单行要用 Net.my_pid():前面的测试 leave() 过的话树上没有 peer,先换回默认的离线 peer
+	if multiplayer.multiplayer_peer == null:
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+
+
 func after_each():
 	# 自动加载是全局的:别把玩法、房主身份留给后面的测试
 	Net.game_mode = GameMode.DEFAULT

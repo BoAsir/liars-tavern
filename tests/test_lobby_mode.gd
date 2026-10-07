@@ -27,6 +27,13 @@ func before_each():
 	add_child_autofree(net)  # _ready 里创建计时器
 
 
+func after_each():
+	# leave() 把整棵树共用的 multiplayer_peer 置空:换回默认的离线 peer,
+	# 否则后面的测试里 Net.my_pid() 之类的调用会报引擎错误
+	if multiplayer.multiplayer_peer == null:
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+
+
 func _host(mode: String, players := 1) -> void:
 	# 搭一个房主:等待厅里有 players 人(含房主)
 	net.is_host = true
