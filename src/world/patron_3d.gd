@@ -12,7 +12,7 @@ const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
 const NECK_BASE := Vector3(0, 0.55, -0.02)
-const NECK_REACH := 0.65      # 头最远水平伸出(米)
+const NECK_REACH := 0.85      # 头最远水平伸出(米):4 人同时探向桌心头不相撞,头顶仍低于吊灯
 const NECK_RISE := 0.25       # 每伸出 1 米头抬高这么多:像潜望镜一样往上探,不会贴着桌面
 const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:临界阻尼(2√刚度),头跟手又停得稳,不过冲不回晃
 const NECK_DAMPING := 15.5
