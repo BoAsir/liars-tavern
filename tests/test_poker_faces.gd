@@ -20,6 +20,8 @@ func before_each():
 func after_each():
 	PokerFaces.batch_renderer = Callable()
 	PokerFaces.clear()
+	# 有的测试会生成骗子酒馆的牌面:清掉全局缓存,后面的测试文件仍看到未生成的 CardFaces,不受文件顺序影响
+	CardFaces.clear()
 
 
 func _fake_renderer(image_size := Vector2i(PokerFaces.SIZE)) -> Callable:
