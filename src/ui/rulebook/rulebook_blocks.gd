@@ -298,6 +298,8 @@ static func _hand_row(item: Dictionary) -> Control:
 	for card in item["cards"]:
 		var face := _card_face(card, HAND_CARD_SIZE)
 		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 从大纹理缩小很多倍(规格 §5.3)
+		# 铺满牌位:牌面生成前的占位纹理是正方形,按比例居中会画成方块,换上真牌面时大小一跳
+		face.stretch_mode = TextureRect.STRETCH_SCALE
 		cards.add_child(face)
 	cells.add_child(cards)
 	cells.add_child(_place_cell("LongPlace", str(item["long"]), UiTheme.PARCHMENT_DIM))

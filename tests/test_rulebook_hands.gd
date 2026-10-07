@@ -31,6 +31,13 @@ func test_cards_are_small_mipmapped_and_textured():
 		assert_not_null(face.texture, "牌面还没生成时也要有占位纹理")
 
 
+func test_cards_fill_the_card_shape_even_with_square_placeholders():
+	# 牌面生成前取到的占位纹理是正方形:按比例居中会画成方块,生成完换上真牌面时大小一跳。
+	# 铺满牌位(真牌面 256×372 与 40×58 的比例只差 0.2%,不会看出变形)
+	for face: TextureRect in table.find_children("*", "TextureRect", true, false):
+		assert_eq(face.stretch_mode, TextureRect.STRETCH_SCALE)
+
+
 func test_lists_both_places_and_highlights_only_the_rows_that_differ():
 	var items: Array = block["items"]
 	var long_cells := table.find_children("LongPlace", "Label", true, false)
