@@ -1,6 +1,6 @@
 # 德州扑克玩法设计文档
 
-- 日期:2026-10-07(同日修订:按设计审查的 57 条意见改定规则细节、计时、兼容、清晰度与布局)
+- 日期:2026-10-07(同日两次修订:按设计审查的 57 条意见与总评审的补充改定规则细节、计时、兼容、清晰度、布局、拆台与迟到者)
 - 状态:已确认(用户确认:德州 2–8 人且牌桌与桌上的牌放大、清晰;房主随时散局;开打后新玩家下一手入座;盲注等细节由本设计决定)
 - 依附于:[《骗子酒馆》设计文档](2026-08-14-liars-tavern-design.md)(网络、3D 酒馆、HUD 等沿用其约定)
 - 协作:3D 模型重做在 `feature/model-detail` 分支进行(见 §9);本分支的 3D 新内容只放在新文件里
@@ -16,7 +16,7 @@
 - 开打后新玩家仍可加入,下一手开始发牌。
 - 在同一个 3D 酒馆里打:牌桌放大(半径 0.95 → 1.45 米);所有公共信息(公共牌、摊牌)另有 2D 大图,保证 1280×720 下看得清。
 
-明确不做:AI 补位、前注与升盲、锦标赛、时间银行、预选动作、主动亮牌/埋牌、聊天、断线重连(断线 = 离桌)、自定义买入额、等待厅里改玩法、死按钮规则。
+明确不做:AI 补位、前注与升盲、锦标赛、时间银行、预选动作、主动亮牌/埋牌、聊天、断线重连(断线 = 离桌)、自定义买入额、死按钮规则、等待厅里改玩法(想换玩法就重开房间;README 与说明书写明)。
 
 ## 2. 规则
 
@@ -76,7 +76,8 @@
 
 ### 2.6 输光、再领与观战
 
-- 一手结束时筹码为 0 的人**输光**(status `busted`):他的屏幕底部出现「再领 2000」/「观战」。不选不会卡住牌局,只是不发牌给他。
+- 一手结束时筹码为 0 的人**输光**(status `busted`):他的屏幕底部出现「再领 2000」/「观战」(带倒计时)。不选不会卡住牌局,只是不发牌给他。
+- **留出选择时间**:有人输光的那一手之后,下一手最早在演出结束后 `PokerPacing.BUST_DECISION`(6 秒)开始;输光者都做了选择(再领/观战/离开)就恢复为 `HAND_GAP`(1.5 秒)。
 - **再领**:status 为 `busted` 或 `spectating` 时可以(注意:手牌中全下的人筹码也是 0,但不能领)。每次 2000,不限次数,累计领取 +1,status 变 `waiting`,下一手发牌。当前没有进行中的手牌且凑够 2 人时自动排期开下一手。
 - **观战**:只有 `busted` 可以选。角色留在座位上不发牌;镜头切到俯视观战机位;HUD 常驻「领取 2000 上桌」。
 - 其他情况的再领/观战请求回 `cannot_rebuy` / `invalid_action`,不产生事件。
@@ -94,6 +95,7 @@
 ### 2.8 回合限时
 
 - 每次行动限时 30 秒,外加演出时间(房主权威计时,同骗子酒馆)。超时:to_call 为 0 就过牌,否则弃牌。
+- **挂机离座**:连续 2 次超时的人,从下一手起离座(status `away`):保留筹码,不发牌,按钮与盲注跳过他;他的屏幕底部显示「你已离座 · 回到牌桌」,点了(意图 `sit_in`)回到 `waiting`,下一手发牌。他自己的任何一次行动都会把连续超时清零。
 
 ### 2.9 散局与结算
 
@@ -129,8 +131,9 @@
 - **加入校验** `LobbyModel.check_join(version: int, in_game: bool, mode: String, accepting_late: bool) -> String`,判定顺序固定:
   ① 版本不符(必须最先判断,主菜单靠「版本」字样触发从房主更新);② 已开局且 `not accepting_late` → 「游戏已开始,请等这一局结束」(德州散局中或已结算时文案为「牌局正在散局,请稍后再来」);③ `size() >= GameMode.max_players(mode)` → 「房间已满(x/上限)」。
   `accepting_late = GameMode.allows_late_join(mode) and 会话存在 and not 会话.is_over() and not 会话.is_ending()`。容量只按已连接的等待厅成员数计。
-- **握手**:`rpc_join_accepted(info: Dictionary)`,`info = {"in_game": bool}`。in_game 为真时客户端保持「加入中」(`_joining` 不清、`_join_timer` 继续),直到 `rpc_game_started` 到达才结束;超时走 `_fail_join("房主没有发来牌局信息")`。
-- `rpc_game_started(seats: Array, info: Dictionary)`,`info = {"mode": String, "late": bool}`;seats 是当前桌上有酒客的人 `[{pid, name}]`:开局时等于等待厅顺序;中途加入时不含加入者本人。
+- **握手**:`rpc_join_accepted(info: Dictionary)`,`info = {"in_game": bool, "mode": String}`。客户端用 `GameMode.is_valid` 校验 mode 并在发 `joined_lobby` 之前写入 `Net.game_mode`(等待厅一进来就要按玩法摆桌;`rpc_lobby_state` 比它晚到)。
+  in_game 为真时客户端保持「加入中」(`_joining` 不清、`_join_timer` 继续),直到 `rpc_game_started` 到达才结束;超时走 `_fail_join("房主没有发来牌局信息")`。等待厅 `_refresh` 发现 `Net.game_mode` 与已摆的桌子不一致时再摆一次(兜底)。
+- `rpc_game_started(seats: Array, info: Dictionary)`,`info = {"mode": String, "late": bool}`;seats 是当前桌上有酒客的人 `[{pid, name}]`:开局时等于等待厅顺序;中途加入时 = `_session.seats_with_patrons()` 配上会话里的名字(房主权威、没有演出延迟),不含加入者本人。
 - 唯一新增 RPC:`rpc_poker_intent(action, amount)`(客户端 → 房主),**参数不加类型**,在函数体内校验:action 是 String 且在 `PokerRules.BET_ACTIONS + SEAT_ACTIONS` 里,amount 是 int、0 ≤ amount ≤ 1,000,000;发送者是本场成员。不合法回 `rpc_intent_rejected`(invalid_action / invalid_amount / not_seated)。
 - **RPC 编号冻结**:Godot 按方法名排序给 RPC 编号。排序后下标 0–7 的方法名(`rpc_game_events, rpc_game_started, rpc_intent_challenge, rpc_intent_play, rpc_intent_rejected, rpc_join_accepted, rpc_join_denied, rpc_join_request`)不得增删改名;`rpc_join_request(pname: String, version: int)` 与 `rpc_join_denied(reason: String)` 的参数与 @rpc 模式冻结;新 RPC 的名字必须排在 `rpc_join_request` 之后。
   测试:`(load("res://src/net/network_manager.gd") as Script).get_rpc_config().keys()` 按字符串排序后前 8 个等于上表;`get_script_method_list()` 里两个握手方法的参数个数与类型不变。跨版本连接时的 checksum 报错属预期,不要去「修」。
@@ -175,6 +178,7 @@ func turn_timer_after(events: Array, pending: float, time_left: float) -> float
 func accepts_late_join() -> bool                # 骗子酒馆 false;德州 = 没散局且未结束
 func add_player(pid: int, name: String) -> Array
 func next_hand_ready() -> bool                  # 骗子酒馆 false
+func hand_gap() -> float                        # 德州:有输光者没做选择时 BUST_DECISION,否则 HAND_GAP
 func start_next_hand() -> Array
 func request_end() -> Array
 ```
@@ -193,7 +197,7 @@ func _after_action(events: Array, turn_action := false) -> void:
 	else:
 		_turn_timer.start(_session.turn_timer_after(events, _anim_left, _turn_time_left()))
 	if not _session.is_over() and _session.next_hand_ready():
-		_hand_timer.start(_anim_left + PokerPacing.HAND_GAP)
+		_hand_timer.start(_anim_left + _session.hand_gap())
 	else:
 		_hand_timer.stop()
 	game_events.emit(events)
@@ -205,12 +209,12 @@ func _on_hand_timer() -> void:
 		_after_action(_session.start_next_hand())
 ```
 
-  开局时先置 `_anim_left = Pacing.INTRO` 再 `_after_action(start 的事件)`。`_turn_time_left()` 与 `_on_turn_timeout()` 都以 `_session != null and _session.has_turn()` 为前提;超时代打按 `turn_action = true` 处理。
+  开局时先置 `_anim_left = Pacing.INTRO` 再 `_after_action(start 的事件)`。输光者做了选择(再领/观战/离开)后 `hand_gap()` 变短,`_after_action` 会按新的间隔重排 `_hand_timer`(只会提前,不会推迟到比原计划更晚)。`_turn_time_left()` 与 `_on_turn_timeout()` 都以 `_session != null and _session.has_turn()` 为前提;超时代打按 `turn_action = true` 处理。
   `leave()` 与 `request_rematch_lobby()` 都停 `_hand_timer` 并把会话置空;`leave()` 另把 `game_mode` 复位为 `GameMode.DEFAULT`。
 - **可离线测试的结构**:`rpc_join_request` 只取发送者再调用 `_handle_join_request(id, pname, version)`;`rpc_poker_intent` 只取发送者再调用 `_handle_poker_rpc(pid, action, amount)`;所有直接的 `rpc_id` 改走 `_send_to(id, method, args)`,内部先判断 `_is_connected(id)`(离线测试里对未知 peer 调 rpc_id 会触发引擎错误,GUT 会判失败)。
 - **中途加入的房主处理顺序**:`_lobby.add_member` → `_send_to(id, "rpc_join_accepted", [{"in_game": true}])` → 只对他发 `rpc_game_started(当前座位, {"mode", "late": true})` → `_session.add_player(id, 名字)` → `_after_action(事件)` → `_broadcast_lobby()`。
 - **视线**:对局中「本场成员」= 已完成握手的等待厅成员 `_lobby`。`rpc_look` 校验 `in_game and _lobby.has(sender)`;`_relay_gaze` 遍历 `_lobby.seat_order()`(跳过房主、发送者与未连接的人)。客户端只对当前桌上有酒客的 pid 应用视线。
-- `Net.seats` 在德州里只用于开局引导;之后一律以 `hand_started.seats` 与 `last_public.seats` 为准(房主与客户端在演到 `hand_started` 时更新 `Net.seats`,名字取公共视图)。
+- `Net.seats` 在德州里只由 NetworkManager 写(开局与中途加入的引导);`PokerScreen` 自己保存座位表(演到 `hand_started` 时取它的 seats),对账时 `last_public.seats` 不同就重排。
 
 ### 4.3 Net 公开接口
 
@@ -261,7 +265,9 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 | `waiting` | 已入座或已再领,还没被发过牌(下一手发牌) |
 | `busted` | 筹码 0,还没选择 |
 | `spectating` | 筹码 0,选择了观战 |
+| `away` | 挂机离座(连续 2 次超时):有筹码但不发牌,按钮与盲注跳过他 |
 
+  意图 `sit_in` 只对 `away` 有效(回到 `waiting`);`PokerRules.SEAT_ACTIONS` 包含 `rebuy`、`spectate`、`sit_in`。
   `left`(bool):已离开;全下离开的人 status 仍是 `allin`,照常摊牌。离开的人在下一手开始时移出座位。
 - **两手之间**(phase IDLE,上一手结束到下一手 `hand_started`):保留上一手的 board、shown、button/sb/bb 与各人的最终 status;street 为这一手结束时所在的街(摊牌结束为 `showdown`);pots 为 []。
   `start_hand()` 时被发牌的人改为 `active`(盲注全下的为 `allin`)。客户端「等待下一手」的界面只认 `waiting`。
@@ -283,6 +289,8 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 | `hand_over` | hand, stacks({pid: 筹码}), busted([pid]) | 一手结束 |
 | `rebuy` | pid, amount, buyins, stack | 再领筹码 |
 | `spectate` | pid | 选择观战 |
+| `away` | pid | 连续超时被移出下一手(一手结束时发) |
+| `sit_in` | pid | 离座的人回到牌桌 |
 | `player_joined` | pid, name | 中途加入(下一手发牌) |
 | `player_left` | pid, folded(这次离开是否让他弃了牌) | 离开或断线 |
 | `ending` | — | 房主散局:本手结束后结算 |
@@ -317,7 +325,8 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 
 ### 4.7 演出预算(`PokerPacing`,已实现)
 
-HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8、PLAYER_JOINED 0.2、SESSION_OVER 3.0、HAND_GAP 1.5;交出回合的事件只有 `turn`。
+HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8、PLAYER_JOINED 0.2、SESSION_OVER 3.0、HAND_GAP 1.5、BUST_DECISION 6.0(有人输光后的一手间隔);`away` / `sit_in` / `spectate` 不占演出时间;交出回合的事件只有 `turn`。
+新入座者(中途加入或离座回来)的镜头从观战机位回到自己座位,这段运镜算在 HAND_STARTED 的 1.4 秒里。
 导演每段演出的实际时长必须不超过预算,由测试读取导演与资产类的节奏常量来保证(同骗子酒馆的 `test_pacing.gd`)。
 
 ## 5. 3D 表现
@@ -328,6 +337,8 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 - `TableWorld.configure_table(radius)`(已实现)+ `main.apply_table_mode(mode)`(已实现):德州时桌子 1.45、隐藏烛台与目标牌立牌、不摆左轮。
 - 座位变化时酒客**沿圆弧**移动到新座位(按角度插值,不走弦线,否则会穿过桌沿);筹码堆与庄家按钮跟着同一角度动画。
 - `TableWorld.remove_patron(pid)`:让酒客 `vanish` 并移除,座位角度保留到下一次 `arrange`。用于 `player_left`。
+- **拆台**:德州的 3D 节点(筹码、下注、底池、公共牌架与牌、亮出的牌、弃牌堆、庄家按钮)都放在 `TableWorld` 下的容器 `poker_root` 里;`TableWorld.clear_poker()` 释放容器内全部节点,并释放所有酒客 Fan 下不属于 `CardTable` 的 Card3D(德州的手牌),幂等。
+  `PokerScreen._exit_tree`、`LobbyScreen._ready`、`main._show_menu` 都调用它;`TableScreen._ready` 也调用 `app.apply_table_mode(Net.game_mode)`(从德州房间出来再进骗子酒馆时桌子、烛台、立牌、左轮都要复原)。
 - 每个 `hand_started`:所有酒客 `reset_pose()`、`set_active(false)`(清掉上一手的庆祝、表情)。
 - 灯光:吊灯聚光在桌面高度只照到半径约 1.5 米,德州桌沿与 8 位酒客在半影外;隐藏烛台还去掉了桌沿补光。处理见 §9 约定(聚光随桌子放大、留一点桌沿暖光),以截图为准。
 
@@ -363,7 +374,10 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 - 观战(德州):(0, 2.00, 2.60) → (0, 0.78, 0.00)。
 - 等待厅(德州):(1.65, 2.75, 3.35) → (1.35, 0.75, 0.10)。
 - 散局环绕:半径 ≥ 3.0,镜头高约 2.0(现在 2.4 米的环绕会擦过 2.11 米处的椅背)。
-- 以上都让最远的头与 1.60 米高的帽子避开吊灯罩(灯摆动 ±3 厘米)。有座位的人(含输光还没选的)用越肩;观战与等待下一手的人用观战机位。4:3 窗口要额外截图检查。
+- 以上都让最远的头与 1.60 米高的帽子避开吊灯罩(灯摆动 ±3 厘米)。4:3 窗口要额外截图检查。
+- **用哪个机位**:自己在当前座位表里且 status 不是 `spectating` → 越肩(输光还没选、刚再领等下一手、离座的人都留在越肩);不在座位表里(迟到者)或在观战 → 观战机位。
+- 观战机位从本机座位(角度 0)的后上方看过去,那个位置不能挡镜头:观战者自己的酒客在本机上设为不可见(别人照样看得到;不要用 `arrange` 的 show_self,它会释放并重建酒客、可能换成别的动物);
+  迟到者按「座位表 + 自己」排座、show_self 为假,于是本机座位空着,正好是下一手他会被排进的位置(新人排在末尾),入座时桌子不用转。
 
 ### 5.6 酒客动作(复用 Patron 现有接口)
 
@@ -423,6 +437,8 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 - 客户端只渲染视图:任何时刻都能只凭公共视图 + 私有视图把牌桌摆对(中途加入的人靠它画出进行中的这一手);事件只负责动画,演出结束后按最新视图对账。
 - `PokerScreen._ready` 先同步连接 `Net` 信号、读取 `Net.last_public` / `last_private`,之后才做任何 `await`(同 TableScreen);否则和 `game_started` 同一批到达的事件会丢。自己不在 `seats` 里时用观战机位、不建自己的酒客;没有酒客的 pid 的 `player_left` 什么也不做。
+- **迟到者的第一帧**:开始演出事件队列之前,先按最新公共/私有视图把整张桌瞬时摆好(座位、筹码、下注、底池、公共牌、亮牌、按钮、2D 牌条),并丢弃在此之前排队的事件(房主每批事件之后都发视图,最新视图已经包含它们);开场运镜结束时还没收到第一份视图就等它到。
+- **导演容错**:缺少前置状态的事件(没有下注堆的收注、手里没牌的弃牌、Fan 里没牌的亮牌、前面槽位空着的转牌)一律按视图补齐或跳过动画,不报错。
 - 断线、离开、散局在任何阶段发生都不能卡住:每批事件之后要么有人在计时行动,要么一手间隔计时器在走,要么牌桌在等人,要么已散局。
 - 筹码守恒(房主每次状态变化后):在座者筹码 + 本手已投入 + 已离开者带走的 = 累计领取总额。离开者在被移出座位之前算在座者里。
 - 结算里可能出现已离开者与在座者同名(离开后用同一昵称重进),已离开的那行标「已离开」,不另做去重。
@@ -436,6 +452,10 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
   - `PokerViews`:**按字段路径**检查不泄露(牌值 8–59 会和筹码数、手数撞值,不能按数值搜):board 只含公共牌;没亮过的人 `shown` 为空;视图里带牌的键只有白名单(board、players[].shown);事件里手牌只能出现在 `reveal.hands` 与已亮过的人的 `pot_won.best`。没摊牌就赢的那手(公共牌 ≥ 3)任何事件与视图都不含赢家的手牌与牌型名。
   - `PokerPacing` 与导演节奏;`GameMode` / `RoomList`(含 v3 校验规则能接受 v4 德州报文、v4 读到 cap/seated)/ `LobbyModel` / `Protocol` / RPC 编号冻结。
   - 离线 NetworkManager(经 `_handle_join_request`、`_handle_poker_rpc`、`_handle_intent` 等内部函数):德州开局计时;一手间隔排期;回合中旁人再领只补 REBUY 预算、一手间隔中再领不缩短 `_hand_timer`;间隔里散局、断线到 1 人、`leave()` 后 `_hand_timer` 都已停;中途加入的完整顺序且下一手发牌,之后视线转发对象里有他;断线弃牌后行动继续;散局与回等待厅。
+  - 输光选择时间:三人局一人输光后 3 秒再领 → 他在下一手的 dealt 里;都不选 → 下一手在演出后约 6 秒开始,不卡住;最后一个没选的人选了观战 → 间隔恢复 HAND_GAP。
+  - 挂机离座:连续 2 次超时 → 下一手 `away`、不发牌、按钮与盲注跳过;sit_in 后下一手发牌;中间自己行动一次 → 清零。
+  - 拆台:打完一手回等待厅 → `TableWorld` 下没有德州节点、酒客 Fan 下没有德州 Card3D;德州房间 → 离开 → 开骗子酒馆房间 → 桌子 0.95、立牌与烛台可见、有左轮、没有德州节点。
+  - 迟到者:翻牌后加入,开场运镜期间到达 action / bets_collected / street → 演完后 3D 状态与视图一致,没有错误日志。
   - UI 纯逻辑:下注预设与金额夹取、按钮文案、结算排名;无头布局测试:8 个铭牌挂点在越肩与观战机位下投影到 1280×720 都在 24 像素安全边内且两两不重叠(按 150×64 估),镜头到每个头部的连线不穿过吊灯罩。
 - **需要随改的现有测试与调用点**:`test_net_turn_timer`(改读 `net.last_public["current_pid"]`、调 `_handle_intent(pid, {"kind": "play", "indices": [0]})`,期望值不变,作为抽取前后行为一致的回归);`test_cursor_look`(改用 `SeatGaze`);`test_room_list`(坏样例改为 `[2, Protocol.MAX_PLAYERS + 1]`,新增 `[8, 8]` 合法);`test_lobby_model`(新 check_join 签名);`test_pacing` 与 `lobby.gd` 状态行(不再用 `Protocol.MAX_PLAYERS` 指骗子酒馆上限);`test_rulebook_content`(骗子酒馆那本用 `GameMode.max_players(GameMode.LIARS)`)。
 - **联机冒烟** `MODE=holdem|short_deck tools/poker_smoke.sh`(SPEED=4,CAP_SECONDS=300):房主 `--autohost=3 --mode=$MODE --hands=6`、直连 bot、局域网发现 bot;房主日志出现 `HAND_STARTED hand=1` 后再启动第 4 个 bot(`--discover`,验证对局中的德州房间可加入)。
@@ -466,6 +486,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 ## 10. 实施顺序
 
 1. 地基(已完成):规格与计划、`GameMode`、`PokerCard`、`PokerRules`、`PokerPacing`、牌桌按玩法放大的接口、Net 接口桩。
+   第二批开工前先把 `feature/liars-tavern-mvp`(0.5.2 之后的渲染预算、脖子 0.85 米、发布脚本等)合进 `feature/texas-holdem`,减少 main.gd / tavern.gd / shot.gd 的冲突。
 2. 并行:德州规则引擎、3D 资产与机位、玩法接入(主菜单/等待厅/发现/协议/握手)、视线逻辑抽取、说明书。
 3. 并行:网络会话(含骗子酒馆会话抽取)、德州牌桌界面。
 4. 联调:bot 与冒烟、截图验收、性能检查、修正。
@@ -474,5 +495,5 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 ## 11. 发布
 
 - 本功能**不改 `project.godot`**:不加自动加载(`PokerFaces` 等用静态类),快捷键用 `InputEventKey` 的 keycode(同 TableScreen),不改渲染与输入设置。这样旧安装包能经网上或局域网更新拿到德州;协议 v4 本身不需要改 `base_build`(旧客户端收到「版本不匹配」后走更新)。
-- 发布前先合并 main(含 0.5.2 之后的提交、渲染预算改动与 `feature/model-detail`);`build.json` 的 build = 当时 main 的 build + 1,version 0.6.0(新玩法改第二位),base_build 不变。万一必须改 `project.godot`,base_build 设为新 build,README 与 Release 说明写明需要重装。
+- 发布时整体合入 main(连同 `feature/liars-tavern-mvp` 与 `feature/model-detail` 的进度),按 release-update 流程;`build.json` 的 build = 那时 main 的 build + 1,version 0.6.0(新玩法改第二位),base_build 不变。万一必须改 `project.godot`,base_build 设为新 build,README 与 Release 说明写明需要重装。
 - README:两种玩法的介绍(骗子酒馆 2–4 人 / 德州 2–8 人)、德州规则摘要、德州操作键、新调试开关、德州冒烟与截图命令、每台机器 4 个发现端口的限制。
