@@ -8,6 +8,9 @@ extends SceneTree
 
 
 const WARMUP_FRAMES := 45
+# 截图前连续强制绘制几帧再读图:窗口被其他窗口挡住时 macOS 不再调度正常绘制(等 frame_post_draw 会永远卡住),
+# 强制绘制不依赖窗口可见;体积雾的时域累积也要几帧才收敛
+const SETTLE_DRAWS := 8
 
 var opts := {}
 
@@ -26,6 +29,7 @@ func _run() -> void:
 		var dims: PackedStringArray = opts["size"].split("x")
 		root.size = Vector2i(int(dims[0]), int(dims[1]))
 	RenderBudget.apply(root)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
 	if opts.has("showcase"):
@@ -50,7 +54,8 @@ func _run() -> void:
 			_place_camera(tavern.camera_rig, view)
 		for i in WARMUP_FRAMES:
 			await process_frame
-		await RenderingServer.frame_post_draw
+		for i in SETTLE_DRAWS:
+			RenderingServer.force_draw(false)
 		var path := "%s/%s.png" % [out_dir, label]
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)
