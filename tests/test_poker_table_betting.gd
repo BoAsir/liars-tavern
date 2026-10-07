@@ -136,6 +136,33 @@ func test_all_in_for_less_than_the_call_counts_as_a_call():
 	assert_eq(H.find(events, "bets_collected")["refund"], {"pid": 2, "amount": 200}, "没人跟的 200 退回")
 
 
+func test_uncalled_part_goes_back_down_to_the_second_highest_bet_even_if_that_player_folded():
+	# 规格 §2.4 的例子:X 下注 300、Y 全下跟 100、Z 加注到 900、X 弃牌 → Z 退回 600(不是 800)
+	var t := make_table([1, 2, 3])
+	start_with_button(t, 3, {"stacks": {2: 120}})   # 小盲 1、大盲 2;翻牌后 1 先说话
+	check_to_flop(t)
+	play_as(t, 1, R.RAISE, 300)
+	var call := _action(play_as(t, 2, R.CALL))
+	assert_eq([call["amount"], call["all_in"]], [100, true], "筹码不够跟:全下跟注")
+	play_as(t, 3, R.RAISE, 900)
+	var events := play_as(t, 1, R.FOLD)
+	assert_eq(H.find(events, "bets_collected")["refund"], {"pid": 3, "amount": 600})
+	assert_eq(H.find(events, "reveal")["reason"], "allin", "Z 不欠跟注、Y 已全下:直接发完")
+
+
+func test_first_actor_after_the_flop_skips_all_in_and_folded_players():
+	var t := make_table([1, 2, 3, 4])
+	start_with_button(t, 4, {"stacks": {1: 100}})   # 小盲 1、大盲 2,3 先说话
+	play_as(t, 3, R.CALL)
+	play_as(t, 4, R.CALL)
+	play_as(t, 1, R.ALLIN)
+	play_as(t, 2, R.FOLD)
+	play_as(t, 3, R.CALL)
+	var events := play_as(t, 4, R.CALL)
+	assert_eq(H.find(events, "street")["street"], R.FLOP)
+	assert_eq(H.find(events, "turn")["pid"], 3, "按钮之后的 1 已全下、2 已弃牌")
+
+
 func test_big_blind_has_the_option_to_raise_when_everyone_limps():
 	var t := make_table([1, 2, 3])
 	start_with_button(t, 1)
