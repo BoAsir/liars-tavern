@@ -1,7 +1,7 @@
 class_name UpdateClient
 extends Node
 # 从一个更新源(房主的局域网文件服务,或互联网上的静态目录)取清单、验签名、下载 pck。
-# 更新源的布局:<base>manifest.json、<base>manifest.sig、<base>game.pck。都是 await 调用。
+# 更新源的布局:<base>manifest.json、<base>manifest.sig、<base><清单里的 pck_file>。都是 await 调用。
 
 
 signal progress(ratio: float)
@@ -35,7 +35,7 @@ func download(base_url: String, manifest: Dictionary, dest_path: String) -> Stri
 	DirAccess.make_dir_recursive_absolute(dest_path.get_base_dir())
 	var http := _make_request(manifest["pck_size"], DOWNLOAD_TIMEOUT)
 	http.download_file = dest_path
-	var err := http.request(base_url + "game.pck")
+	var err := http.request(base_url + manifest["pck_file"])
 	if err != OK:
 		http.queue_free()
 		return "无法发起下载(%s)" % error_string(err)

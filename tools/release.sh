@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 发布:导出 macOS / Windows 安装包并给各自的游戏内容包(pck)签名。
 # - 安装包里附上签名清单:开房时房主就能把自己这一版转发给局域网里版本旧的玩家;
-# - build/update/<平台>/ 下备好 manifest.json、manifest.sig、game.pck,原样放到静态网址上
+# - build/update/<平台>/ 下备好 manifest.json、manifest.sig、game-b<build>.pck,用 tools/publish_update.sh 推到 GitHub
 #   (BuildInfo.FEED_URL 指向那里)就是互联网更新源。
 # 发布前先把 build.json 的 build 加一;project.godot 改过时还要把 base_build 设成同一个数(必须重装)。
 # 用法:tools/release.sh [更新说明]
@@ -32,18 +32,20 @@ fi
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/liars_release.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
+PCK_FILE="game-b$BUILD.pck"   # 按 build 命名:网上的缓存不会把新清单和旧 pck 配在一起
+
 sign() {  # sign <pck> <平台> <输出目录>
-	# 先删掉上次发布留下的清单:签名失败时不能让旧清单冒充这一版
+	# 先清空上次发布留下的文件:签名失败时不能让旧清单冒充这一版
 	mkdir -p "$3"
-	rm -f "$3/manifest.json" "$3/manifest.sig" "$3/game.pck"
-	if ! "$GODOT" --headless --path "$ROOT" -s tools/sign_update.gd -- \
-			--pck="$1" --platform="$2" --out="$3" --notes="$NOTES" --key="$KEY" >"$STAGE/sign_$2.log" 2>&1; then
+	rm -f "$3"/manifest.json "$3"/manifest.sig "$3"/*.pck
+	if ! "$GODOT" --headless --path "$ROOT" -s tools/sign_update.gd -- --pck="$1" --platform="$2" --out="$3" \
+			--pck-file="$PCK_FILE" --notes="$NOTES" --key="$KEY" >"$STAGE/sign_$2.log" 2>&1; then
 		cat "$STAGE/sign_$2.log"; echo "签名失败:$2"; exit 1
 	fi
 	grep -E "已签名" "$STAGE/sign_$2.log" || true
 	local want; want=$(shasum -a 256 "$1" | cut -d' ' -f1)
 	grep -q "\"pck_sha256\": \"$want\"" "$3/manifest.json" || { echo "清单里的校验值和 pck 对不上:$2"; exit 1; }
-	cp "$1" "$3/game.pck"
+	cp "$1" "$3/$PCK_FILE"
 }
 
 # —— macOS:pck 在 .app/Contents/Resources 里;附上清单后整包重新做 ad-hoc 签名 ——
@@ -83,4 +85,4 @@ echo "$BUILD" > "$STAMPS/last_build"
 echo "$SETTINGS_SHA" > "$STAMPS/project.godot.sha256"
 echo "发布完成 build $BUILD:"
 ls -la "$OUT/macos/$NAME-macOS.zip" "$OUT/windows/$NAME-Windows.zip"
-echo "互联网更新文件:$OUT/update/{macos,windows}/"
+echo "互联网更新文件:$OUT/update/{macos,windows}/(用 tools/publish_update.sh 推到 GitHub)"

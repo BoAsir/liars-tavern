@@ -74,3 +74,10 @@ func test_applicability():
 	assert_eq(UpdateManifest.blocker(m, here.merged({"installer_build": 2}, true)), UpdateManifest.NEEDS_INSTALLER)
 	assert_eq(UpdateManifest.blocker(m, here.merged({"engine": "4.8.0.stable"}, true)), UpdateManifest.NEEDS_INSTALLER)
 	assert_eq(UpdateManifest.blocker(m, here.merged({"platform": "windows"}, true)), UpdateManifest.OTHER_PLATFORM)
+
+
+func test_pck_file_name_defaults_and_is_restricted():
+	assert_eq(UpdateManifest.parse(_text())["pck_file"], "game.pck", "旧清单没有这个字段")
+	assert_eq(UpdateManifest.parse(_text({"pck_file": "game-b12.pck"}))["pck_file"], "game-b12.pck")
+	for bad in ["../game.pck", "game-b12.pck/../../x", "evil.pck", "game-bx.pck", "game-b1.exe", 5]:
+		assert_true(UpdateManifest.parse(_text({"pck_file": bad})).is_empty(), str(bad))

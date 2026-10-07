@@ -12,6 +12,7 @@ extends Node
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
 #   --update-from=IP:端口 从这个房主下载更新并装好,装好后打印 UPDATE_READY 退出(失败退出码 1)
+#   --update-url=网址    同上,但从任意更新源(如 BuildInfo.FEED_URL + 平台 + "/")
 
 
 const BOT_THINK := Vector2(0.6, 1.6)
@@ -54,8 +55,8 @@ func _ready() -> void:
 	print("[debug] flags: ", opts)
 	print("[debug] build=%d active_update=%d installer=%d" % [BuildInfo.build(), UpdateBoot.active_build,
 		UpdateBoot.installer["build"]])
-	if opts.has("update-from"):
-		_update_from(opts["update-from"])
+	if opts.has("update-from") or opts.has("update-url"):
+		_update_from(opts.get("update-from", ""), opts.get("update-url", ""))
 		return
 	if opts.has("fast"):
 		Engine.time_scale = float(opts["fast"]) if opts["fast"] != "true" else 3.0
@@ -111,9 +112,12 @@ func _process(delta: float) -> void:
 	_bot_act(screen)
 
 
-func _update_from(address: String) -> void:
-	var addr := Protocol.parse_address(address)
+func _update_from(address: String, url: String) -> void:
 	Updater.changed.connect(_on_update_changed)
+	if url != "":
+		Updater.check(url, "网络")
+		return
+	var addr := Protocol.parse_address(address)
 	Updater.check(Updater.lan_source(addr["ip"], addr["port"]), "房主")
 
 

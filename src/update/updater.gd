@@ -147,10 +147,13 @@ func start_serving(port: int) -> void:
 	if bundle.is_empty():
 		return   # 源码运行或缺少发布清单:没有可转发的签名包
 	var root := "/%s/" % bundle["manifest"]["platform"]
+	var pck := FileAccess.get_file_as_bytes(bundle["pck_path"])
+	# pck 同时挂在清单里的文件名和 game.pck 下:不认 pck_file 的旧客户端也能取到(同一份数据,不复制)
 	var files := {
 		root + "manifest.json": bundle["text"].to_utf8_buffer(),
 		root + "manifest.sig": bundle["sig"],
-		root + "game.pck": FileAccess.get_file_as_bytes(bundle["pck_path"]),
+		root + UpdateManifest.DEFAULT_PCK_FILE: pck,
+		root + bundle["manifest"]["pck_file"]: pck,
 	}
 	var err := _server.start(port, files)
 	if err != OK:

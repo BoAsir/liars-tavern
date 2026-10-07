@@ -9,6 +9,9 @@ const MAX_TEXT := 40
 const MAX_NOTES := 200
 const MAX_MANIFEST_BYTES := 16 * 1024
 const PLATFORMS := ["macos", "windows", "linux"]
+# 更新源里 pck 的文件名:默认 game.pck;发布时按 build 命名(game-b<build>.pck),
+# 网上的缓存不会把新清单和旧 pck 配在一起
+const DEFAULT_PCK_FILE := "game.pck"
 
 # blocker() 的结果:空串表示可以更新
 const NOT_NEWER := "not_newer"
@@ -44,7 +47,21 @@ static func parse(text: String) -> Dictionary:
 		return {}
 	var notes = data.get("notes", "")
 	out["notes"] = Protocol.sanitize_text(notes, MAX_NOTES) if notes is String else ""
+	var pck_file = data.get("pck_file", DEFAULT_PCK_FILE)
+	if not is_pck_file_name(pck_file):
+		return {}
+	out["pck_file"] = pck_file
 	return out
+
+
+static func is_pck_file_name(value) -> bool:
+	# 只能是 game.pck 或 game-b<数字>.pck:文件名会拼进下载地址和房主的文件服务路径
+	if not value is String:
+		return false
+	if value == DEFAULT_PCK_FILE:
+		return true
+	return value.begins_with("game-b") and value.ends_with(".pck") \
+		and value.trim_prefix("game-b").trim_suffix(".pck").is_valid_int()
 
 
 static func _is_sha256(text: String) -> bool:

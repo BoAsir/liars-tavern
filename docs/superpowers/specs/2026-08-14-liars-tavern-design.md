@@ -170,6 +170,8 @@ LiarsTavern/
   "更新"按钮(只对同平台,报文带 `plat`),协议不兼容的房间显示"更新后加入"或"版本不同";直连被拒"版本不匹配"时也会去问房主。
   文件服务限制总连接数、单地址连接数、请求头长度、空闲与总时长,客户端不跟随重定向。
 - **互联网来源**:`BuildInfo.FEED_URL` 指向一个静态目录(布局同上,按平台分子目录),启动时静默检查一次;留空则只走局域网。
+  现在是 GitHub 仓库的 `updates` 分支,经 `raw.githubusercontent.com` 读取(不跳转);`tools/publish_update.sh` 每次强推一个提交。
+  pck 按 build 命名(清单 `pck_file`:`game-b<build>.pck`),CDN 缓存不会把新清单和旧 pck 配在一起;房主同时以 `game.pck` 提供给旧客户端。
 - **发布**:`tools/release.sh [更新说明]` 导出两个平台的安装包、签名、把清单附进安装包(macOS 放进 `.app/Contents/Resources`
   并重新 ad-hoc 签名;Windows 的 exe 与 pck 分开放在同一文件夹),并在 `build/update/<平台>/` 备好可直接上传的更新文件。
 - 跨平台不能互相更新(各平台导出的 pck 不通用);引擎升级或 `base_build` 变了只能重装完整安装包,界面会说明原因。

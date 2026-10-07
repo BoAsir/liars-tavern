@@ -7,16 +7,28 @@
 - 全部美术与音效程序化生成,无外部资源
 - 局域网联机:房主开房,其他人在房间列表里自动看到;也可以输入 IP 直连
 
-## 运行
+## 下载
+
+到 [Releases](https://github.com/Murphycx94/liars-tavern/releases) 下载最新安装包:
+
+- **macOS**(Intel 与 Apple 芯片通用):`骗子酒馆-macOS.zip`,解压得到 `骗子酒馆.app`。
+  安装包没有经过苹果公证,第一次打开时右键点它选「打开」;开房时系统询问「本地网络」权限请选允许。
+- **Windows**(64 位):`骗子酒馆-Windows.zip`,解压后运行文件夹里的 `骗子酒馆.exe`(exe 与同目录的 `.pck` 要放在一起)。
+
+## 在线更新
+
+装好一次之后,游戏会自己更新,不用再下载安装包:
+
+- **网上**:启动时自动检查本仓库 `updates` 分支上的新版本,有的话主菜单顶部出现提示,点「更新」再「重启」即可。
+- **局域网**:房主是新版本时,房间列表里他的房间旁会有「更新」按钮,直接从房主那里下载(没网也能更新)。
+- 每次更新只下载几百 KB 的游戏内容包;更新包都有发布者的签名,游戏只接受签名正确的包。
+- 更新后的版本连续两次没能正常启动,会自动退回安装包自带的版本;也可以用启动参数 `-- --no-update` 手动退回。
+- 引擎升级或改了项目设置的版本没法在线更新,提示条会说明需要下载完整安装包。
+
+## 从源码运行
 
 1. 安装 [Godot 4.7](https://godotengine.org/)(macOS:`brew install --cask godot`)
 2. 在仓库根目录运行:`godot --path .`(或用编辑器打开项目后按 F5)
-3. 导出桌面包:仓库里没有提交导出预设(`export_presets.cfg`),第一次导出前在本机添加:
-   - 编辑器菜单「编辑器 → 管理导出模板」,下载与引擎版本一致的导出模板;
-   - 「项目 → 导出 → 添加…」,按需添加 Windows Desktop / macOS 预设,填好导出路径后导出;
-   - macOS 预设还要在 `application/additional_plist_content`(Application → Additional Plist Content)里填入
-     `<key>NSLocalNetworkUsageDescription</key><string>用于发现并加入局域网房间</string>`:
-     Godot 没有现成的「本地网络」隐私选项,不填的话系统询问本地网络权限时没有用途说明(见下方网络说明)。
 
 ## 联机
 
@@ -48,6 +60,8 @@
 | 选牌(1–3 张) | 点击手牌 | `1`–`5` |
 | 出牌 | 「出牌」按钮 | `Enter` |
 | 质疑上家 | 「质疑!」按钮 | `C` / `空格` |
+| 转头张望 | 移动鼠标 | — |
+| 探头 / 缩回(脖子自动伸缩) | — | `W` `A` `S` `D` |
 | 翻开说明书 | 「规则」/「游戏规则」按钮 | `F1` |
 | 离开 / 合上说明书 | — | `Esc` |
 
@@ -85,7 +99,18 @@ $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu --showcas
 ```
 
 调试命令行开关(写在 `--` 之后):`--name=甲`、`--autohost[=人数]`、`--port=端口`、`--room=房名`、
-`--autojoin=IP[:端口]`、`--discover[=房名]`、`--bot`、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`。
+`--autojoin=IP[:端口]`、`--discover[=房名]`、`--bot`、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`、
+`--update-from=IP:端口`、`--update-url=网址`。
+
+### 发布新版本
+
+需要 [导出模板](https://godotengine.org/download)(与引擎版本一致)和更新签名私钥
+(`~/.config/liarstavern/update_signing_key.pem`,不在仓库里;第一次用 `tools/make_update_key.gd` 生成,务必备份)。
+
+1. 把 `build.json` 的 `build` 加一、改好 `version`;改过 `project.godot` 时把 `base_build` 也设成同一个数(必须重装)。
+2. `tools/release.sh "这次更新了什么"`:导出两个平台的安装包到 `build/`,并签好更新包。
+3. `tools/publish_update.sh`:把更新包推到 `updates` 分支,已安装的游戏下次启动就能更新。
+4. 把 `build/macos`、`build/windows` 里的安装包传到 GitHub Releases,给新玩家下载。
 
 目录结构:
 
@@ -94,6 +119,7 @@ src/core/    纯规则逻辑(状态机、牌堆、左轮、判定)——全部�
 src/net/     协议、视图、等待厅名单、房间发现、ENet 房主权威网络层
 src/world/   3D 酒馆:场景、材质着色器、卡牌、左轮、酒客、相机、特效
 src/ui/      主题、音效、主菜单、等待厅、说明书、牌桌(控制器/演出导演/HUD/结算)
-tools/       联机探针、冒烟脚本、截图工具
+src/update/  在线更新:启动引导、签名清单、下载、局域网文件服务
+tools/       联机探针、冒烟脚本、截图工具、发布与签名脚本
 tests/       GUT 单元测试
 ```
