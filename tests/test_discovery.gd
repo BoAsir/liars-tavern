@@ -63,14 +63,19 @@ func test_stop_from_a_stale_owner_is_ignored():
 	var old_menu: Node = autofree(Node.new())
 	var new_menu: Node = autofree(Node.new())
 	var listening: bool = discovery.start_listening(new_menu)
+	if not listening:
+		pending("发现端口 47800-47803 全被占用(同机多开),本测试无法验证")
+		return
 	discovery.stop_listening(old_menu)
-	assert_eq(discovery.is_listening(), listening, "旧菜单迟到的 stop 不能关掉新菜单的监听")
+	assert_true(discovery.is_listening(), "旧菜单迟到的 stop 不能关掉新菜单的监听")
 	discovery.stop_listening(new_menu)
 	assert_false(discovery.is_listening())
 
 
 func test_stop_without_owner_always_stops():
 	var menu: Node = autofree(Node.new())
-	discovery.start_listening(menu)
+	if not discovery.start_listening(menu):
+		pending("发现端口 47800-47803 全被占用(同机多开),本测试无法验证")
+		return
 	discovery.stop_listening()
 	assert_false(discovery.is_listening())

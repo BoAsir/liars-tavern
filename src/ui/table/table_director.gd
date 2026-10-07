@@ -8,6 +8,8 @@ signal event_started(ev: Dictionary)   # 每段演出开始时发出(调试截�
 
 const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
 const BUBBLE_ABOVE_PLATE := -66.0  # 他人气泡挂在铭牌正上方(屏幕像素),不压住名字
+const SEAT_RETURN := 0.45          # 新一局前镜头回座的时长(强制验证为真话时没有开枪段)
+const SPECTATOR_SEAT_FACTOR := 1.6 # 观战者回俯视机位要走更远,时长按此倍数
 const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到越肩机位的时长(须在房主给的开场预算之内)
 
 var screen: Node        # TableScreen
@@ -66,7 +68,7 @@ func _round_started(ev: Dictionary) -> void:
 	screen.begin_round(ev["round"])
 	if not _at_seat:
 		# 强制验证为真话时没有开枪段,镜头还停在翻牌机位
-		await back_to_seat(0.45)
+		await back_to_seat(SEAT_RETURN)
 	hud.set_target(ev["target"], ev["round"])
 	await cards.sweep()
 	hud.announce("第 %d 局" % ev["round"], UiTheme.BRASS_BRIGHT, "目标牌 ·「%s」" % Card.NAMES[ev["target"]], 0.9)
@@ -263,7 +265,7 @@ func _match_over(ev: Dictionary) -> void:
 func back_to_seat(duration: float) -> void:
 	_at_seat = true
 	if spectator:
-		await rig.move_to(world.overview_view(), duration * 1.6).finished
+		await rig.move_to(world.overview_view(), duration * SPECTATOR_SEAT_FACTOR).finished
 		hud.set_away_from_seat(false)
 		return
 	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, duration)
@@ -275,6 +277,8 @@ func back_to_seat(duration: float) -> void:
 
 func _leave_seat() -> void:
 	_at_seat = false
+	# 收起自己的气泡:按钮行一藏,气泡会掉到翻牌行正上方,盖住刚翻开的牌
+	hud.clear_my_bubble()
 	hud.set_away_from_seat(true)
 	rig.parallax_enabled = false
 	rig.set_fill(0.0, 0.5)

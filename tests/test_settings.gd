@@ -2,7 +2,8 @@ extends GutTest
 # Settings:玩家本地设置的读写(用临时文件,不碰真正的 user://settings.cfg)。
 
 
-const PATH := "user://test_settings_gut.cfg"
+# 每个进程一个文件、放在系统临时目录:并行跑两份测试不会互相覆盖,也不会落在玩家的存档目录里
+var PATH := OS.get_temp_dir().path_join("liars_tavern_settings_gut_%d.cfg" % OS.get_process_id())
 
 
 func before_each():

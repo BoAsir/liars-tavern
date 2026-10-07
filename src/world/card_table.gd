@@ -8,6 +8,10 @@ signal sfx(name: String)
 
 const DEAL_STAGGER := 0.055
 const DEAL_FLIGHT := 0.32
+const DEAL_TAIL := 0.05            # 最后一张落定后再等的余量
+const SWEEP_JITTER := 0.12         # 收牌时每张随机多飞的上限
+const TARGET_FLIP_HALF := 0.16     # 目标牌翻面:压扁 / 弹回各一段
+const TARGET_GLOW := 0.9           # 目标牌揭示后的辉光淡出(与回弹并行,决定整段时长)
 const PLAY_FLIGHT := 0.42
 const SWEEP_FLIGHT := 0.4
 const LIFT_HOVER := 0.012
@@ -68,11 +72,11 @@ func set_target(kind: int, animate := true) -> void:
 		return
 	sfx.emit("flip")
 	var tween := create_tween()
-	tween.tween_property(_target_card, "scale", Vector3(0.05, 1.0, 1.0), 0.16).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_target_card, "scale", Vector3(0.05, 1.0, 1.0), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
 	tween.tween_callback(_target_card.set_both_faces.bind(kind))
-	tween.tween_property(_target_card, "scale", Vector3(1.25, 1.0, 1.25), 0.16).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_target_card, "scale", Vector3(1.25, 1.0, 1.25), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(_target_card, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_method(_target_card.set_glow.bind(Color(1.0, 0.8, 0.35)), 1.6, 0.0, 0.9)
+	tween.parallel().tween_method(_target_card.set_glow.bind(Color(1.0, 0.8, 0.35)), 1.6, 0.0, TARGET_GLOW)
 	await tween.finished
 
 
@@ -154,7 +158,7 @@ func deal(order: Array, counts: Dictionary, my_hand: Array) -> void:
 			if r < count:
 				_deal_one(pid, r, count, my_hand, delay)
 				delay += DEAL_STAGGER
-	await get_tree().create_timer(delay + DEAL_FLIGHT + 0.05).timeout
+	await get_tree().create_timer(delay + DEAL_FLIGHT + DEAL_TAIL).timeout
 	_layout_mine(0.15)
 	for pid in held:
 		_layout_held(pid, 0.15)
@@ -298,7 +302,7 @@ func sweep() -> void:
 			continue
 		card.reparent(self, true)
 		tween = card.fly_to(Transform3D(Basis(Vector3.BACK, PI).scaled(Vector3.ONE * 0.2), stand_position()),
-			SWEEP_FLIGHT + randf() * 0.12, 0.1, 1.2)
+			SWEEP_FLIGHT + randf() * SWEEP_JITTER, 0.1, 1.2)
 		tween.tween_callback(card.queue_free)
 	if tween != null:
 		await tween.finished

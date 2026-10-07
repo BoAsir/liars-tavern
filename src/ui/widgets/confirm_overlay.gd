@@ -41,13 +41,17 @@ func _ready() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
 	box.add_child(row)
+	var buttons: Array[Button] = []
 	if _cancel_text != "":
 		var cancel := UiTheme.button(_cancel_text)
 		cancel.pressed.connect(_close.bind(false))
 		row.add_child(cancel)
+		buttons.append(cancel)
 	var ok := UiTheme.button(_confirm_text, true)
 	ok.pressed.connect(_close.bind(true))
 	row.add_child(ok)
+	buttons.append(ok)
+	_trap_focus(buttons)
 	_take_focus.call_deferred(ok)
 	modulate.a = 0.0
 	create_tween().tween_property(self, "modulate:a", 1.0, 0.18)
@@ -66,6 +70,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		_close(false)
 	elif event is InputEventKey:
 		get_viewport().set_input_as_handled()
+
+
+func _trap_focus(buttons: Array[Button]) -> void:
+	# 确认框和背后的屏幕共用一个根控件,Tab/方向键默认会把焦点挪到屏幕的按钮上去;
+	# 把每个按钮的焦点邻居都指回框内,键盘就出不去了
+	for i in buttons.size():
+		var button := buttons[i]
+		var next := buttons[(i + 1) % buttons.size()]
+		var prev := buttons[(i - 1 + buttons.size()) % buttons.size()]
+		button.focus_next = button.get_path_to(next)
+		button.focus_previous = button.get_path_to(prev)
+		button.focus_neighbor_right = button.get_path_to(next)
+		button.focus_neighbor_left = button.get_path_to(prev)
+		button.focus_neighbor_top = button.get_path_to(button)
+		button.focus_neighbor_bottom = button.get_path_to(button)
 
 
 func _take_focus(button: Button) -> void:

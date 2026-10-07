@@ -56,3 +56,27 @@ func test_speech_bubble_pops_from_its_tail_after_layout():
 	assert_gt(bubble.size.x, 40.0)
 	assert_eq(bubble.pivot_offset, Vector2(bubble.size.x / 2.0, bubble.size.y))
 	assert_eq(bubble.mouse_filter, Control.MOUSE_FILTER_IGNORE)
+
+
+func test_eliminated_player_keeps_action_row_hidden_after_camera_returns():
+	# 出局后镜头每次离开/回座都会切 set_away_from_seat,按钮行必须一直藏着
+	hud.set_actions_visible(false)
+	hud.set_away_from_seat(true)
+	hud.set_away_from_seat(false)
+	assert_false(hud._action_row.visible)
+	assert_false(hud._hint.visible)
+
+
+func test_alive_player_action_row_hides_while_camera_is_away_and_returns():
+	hud.set_actions_visible(true)
+	hud.set_away_from_seat(true)
+	assert_false(hud._action_row.visible, "特写时收起按钮行,不挡角色")
+	hud.set_away_from_seat(false)
+	assert_true(hud._action_row.visible)
+	assert_true(hud._hint.visible)
+
+
+func test_clear_my_bubble_removes_pending_bubbles():
+	hud.my_bubble("骗子!")
+	hud.clear_my_bubble()
+	assert_eq(hud._bubble_anchor.get_child_count(), 0)

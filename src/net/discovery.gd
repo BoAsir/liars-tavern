@@ -63,16 +63,19 @@ func _broadcast_once() -> void:
 	if _sender == null or not _announce.is_valid():
 		return
 	var payload := RoomList.encode(_announce.call())
+	var addresses := Array(IP.get_local_addresses())
+	var health_targets := Lan.health_targets(addresses)
 	var lan_sent := 0
 	var last_error := OK
-	for target in Lan.broadcast_targets(Array(IP.get_local_addresses())):
+	for target in Lan.broadcast_targets(addresses):
 		for port in Protocol.discovery_ports():
 			var err := _send(target, port, payload)
 			if err != OK:
 				last_error = err
-			elif target != Lan.LOOPBACK:
+			elif health_targets.has(target):
 				lan_sent += 1
-	# 定向广播地址按 /24 推测,发不出去很常见,不逐个告警;只看这一轮有没有发到局域网
+	# 推测的定向广播地址发不出去很常见,不逐个告警;健康度只看必定在本链路上的目标是否发成功
+	# (经网关转发的宽前缀推测地址即使"发送成功",局域网也未必收到,不能算数)
 	_record_tick(lan_sent > 0, last_error)
 
 

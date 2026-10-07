@@ -328,11 +328,15 @@ func _set_announce_y(y_offset: float) -> void:
 	_announce_box.offset_bottom = y_offset
 
 
-func my_bubble(text: String, color := UiTheme.INK) -> void:
-	# 自己的声称 /「骗子!」:越肩镜头下自己头顶在画面外,改在出牌按钮行上方居中弹出;新的一句顶掉旧的
+func clear_my_bubble() -> void:
 	for old in _bubble_anchor.get_children():
 		_bubble_anchor.remove_child(old)
 		old.queue_free()
+
+
+func my_bubble(text: String, color := UiTheme.INK) -> void:
+	# 自己的声称 /「骗子!」:越肩镜头下自己头顶在画面外,改在出牌按钮行上方居中弹出;新的一句顶掉旧的
+	clear_my_bubble()
 	var bubble := SpeechBubble.new(text, color)
 	_bubble_anchor.add_child(bubble)
 	# 底边中点贴住锚点底边(留出小三角),随文字宽度向两侧、向上长

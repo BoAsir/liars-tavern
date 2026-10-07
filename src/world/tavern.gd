@@ -218,7 +218,8 @@ func _build_lamp() -> void:
 
 func _build_candles() -> void:
 	var top_y := SeatLayout.TABLE_TOP
-	for spec in [[PI * 0.76, 3, 1.0], [PI * 1.24, 2, 7.0]]:
+	# 角度避开各座位的左轮摆放位置(3 人局 240° 座位的枪原本会穿过第二个烛台)
+	for spec in [[PI * 0.76, 3, 1.0], [PI * 1.31, 2, 7.0]]:
 		var base := SeatLayout.direction(spec[0]) * 0.7 + Vector3(0, top_y, 0)
 		var holder := MeshKit.pivot(self, base, "Candles")
 		MeshKit.add(holder, MeshKit.cylinder(0.07, 0.08, 0.012, 24), WorldMaterials.brass(), Vector3(0, 0.006, 0))

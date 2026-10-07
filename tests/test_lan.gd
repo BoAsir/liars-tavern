@@ -64,10 +64,14 @@ func test_broadcast_targets_without_interfaces_still_has_global_and_loopback():
 	assert_eq(Lan.broadcast_targets([]), ["255.255.255.255", "127.0.0.1"])
 
 
-func test_primary_targets_are_global_and_loopback_only():
-	# 其余定向广播都是推测目标:发送失败属正常,发现模块不必告警
-	assert_eq(Lan.primary_broadcast_targets(), ["255.255.255.255", "127.0.0.1"])
-	for target in Lan.primary_broadcast_targets():
+func test_health_targets_are_global_broadcast_plus_narrowest_guess_per_nic():
+	# 只有这些一定不经路由器:宽前缀的推测地址会被当单播交给网关,发成功不代表局域网收到
+	assert_eq(Lan.health_targets([]), ["255.255.255.255"])
+	assert_eq(Lan.health_targets(["192.168.1.20"]), ["255.255.255.255", "192.168.1.255"])
+	assert_eq(Lan.health_targets(["169.254.7.9"]), ["255.255.255.255", "169.254.255.255"])
+	assert_does_not_have(Lan.health_targets(["192.168.1.20"]), "127.0.0.1")
+	assert_does_not_have(Lan.health_targets(["192.168.1.20"]), "192.168.255.255")
+	for target in Lan.health_targets(["10.20.0.42"]):
 		assert_has(Lan.broadcast_targets(["10.20.0.42"]), target)
 
 

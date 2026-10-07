@@ -186,3 +186,5 @@ func _reset_view() -> void:
 	# 旧屏幕的演出可能停在半路(举枪紧张、中弹染红、镜头变焦):共享的后处理与镜头统一回到平静
 	post_fx.reset(VIEW_RESET_TIME)
 	tavern.camera_rig.set_fov(_default_fov, VIEW_RESET_TIME)
+	# 胜者特写留下的补光也要灭掉;进牌桌时开场运镜会马上重新点亮
+	tavern.camera_rig.set_fill(0.0, VIEW_RESET_TIME)

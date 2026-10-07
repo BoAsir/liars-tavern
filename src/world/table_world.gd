@@ -12,6 +12,9 @@ const THIRD_PERSON_HEIGHT := 1.92
 const THIRD_PERSON_SIDE := 0.55
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
+# 翻牌机位朝出牌者偏转的权重(0 = 只看翻牌行,1 = 只看出牌者头部)
+const REVEAL_LIAR_WEIGHT_FRONT := 0.35
+const REVEAL_LIAR_WEIGHT_SIDE := 0.2
 
 var tavern: Tavern
 var cards: CardTable
@@ -174,8 +177,9 @@ func head_position(pid: int) -> Vector3:
 
 
 func overview_view() -> Transform3D:
-	# 观战机位:从自己座位后上方俯看整桌,越过自己(倒下的)角色的头顶
-	var pos := Vector3(0, 2.7, 2.4)
+	# 观战机位:从自己座位后上方俯看整桌,越过自己(倒下的)角色的头顶;
+	# 高度压在吊灯罩之下,否则对面玩家的脸会被灯罩挡住
+	var pos := Vector3(0, 2.3, 2.7)
 	return Transform3D(Basis.looking_at(Vector3(0, SeatLayout.TABLE_TOP, -0.25) - pos, Vector3.UP), pos)
 
 
@@ -186,13 +190,14 @@ func lobby_view() -> Transform3D:
 
 
 func reveal_view(liar_pid: int) -> Transform3D:
-	# 俯看本机座位前的翻牌行,同时把出牌者(被翻牌的人)的脸收进画面:对面座位少转一点,侧座多转一点
+	# 俯看本机座位前的翻牌行,同时尽量把出牌者(被翻牌的人)的脸收进画面。
+	# 翻牌行必须完整在画面里:侧座时镜头只能少转一点,否则牌会掉出画面下缘
 	var pos := Vector3(0, 1.42, 1.05)
 	var target := Vector3(0, 0.86, 0.0)
 	if liar_pid != my_pid and seat_angles.has(liar_pid):
 		var sideways := absf(sin(float(seat_angles[liar_pid])))
 		var row := Vector3(0, SeatLayout.TABLE_TOP, CardTable.REVEAL_Z)
-		target = row.lerp(head_position(liar_pid), lerpf(0.35, 0.5, sideways))
+		target = row.lerp(head_position(liar_pid), lerpf(REVEAL_LIAR_WEIGHT_FRONT, REVEAL_LIAR_WEIGHT_SIDE, sideways))
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
 

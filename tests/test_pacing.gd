@@ -1,11 +1,12 @@
 extends GutTest
 
-# 导演 _round_started 各段里的固定时长(与 table_director.gd / card_table.gd 中的字面量一致)
-const SEAT_RETURN := 0.45                 # 强制验证没有开枪段时先 back_to_seat(0.45)
-const SPECTATOR_SEAT_FACTOR := 1.6        # 观战者回俯视机位的时长倍数
-const SWEEP_JITTER := 0.12                # sweep 每张牌随机多飞的上限
-const TARGET_FLIP := 0.16 + 0.16 + 0.9    # set_target:翻面两段 + 与回弹并行的 0.9 秒辉光
-const DEAL_TAIL := 0.05
+# 导演 _round_started 各段的时长直接读代码里的常量:导演或牌桌改了节奏,这里的预算检查会跟着变
+const TableDirectorScript := preload("res://src/ui/table/table_director.gd")
+const SEAT_RETURN := TableDirectorScript.SEAT_RETURN
+const SPECTATOR_SEAT_FACTOR := TableDirectorScript.SPECTATOR_SEAT_FACTOR
+const SWEEP_JITTER := CardTable.SWEEP_JITTER
+const TARGET_FLIP := CardTable.TARGET_FLIP_HALF * 2 + CardTable.TARGET_GLOW
+const DEAL_TAIL := CardTable.DEAL_TAIL
 const FRAME_SLACK := 4.0 / 30.0           # 4 个 await 各可能晚一帧(按 30 fps 估)
 
 const CHALLENGE_BATCH := [

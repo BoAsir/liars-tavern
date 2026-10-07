@@ -46,7 +46,7 @@ func _ready() -> void:
 func _focus_default() -> void:
 	# 默认焦点:还没有名号就先填名号,有了就落在「开设房间」,纯键盘也能直接操作。
 	# 延迟执行时可能已被切走(如调试开关直接建房),不在树内就不抢
-	if not is_inside_tree():
+	if not is_inside_tree() or app.is_rules_open():
 		return
 	if _name_edit.text == "":
 		_name_edit.grab_focus()

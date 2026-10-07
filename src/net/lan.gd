@@ -88,9 +88,16 @@ static func broadcast_targets(addresses: Array) -> Array:
 	return targets
 
 
-static func primary_broadcast_targets() -> Array:
-	# 必定有效的目标;broadcast_targets 里其余的都是推测,发送失败属正常
-	return [GLOBAL_BROADCAST, LOOPBACK]
+static func health_targets(addresses: Array) -> Array:
+	# 用来判断"广播是否真的到了局域网"的目标:只算路由器绝不会转发的那些。
+	# 全局广播与每块网卡最窄的子网推测(/24,链路本地 /16)肯定在本链路上;
+	# 更宽的推测地址可能落在子网之外,系统会当普通单播交给网关,发送成功不代表局域网收到
+	var out := [GLOBAL_BROADCAST]
+	for ip in addresses:
+		var guesses := directed_broadcasts(ip)
+		if not guesses.is_empty() and not out.has(guesses[0]):
+			out.append(guesses[0])
+	return out
 
 
 static func directed_broadcasts(ip: String) -> Array:

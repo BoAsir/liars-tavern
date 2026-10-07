@@ -40,7 +40,10 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		return {}
 	if not _counts_valid(out["players"], out["max"]):
 		return {}
-	out["open"] = parsed.get("open", true) == true
+	var open = parsed.get("open", true)
+	if not open is bool:
+		return {}  # 和其他字段一样按类型丢弃:非 bool 与 bool 比较在 GDScript 里是运行时错误
+	out["open"] = open
 	return out
 
 

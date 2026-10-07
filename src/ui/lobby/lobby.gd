@@ -43,9 +43,11 @@ func _ready() -> void:
 
 func _focus_default() -> void:
 	# 默认焦点落在主操作上:房主「开始游戏」(凑齐前是灰的),客人「准备」。
-	# 延迟执行时可能已被切走(同一帧里开局),不在树内就不抢
-	if is_inside_tree():
-		(_start_button if _start_button != null else _ready_button).grab_focus()
+	# 延迟执行时可能已被切走(同一帧里开局),不在树内就不抢;
+	# 说明书开着时也不抢:它靠握着焦点挡住回车/空格,抢走后按键会在它背后切换准备
+	if not is_inside_tree() or app.is_rules_open():
+		return
+	(_start_button if _start_button != null else _ready_button).grab_focus()
 
 
 func _exit_tree() -> void:
