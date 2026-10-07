@@ -42,6 +42,10 @@ func _init() -> void:
 	add_child(letter)
 
 
+func is_moving() -> bool:
+	return _tween != null and _tween.is_valid() and _tween.is_running()
+
+
 func move_to(target: Vector3, duration: float) -> Tween:
 	# 绕桌心按角度与半径插值滑到目标;duration ≤ 0 时直接落位(返回 null)
 	if _tween != null and _tween.is_valid():
