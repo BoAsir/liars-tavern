@@ -2,7 +2,8 @@ class_name TurnClock
 extends RefCounted
 # 回合倒计时(客户端显示用)。房主在公共状态里附带回合计时的剩余秒数(含演出补时),
 # 每次收到就以它为准;两次之间按帧时长扣减。帧时长随 Engine.time_scale 缩放,与房主的 Timer 同速。
-# 显示值封顶 TURN_TIMEOUT:演出补时还没用完时圆环停在满格,归零的那一刻正是房主代打的时刻。
+# 显示真实剩余秒数(演出预算略宽于实际动画时,刚轮到时可能是 31 左右),不封顶:
+# 封顶会让圆环在补时用完前一直停在 30 不动。归零的那一刻正是房主代打的时刻。
 # 旧版房主不发剩余时间:退回原来的本地计时,每次轮转从整 30 秒开始。
 
 
@@ -32,7 +33,7 @@ func tick(delta: float) -> void:
 
 
 func remaining() -> float:
-	return clampf(_left, 0.0, Protocol.TURN_TIMEOUT)
+	return maxf(_left, 0.0)
 
 
 func has_host_time() -> bool:

@@ -22,16 +22,15 @@ func test_host_time_survives_turn_changes():
 	assert_almost_eq(clock.remaining(), 20.0, 0.001)
 
 
-func test_display_is_capped_while_the_animation_grace_lasts():
-	# 房主计时 = 30 秒 + 演出补时;演出提前播完时圆环停在满格,直到真正进入 30 秒
+func test_display_never_freezes_while_grace_remains():
+	# 演出预算略宽于实际动画时,轮到行动者时剩余可能略多于 30 秒:照实显示并持续走动,不能停在 30
 	var clock := TurnClock.new()
-	clock.sync_from_host(Protocol.TURN_TIMEOUT + 13.5)
-	clock.tick(9.0)
-	assert_eq(clock.remaining(), Protocol.TURN_TIMEOUT)
-	clock.tick(4.5)
+	clock.sync_from_host(Protocol.TURN_TIMEOUT + 1.5)
+	var before := clock.remaining()
+	clock.tick(0.5)
+	assert_almost_eq(clock.remaining(), before - 0.5, 0.001)
+	clock.tick(1.0)
 	assert_almost_eq(clock.remaining(), Protocol.TURN_TIMEOUT, 0.001)
-	clock.tick(10.0)
-	assert_almost_eq(clock.remaining(), Protocol.TURN_TIMEOUT - 10.0, 0.001)
 
 
 func test_newer_host_value_replaces_the_running_countdown():
@@ -41,7 +40,7 @@ func test_newer_host_value_replaces_the_running_countdown():
 	clock.tick(8.0)
 	assert_eq(clock.remaining(), 0.0)
 	clock.sync_from_host(Protocol.TURN_TIMEOUT + 1.2)
-	assert_eq(clock.remaining(), Protocol.TURN_TIMEOUT)
+	assert_almost_eq(clock.remaining(), Protocol.TURN_TIMEOUT + 1.2, 0.001)
 
 
 func test_never_counts_below_zero():

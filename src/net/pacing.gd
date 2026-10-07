@@ -3,11 +3,13 @@ class_name Pacing
 # 牌桌导演的各段演出时长必须不超过这里的预算。
 
 
-const PLAYED := 1.2
-const REVEAL_BASE := 2.6
-const REVEAL_PER_CARD := 0.75
-const GUNSHOT := 5.5
-const ELIMINATED := 1.2
+# 预算 = 导演实测最坏时长 + 少量帧余量。预算比动画长多少,轮到行动者时倒计时就多出多少秒,
+# 所以不能留得太宽(实测:出牌 0.42;翻牌 1.48 + 0.68×张数;开枪 4.73(自己中弹转观战);断线出局 0.8)
+const PLAYED := 0.6
+const REVEAL_BASE := 1.8
+const REVEAL_PER_CARD := 0.72
+const GUNSHOT := 5.0
+const ELIMINATED := 1.0
 # 最坏情况:强制验证为真话(无开枪段)后先回座 0.45 + 收牌 0.52 + 翻目标牌 1.22 + 满员发牌 1.47 ≈ 3.66,
 # 再留几帧余量(每个 await 可能晚一帧)
 const ROUND_STARTED := 3.8
@@ -20,6 +22,7 @@ const TURN_EVENTS := ["turn", "round_started"]
 
 static func estimate(events: Array) -> float:
 	var total := 0.0
+	var shot_dead := {}   # 本批里中弹的人:紧随其后的 eliminated 事件没有单独的演出
 	for ev in events:
 		match ev.get("type", ""):
 			"played":
@@ -28,8 +31,11 @@ static func estimate(events: Array) -> float:
 				total += REVEAL_BASE + REVEAL_PER_CARD * ev.get("cards", []).size()
 			"gunshot":
 				total += GUNSHOT
+				if ev.get("hit", false):
+					shot_dead[ev.get("pid")] = true
 			"eliminated":
-				total += ELIMINATED
+				if not shot_dead.has(ev.get("pid")):
+					total += ELIMINATED
 			"round_started":
 				total += ROUND_STARTED
 	return total

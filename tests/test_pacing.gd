@@ -114,3 +114,20 @@ func test_first_turn_budget_includes_intro():
 	var pending := Pacing.pending_after(Pacing.INTRO, batch)
 	assert_almost_eq(Pacing.turn_timer_after(batch, pending, 0.0),
 		Protocol.TURN_TIMEOUT + Pacing.INTRO + Pacing.ROUND_STARTED, 0.001)
+
+
+func test_fatal_shot_elimination_is_not_budgeted_twice():
+	# 中弹出局的 eliminated 事件没有单独演出(导演直接跳过);断线出局才有
+	var fatal := [
+		{"type": "gunshot", "pid": 2, "hit": true, "shots_fired": 3},
+		{"type": "eliminated", "pid": 2},
+	]
+	assert_almost_eq(Pacing.estimate(fatal), Pacing.GUNSHOT, 0.001)
+	var disconnect := [{"type": "eliminated", "pid": 3}]
+	assert_almost_eq(Pacing.estimate(disconnect), Pacing.ELIMINATED, 0.001)
+
+
+func test_play_budget_covers_card_flight_but_stays_tight():
+	# 预算超出动画多少,倒计时刚出现时就多出多少秒:要盖住飞牌,又不能宽到明显
+	assert_gte(Pacing.PLAYED, CardTable.PLAY_FLIGHT + FRAME_SLACK)
+	assert_lte(Pacing.PLAYED - CardTable.PLAY_FLIGHT, 0.3)
