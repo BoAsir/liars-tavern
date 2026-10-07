@@ -18,6 +18,7 @@ class StubRig:
 
 class StubWorld:
 	extends RefCounted
+	var patrons := {}
 
 	func lobby_view() -> Transform3D:
 		return Transform3D.IDENTITY
@@ -40,7 +41,9 @@ class StubApp:
 
 
 func after_each():
-	Net.game_mode = GameMode.DEFAULT   # 自动加载是全局的:别把玩法留给后面的测试
+	# 自动加载是全局的:别把玩法、房主身份留给后面的测试
+	Net.game_mode = GameMode.DEFAULT
+	Net.is_host = false
 
 
 func test_table_follows_the_mode_and_a_late_change_only_once():
@@ -111,3 +114,23 @@ func test_row_buttons_keep_rows_as_short_as_the_name():
 		assert_eq([box.content_margin_left, box.content_margin_top], [LobbyScreen.ROW_BUTTON_PADDING.x,
 			LobbyScreen.ROW_BUTTON_PADDING.y], state)
 	assert_eq(button.focus_mode, Control.FOCUS_ALL, "仍能用键盘请出")
+
+
+func _themed(control: Control) -> Control:
+	# 挂在用游戏主题的节点下量尺寸:字体与按钮样式和真实界面一致
+	var holder := Control.new()
+	holder.theme = UiTheme.theme()
+	add_child_autofree(holder)
+	holder.add_child(control)
+	return control
+
+
+func test_player_rows_stay_compact_with_long_names_and_kick_buttons():
+	# 每行不超过 36 像素(规格 §3.2):房名折成两行、广播告警同时出现时面板也放得下
+	var lobby: Control = autofree(LobbyScreen.new(autofree(StubApp.new())))
+	Net.is_host = true
+	for player in [{"pid": 1, "name": "房主", "ready": true, "is_host": true},
+			{"pid": 5, "name": LONG_NAME, "ready": false, "is_host": false}]:
+		var row: Control = _themed(lobby._player_row(player, 0))
+		assert_lte(row.get_combined_minimum_size().y, LobbyScreen.ROW_MAX_HEIGHT, player["name"])
+		assert_lte(row.get_combined_minimum_size().x, LobbyScreen.PANEL_WIDTH, "长昵称不撑宽面板")

@@ -12,6 +12,9 @@ const LIST_GAP := 8
 # 玩家列表最多露出这么多行,其余在列表里滚动:德州 8 人时面板在 1280×720 下也不超过 672 像素高;
 # 骗子酒馆满员正好 4 人,列表不滚动
 const LIST_VISIBLE_ROWS := 4
+# 名单每行不超过这么高(规格 §3.2):房名折成两行、广播告警同时出现时面板也放得下
+const ROW_MAX_HEIGHT := 36.0
+const ROW_PADDING_Y := 4
 # 名单行里的小按钮(请出):沿用主题样式,只收小内边距,有按钮的行与没按钮的行一样高
 const ROW_BUTTON_PADDING := Vector2(12, 3)
 const ROW_BUTTON_STATES := ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]
@@ -275,8 +278,8 @@ func _player_row(player: Dictionary, index: int) -> Control:
 	var panel := PanelContainer.new()
 	var mine: bool = player["pid"] == Net.my_pid()
 	var style := UiTheme.panel_box(Color(0.13, 0.09, 0.06, 0.9), Color(UiTheme.BRASS, 0.7 if mine else 0.3), 1, 8)
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
+	style.content_margin_top = ROW_PADDING_Y
+	style.content_margin_bottom = ROW_PADDING_Y
 	panel.add_theme_stylebox_override("panel", style)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
