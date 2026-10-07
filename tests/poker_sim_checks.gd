@@ -41,7 +41,26 @@ static func _turn_state(t: PokerTable) -> String:
 		return "BETTING 时没有行动者"
 	if t.player(current).get("status") != R.STATUS_ACTIVE or t.legal_actions(current).is_empty():
 		return "行动者 p%d 不能行动" % current
-	return _cards_unique(t)
+	var error := _legal_shape(t, current)
+	return error if error != "" else _cards_unique(t)
+
+
+static func _legal_shape(t: PokerTable, pid: int) -> String:
+	# 可选动作自洽(规格 §2.4):最少加注不超过全下额、跟注额不超过筹码、能过牌当且仅当不欠跟注、能加注时加得上去
+	var legal := t.legal_actions(pid)
+	var p := t.player(pid)
+	var error := _amounts([legal["to_call"], legal["call_amount"], legal["min_raise_to"], legal["max_raise_to"]])
+	if error != "":
+		return "可选动作里的" + error
+	if legal["max_raise_to"] != p["bet"] + p["stack"] or legal["min_raise_to"] > legal["max_raise_to"]:
+		return "加注范围不对:%s" % legal
+	if legal["call_amount"] != mini(legal["to_call"], p["stack"]) or legal["can_check"] != (legal["to_call"] == 0):
+		return "跟注/过牌不对:%s" % legal
+	if legal["to_call"] > t.current_bet() - p["bet"]:
+		return "欠的比当前最高下注还多:%s" % legal
+	if legal["can_raise"] and legal["min_raise_to"] <= t.current_bet():
+		return "能加注却加不过当前最高下注:%s" % legal
+	return ""
 
 
 static func _cards_unique(t: PokerTable) -> String:
