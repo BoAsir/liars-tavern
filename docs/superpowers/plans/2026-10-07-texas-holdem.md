@@ -337,6 +337,11 @@ static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Ve
 
 - `LiarsSession` 原样搬走现有的 `GameState` / `Views` / `Pacing` 用法,骗子酒馆行为零变化。
 - `PokerSession` 持有 `PokerTable` 与名字表;`PokerViews` 只用 `PokerTable` 的只读访问。
+- 规格后来补充、归本任务的条目:
+  - `PokerPacing.BUST_DECISION`(6.0)与会话的 `hand_gap()`(规格 §2.6、§4.2、§4.7);
+  - `rpc_game_started` 的 seats 取 `_session.seats_with_patrons()`;`Net.seats` 只由 NetworkManager 写(§3.3、§4.2);
+  - `sit_in` 意图走 `rpc_poker_intent`;`away` / `sit_in` 事件进视图与预算(§2.8、§4.5、§4.7)。
+  - 挂机离座的状态机部分在任务 1 里实现。
 - 测试:
   - [ ] `test_poker_views.gd`:
     - 按字段路径检查不泄露(规格 §8),含「没摊牌就赢」。
@@ -362,7 +367,13 @@ static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Ve
 - `main.gd`:`_show_table` 按 `Net.game_mode` 选 `PokerScreen`;`_exit_tree` 里 `PokerFaces.clear()`。
 - `sfx.gd`:加 `chips` / `chips_push` / `fold`。
 - 依赖:任务 6 的 `Net` 接口签名已经作为桩存在。视图字段以规格 §4.6 为准,可以用假视图字典开发与测试。
-- 给 bot 的入口:`is_my_turn()`、`legal()`、`submit(action, amount := 0)`(与按钮同路径)、`my_status()`、`choose_rebuy()`、`choose_spectate()`。
+- 给 bot 的入口:`is_my_turn()`、`legal()`、`submit(action, amount := 0)`(与按钮同路径)、`my_status()`、`choose_rebuy()`、`choose_spectate()`、`choose_sit_in()`。
+- 规格后来补充、归本任务的条目:
+  - 拆台的调用方:`PokerScreen._exit_tree`、`LobbyScreen._ready`、`main._show_menu` 调用 `TableWorld.clear_poker()`;`TableScreen._ready` 调用 `app.apply_table_mode(Net.game_mode)`(§5.1)。
+  - 迟到者的第一帧:先按视图瞬时摆好,丢弃之前排队的事件;导演对缺少前置状态的事件容错(§7)。
+  - 机位规则:观战者本机隐藏自己的酒客;迟到者按「座位表 + 自己」排座(§5.5)。
+  - 输光提示带倒计时(§2.6);离座的人底部显示「你已离座 · 回到牌桌」(§2.8)。
+  - SeatGaze 接法:见任务 4 交付说明里的接线建议。观战者被排除时把他的脖子收回、看向桌心。
 - 测试:
   - [ ] `test_bet_controls.gd`:
     - 底池 60 + 桌上下注 40、当前最高 20、要跟 20、最少加到 40、最多 1000 时:½ 池 = 80,1 池 = 140,全下 = 1000。
