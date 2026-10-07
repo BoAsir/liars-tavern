@@ -8,6 +8,9 @@ extends GutTest
 const LIARS_CAMERA := Vector3(0.55, 1.92, 2.1)
 const POKER_CAMERA := Vector3(0.55, 1.92, 2.60)
 const BIG_TABLE_SPOT := Vector3(1.2, SeatLayout.TABLE_TOP, 0.3)   # 德州桌面上、骗子酒馆桌外的一点
+const FAR_SIDE_SPOT := Vector3(0, SeatLayout.TABLE_TOP, -1.35)    # 德州桌对面靠桌沿:对手的筹码与亮牌一带
+const PULL_BACK := Vector3(0, 0.5, 1.0)   # 越肩机位再往后上方拉远一些(以后调机位时)
+const FELT_SAMPLES := 12                  # 每圈取几个点检查桌面
 const FRAME := 0.1
 const ME := 1
 const NEAR := 0.001
@@ -95,6 +98,38 @@ func test_spot_on_the_small_table_is_tabletop_with_either_radius():
 	for radius in [SeatLayout.TABLE_RADIUS, SeatLayout.POKER_TABLE_RADIUS]:
 		var target: Vector3 = SeatGaze.cursor_look_target(LIARS_CAMERA, spot - LIARS_CAMERA, radius)
 		assert_lt(target.distance_to(spot), NEAR, "半径 %.2f" % radius)
+
+
+func test_far_side_of_the_big_table_is_tabletop_too():
+	# 德州桌对面的桌沿离越肩机位 4 米多,比 CURSOR_LOOK_FAR 还远:照样看桌面上那一点,不看它上方的半空
+	assert_gt(FAR_SIDE_SPOT.distance_to(POKER_CAMERA), SeatGaze.CURSOR_LOOK_FAR, "前提:这一点比远处的视线目标还远")
+	var dir := FAR_SIDE_SPOT - POKER_CAMERA
+	var target: Vector3 = SeatGaze.cursor_look_target(POKER_CAMERA, dir, SeatLayout.POKER_TABLE_RADIUS)
+	assert_lt(target.distance_to(FAR_SIDE_SPOT), NEAR)
+
+
+func test_every_spot_on_the_felt_is_tabletop_however_far_the_camera():
+	# 光标落在桌面上就看那一点,与离镜头多远无关;越肩机位以后再往后拉远也一样
+	var cameras := {SeatLayout.TABLE_RADIUS: LIARS_CAMERA, SeatLayout.POKER_TABLE_RADIUS: POKER_CAMERA}
+	var missed := []
+	for radius in cameras:
+		for camera in [cameras[radius], cameras[radius] + PULL_BACK]:
+			for spot in _felt_spots(radius):
+				var target: Vector3 = SeatGaze.cursor_look_target(camera, spot - camera, radius)
+				if target.distance_to(spot) > NEAR:
+					missed.append("半径 %.2f 镜头 %s 落点 %s" % [radius, camera, spot])
+	assert_eq(missed, [], "桌面上每一点都看那一点")
+
+
+func _felt_spots(radius: float) -> Array:
+	# 桌心,加上半径一半处与紧贴桌沿处各一圈
+	var top := Vector3(0, SeatLayout.TABLE_TOP, 0)
+	var spots := [top]
+	for ring in [0.5, 0.97]:
+		for i in FELT_SAMPLES:
+			var angle := TAU * i / FELT_SAMPLES
+			spots.append(top + Vector3(cos(angle), 0, sin(angle)) * radius * ring)
+	return spots
 
 
 func test_floor_beyond_either_table_looks_far_along_the_ray():

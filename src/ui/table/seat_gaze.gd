@@ -105,12 +105,12 @@ static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Ve
 
 
 static func cursor_look_target(origin: Vector3, direction: Vector3, table_radius := SeatLayout.TABLE_RADIUS) -> Vector3:
-	# 光标射线落在桌面上就看桌面上那一点(低头看牌、看出牌区);
+	# 光标射线落在桌面上就看桌面上那一点(低头看牌、看出牌区),不论离镜头多远:德州桌对面的桌沿离越肩机位 4 米多;
 	# 指向桌面以上或桌外(对手、墙、天花板)时取射线上远处一点。桌面半径随玩法:德州桌更大
 	var dir := direction.normalized()
 	if dir.y < -0.01:
 		var t := (SeatLayout.TABLE_TOP - origin.y) / dir.y
-		if t > 0.0 and t < CURSOR_LOOK_FAR:
+		if t > 0.0:
 			var hit := origin + dir * t
 			if Vector2(hit.x, hit.z).length() <= table_radius:
 				return hit
