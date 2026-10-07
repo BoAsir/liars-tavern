@@ -35,8 +35,8 @@ func _run() -> void:
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(int(dims[0]), int(dims[1]))
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_viewport.msaa_3d = ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")
 	root.add_child(_viewport)
+	RenderBudget.apply(_viewport)   # 与游戏一致:3D 像素预算 + FSR + SMAA
 	_tavern = Tavern.new()
 	_viewport.add_child(_tavern)
 	var showcase: Node = load("res://tools/showcase.gd").new()
