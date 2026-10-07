@@ -144,6 +144,11 @@ func _clear_debris() -> void:
 
 # —— 几何查询 ——
 
+static func angle_of(pos: Vector3) -> float:
+	# 桌面上一点绕桌心的角度(SeatLayout 的约定:0 = +Z,俯视顺时针增大),取值 [0, TAU)
+	return wrapf(atan2(-pos.x, pos.z), 0.0, TAU)
+
+
 func seat_transform(angle: float) -> Transform3D:
 	var pos := SeatLayout.seat_position(angle, seat_radius)
 	return Transform3D(Basis.looking_at(-SeatLayout.direction(angle), Vector3.UP), pos)
