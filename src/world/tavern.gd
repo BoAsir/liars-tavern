@@ -104,8 +104,7 @@ func _build_environment() -> void:
 	environment.ssao_enabled = true
 	environment.ssao_radius = 0.9
 	environment.ssao_intensity = 1.8
-	environment.ssil_enabled = true
-	environment.ssil_intensity = 0.8
+	# 不开 SSIL(屏幕空间间接光):实测内部 1080p 下约 3 毫秒/帧,开关前后画面几乎看不出差别
 	environment.volumetric_fog_enabled = true
 	environment.volumetric_fog_density = 0.05
 	environment.volumetric_fog_albedo = Color(0.85, 0.84, 0.82)
