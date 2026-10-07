@@ -1,15 +1,19 @@
 class_name Patron
 extends Node3D
 # 酒客角色:坐在椅子上的卡通动物。原点在座位地面,面朝 -Z(牌桌中心)。
-# 待机:呼吸、眨眼、眼神与头部跟随;动作:持牌、出牌伸手、拍桌、举枪、中弹倒下、庆祝。
+# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪、中弹倒下、庆祝。
+# 拿着牌时双手也搭在桌上,牌扇自己立在胸前——爪子去扶牌会挡住牌面。
 
 
 const ARM_LENGTH := 0.4
-const SHOULDER := Vector3(0.21, 0.52, -0.02)
+# 肩略靠前:坐直时单节手臂才够得着桌沿,手掌能搭到桌面上
+const SHOULDER := Vector3(0.21, 0.52, -0.06)
+const PAW_RADIUS := 0.058
+const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
 const HIP := Vector3(0, 0.5, 0.12)
-const HAND_HOLD := Vector3(0.07, 0.36, -0.36)
-const HAND_REST := Vector3(0.17, 0.31, -0.38)
+# 搭在桌沿上:恰好一臂之长,掌底贴着桌面(拿着牌时也是这个姿势)
+const HAND_REST := Vector3(0.16, 0.33, -0.41)
 const HAND_REACH := Vector3(0.06, 0.33, -0.66)
 const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
 const HAND_SLAM := Vector3(0.12, 0.29, -0.52)
@@ -21,7 +25,6 @@ const FAN_TILT_DEG := -18.0
 # 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头
 const SELF_FAN_POS := Vector3(0.36, 0.62, -0.3)
 const SELF_FAN_SCALE := 1.4
-const SELF_GRIP_OFFSET := Vector3(0.07, -0.08, 0.02)
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
 const CHEER_BOUNCES := 3
 const CHEER_BOUNCE_TIME := 0.22
@@ -54,9 +57,6 @@ var _breath_rate := 1.0
 var _lean := 0.0
 var _arms_locked := false
 var _cheer_tweens: Array[Tween] = []   # 庆祝中的蹦跳与举手,复位时中止
-var _holding := false
-var _hold_left := Vector3(-HAND_HOLD.x, HAND_HOLD.y, HAND_HOLD.z)
-var _hold_right := HAND_HOLD
 var _noise := FastNoiseLite.new()
 
 
@@ -144,7 +144,7 @@ func _build_arm(side: float, mats: Dictionary) -> Node3D:
 	MeshKit.add(pivot, MeshKit.cylinder(0.06, 0.06, 0.05, 16), mats["muzzle"], Vector3(0, 0, -ARM_LENGTH + 0.04),
 		Vector3(90, 0, 0))
 	var hand := MeshKit.pivot(pivot, Vector3(0, 0, -ARM_LENGTH), "Hand")
-	MeshKit.add(hand, MeshKit.sphere(0.058, 16), mats["fur"], Vector3.ZERO, Vector3.ZERO, Vector3(1, 0.8, 1.1))
+	MeshKit.add(hand, MeshKit.sphere(PAW_RADIUS, 16), mats["fur"], Vector3.ZERO, Vector3.ZERO, PAW_SCALE)
 	return pivot
 
 
@@ -234,15 +234,11 @@ func set_expression(kind: String) -> void:
 
 # —— 手臂 ——
 
-func set_holding(holding: bool, animate := true) -> void:
-	_holding = holding
+func rest_arms(animate := true) -> void:
+	# 双手搭回桌上;动作进行中(动作锁)时不打断,动作结束后由动作自己调用
 	if _arms_locked:
 		return
-	var duration := 0.3 if animate else 0.0
-	if holding:
-		pose_arms(_hold_left, _hold_right, duration)
-	else:
-		pose_arms(_mirror(HAND_REST, -1.0), HAND_REST, duration)
+	pose_arms(_mirror(HAND_REST, -1.0), HAND_REST, 0.3 if animate else 0.0)
 
 
 func present_hand_to(viewer: Vector3) -> void:
@@ -254,10 +250,6 @@ func present_hand_to(viewer: Vector3) -> void:
 	var bottom := -(Vector3.UP - normal * Vector3.UP.dot(normal)).normalized()
 	var world_basis := Basis(normal.cross(bottom), normal, bottom)
 	fan.transform = Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), SELF_FAN_POS)
-	_hold_left = SELF_FAN_POS + Vector3(-SELF_GRIP_OFFSET.x, SELF_GRIP_OFFSET.y, SELF_GRIP_OFFSET.z)
-	_hold_right = SELF_FAN_POS + SELF_GRIP_OFFSET
-	if _holding:
-		set_holding(true, false)
 
 
 func pose_arms(left_target: Vector3, right_target: Vector3, duration: float) -> Tween:
@@ -281,7 +273,7 @@ func reach_toward_center() -> void:
 	await pose_arms(_mirror(HAND_REACH, -1.0), HAND_REACH, 0.22).finished
 	await get_tree().create_timer(0.12).timeout
 	_arms_locked = false
-	set_holding(_holding)
+	rest_arms()
 
 
 func slam_table() -> void:
@@ -298,7 +290,7 @@ func slam_table() -> void:
 func _finish_slam() -> void:
 	await get_tree().create_timer(0.35).timeout
 	_arms_locked = false
-	set_holding(_holding)
+	rest_arms()
 
 
 func pick_up(gun: Node3D, duration: float) -> void:
@@ -331,7 +323,7 @@ func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: f
 	tween.tween_property(gun, "global_transform", rest, 0.15)
 	await tween.finished
 	_arms_locked = false
-	set_holding(_holding)
+	rest_arms()
 
 
 func relief() -> void:
@@ -408,7 +400,7 @@ func reset_pose() -> void:
 	_arms_locked = false
 	set_expression("neutral")
 	body.position = HIP
-	set_holding(false, false)
+	rest_arms(false)
 
 
 func appear() -> void:

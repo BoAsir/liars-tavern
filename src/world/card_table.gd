@@ -36,7 +36,6 @@ var target_kind := CardFaces.BACK
 var _stand: Node3D
 var _target_card: Card3D
 var _pile_seed := 0
-var _my_holding := false
 
 
 func _init(p_world: TableWorld) -> void:
@@ -118,10 +117,6 @@ func _layout_mine(duration: float) -> void:
 		_move_local(card, fan_slot(i, my_cards.size(), lift), duration)
 		var glow := 0.75 if selected.has(i) else (0.3 if i == hovered else 0.0)
 		card.set_glow(glow)
-	var holding := not my_cards.is_empty()
-	if holding != _my_holding and world.patrons.has(world.my_pid):
-		_my_holding = holding
-		world.patrons[world.my_pid].set_holding(holding)
 
 
 # —— 他人手牌 ——
@@ -130,8 +125,6 @@ func _layout_held(pid: int, duration: float) -> void:
 	var cards: Array = held.get(pid, [])
 	for i in cards.size():
 		_move_local(cards[i], fan_slot(i, cards.size(), 0.0), duration)
-	if world.patrons.has(pid):
-		world.patrons[pid].set_holding(not cards.is_empty())
 
 
 func _fan_of(pid: int) -> Node3D:
@@ -287,11 +280,7 @@ func sweep() -> void:
 	my_cards = []
 	selected = {}
 	hovered = -1
-	for pid in held.keys() + [world.my_pid]:
-		if world.patrons.has(pid):
-			world.patrons[pid].set_holding(false)
 	held = {}
-	_my_holding = false
 	_pile_seed += 1
 	if all.is_empty():
 		return

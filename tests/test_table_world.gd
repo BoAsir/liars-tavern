@@ -78,9 +78,9 @@ func test_revive_all_releases_the_winners_cheer_pose():
 	winner.celebrate()
 	world.revive_all()
 	assert_eq(world.patrons[1], winner, "幸存者沿用原实例")
-	winner.set_holding(true, false)
+	winner.rest_arms(false)
 	await wait_process_frames(3)
-	assert_true(_right_arm_points_at(winner, Patron.HAND_HOLD), "复位后能重新举牌")
+	assert_true(_right_arm_points_at(winner, Patron.HAND_REST), "复位后双手能搭回桌上")
 	assert_almost_eq(winner.body.position.y, Patron.HIP.y, 0.0001, "庆祝的蹦跳已停止")
 
 
@@ -91,9 +91,9 @@ func test_celebrate_unlocks_the_arms_once_its_bounces_end():
 	winner.celebrate()
 	await wait_seconds(Patron.CHEER_BOUNCES * Patron.CHEER_BOUNCE_TIME * 2.0 + CLOCK_SLACK)
 	assert_true(_right_arm_points_at(winner, Patron.HAND_CHEER), "跳完后双手仍举着")
-	winner.set_holding(true, false)
+	winner.rest_arms(false)
 	await wait_process_frames(3)
-	assert_true(_right_arm_points_at(winner, Patron.HAND_HOLD), "动作锁已解除")
+	assert_true(_right_arm_points_at(winner, Patron.HAND_REST), "动作锁已解除")
 
 
 # —— 散落物 ——
