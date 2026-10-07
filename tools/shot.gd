@@ -19,6 +19,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var out_dir: String = opts.get("out", OS.get_user_data_dir() + "/shots")
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	RenderBudget.apply(root)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
 	if opts.has("showcase"):

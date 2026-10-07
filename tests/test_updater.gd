@@ -41,3 +41,17 @@ func test_quiet_check_alone_stays_silent():
 	updater.check(_source(), "网络", true)
 	await wait_until(func(): return updater.state != UpdaterScript.State.CHECKING, 10.0)
 	assert_eq(updater.state, UpdaterScript.State.IDLE)
+
+
+func test_restart_drops_the_no_update_flag():
+	# 带 -- --no-update 启动的游戏装好更新后点「重启」:不能把这个参数带过去,否则刚装好的更新被当场丢掉
+	var args := UpdaterScript.restart_args(PackedStringArray(["--path", "x"]), PackedStringArray(["--no-update", "--name=甲"]))
+	assert_eq(args, PackedStringArray(["--path", "x", "--", "--name=甲"]))
+	var only_flag := UpdaterScript.restart_args(PackedStringArray(), PackedStringArray(["--no-update"]))
+	assert_eq(only_flag, PackedStringArray(), "只有这个参数时连 -- 也不要")
+
+
+func test_restart_keeps_other_arguments():
+	var args := UpdaterScript.restart_args(PackedStringArray(["--fullscreen"]), PackedStringArray(["--name=乙"]))
+	assert_eq(args, PackedStringArray(["--fullscreen", "--", "--name=乙"]))
+	assert_eq(UpdaterScript.NO_UPDATE_ARG, preload("res://src/update/update_boot.gd").SKIP_ARG, "两边的参数名要一致")
