@@ -1,10 +1,12 @@
 class_name RulebookPoker
 # 说明书的德州扑克那本(长牌、短牌共用):按章节组织的纯数据,由 Rulebook 渲染,块类型见 RulebookContent。
-# 规则数字全部取自 PokerRules 与 Protocol.TURN_TIMEOUT,规则改动时说明书自动跟随;例子里的金额按大盲的
-# 倍数算,改了盲注也自洽。界面字体里没有花色字形(规格 §6.1):文案不写花色符号,具体的牌由 hands 块画成小牌。
+# 规则数字全部取自 PokerRules 与 Protocol.TURN_TIMEOUT(挂机离座的次数引擎还没有常量,暂记在 AWAY_TIMEOUTS),
+# 规则改动时说明书自动跟随;例子里的金额按大盲的倍数算,改了盲注也自洽。
+# 界面字体里没有花色字形(规格 §6.1):文案不写花色符号,具体的牌由 hands 块画成小牌。
 
 
 const STRAIGHT_LENGTH := 5
+const AWAY_TIMEOUTS := 2                   # 连续这么多次超时就离座(规格 §2.8);规则引擎有了对应常量后改用它
 # 例子里的金额(以大盲计,不是规则)
 const RAISE_EXAMPLE_BLINDS := 3            # 翻牌前有人加注到 3 个大盲
 const REFUND_EXAMPLE_BLINDS := [15, 5]     # 你下注 15 个大盲,对手全下只跟了 5 个
@@ -58,7 +60,7 @@ static func _play() -> Dictionary:
 		"tagline": "无限注现金局",
 		"blocks": [
 			{"type": "lead", "text": "每人两张只有自己看得见的底牌,桌心五张公共牌大家共用。凑出最大的五张牌,或者下注把别人都逼得弃牌,就能赢走底池。"},
-			{"type": "text", "text": "%d–%d 人围坐一桌,入座领 %d 筹码;盲注 %d/%d,整场不升。下注没有上限,随时可以全下。"
+			{"type": "text", "text": "%d–%d 人围坐一桌,入座领 %d 筹码;盲注 %d/%d,整场不升。下注没有上限,最多可以押上面前的全部筹码。"
 				% [PokerRules.MIN_PLAYERS, PokerRules.MAX_SEATS, PokerRules.STARTING_STACK,
 					PokerRules.SMALL_BLIND, PokerRules.BIG_BLIND]},
 			{"type": "pair", "items": [
@@ -141,7 +143,7 @@ static func _betting() -> Dictionary:
 				"其他人都已全下时,你只能跟注或弃牌:再加注也没有人能跟。",
 				"每次行动限时 %d 秒,超时自动过牌;不能过牌就弃牌。" % int(Protocol.TURN_TIMEOUT),
 			]},
-			{"type": "note", "text": "下注控件上的预设一键选好金额:最小、½ 池、¾ 池、1 池、全下(快捷键 1–5)。"},
+			{"type": "note", "text": "下注控件上的预设(快捷键 1–5)一键选好金额:最小、½ 池、¾ 池、1 池、全下。"},
 		],
 	}
 
@@ -158,13 +160,13 @@ static func _pots() -> Dictionary:
 			{"type": "bullets", "items": [
 				"主池:每人按全下者的额度投入的那部分,所有没弃牌的人都有份。",
 				"边池:超出的部分另成一池,只有投够这一层的人能赢;全下的人赢不到他没跟上的那几层。",
-				"弃牌或离开的人投进去的筹码留在池里,但他们不能再赢。",
+				"弃牌的人投进去的筹码留在池里,但他不能再赢;没全下就离开牌桌的人算弃牌。",
 			]},
 			{"type": "text", "text": "没人跟到的那部分会退回:比如你下注 %d,对手全下只跟了 %d,多出的 %d 在这一轮结束时退给你。"
 				% [bet, called, bet - called]},
 			{"type": "text", "text": "摊牌时从最后一个边池到主池依次分配,每个池由有资格的人里牌最大的赢。平局就平分,按 %d 为单位分,分不开的零头从按钮之后的第一位赢家起,依次每人多拿 %d。"
 				% [PokerRules.CHIP_UNIT, PokerRules.CHIP_UNIT]},
-			{"type": "note", "text": "全下之后如果没人还能下注,所有没弃牌的人先亮牌,再把剩下的公共牌一张张发完。"},
+			{"type": "note", "text": "全下之后没人还能下注时,所有没弃牌的人先亮牌,再把剩下的公共牌发完。"},
 		],
 	}
 
@@ -181,6 +183,8 @@ static func _session() -> Dictionary:
 				"一手结束时筹码输光:屏幕下方出现「再领 %d」和「观战」。不选也不会卡住牌局,只是不发牌给你。" % stack,
 				"再领:每次 %d,次数不限,下一手开始发牌。观战时也可以随时「领取 %d 上桌」。" % [stack, stack],
 				"中途加入的人同样领 %d:先旁观正在打的这一手,下一手入座发牌。" % stack,
+				"连续 %d 次超时(中间自己没出过手)就离座:从下一手起不发牌、不下盲注,筹码保留;点屏幕下方的「回到牌桌」,下一手接着发牌。"
+					% AWAY_TIMEOUTS,
 				"离开牌桌或断线:还在这一手里就自动弃牌;已经全下的照常摊牌,赢了也算。房主离开则整桌解散。",
 			]},
 			{"type": "text", "text": "房主点「散局」后,正在打的这一手结束就结算:每人的盈亏 = 筹码 − 领取次数 × %d(入座领的那次也算),按盈亏从高到低排名。所有人的盈亏加起来正好是 0。"

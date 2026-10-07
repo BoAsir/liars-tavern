@@ -39,6 +39,20 @@ func test_text_follows_rule_constants():
 	assert_string_contains(text, "%d 张" % PokerRules.deck_size(true))
 
 
+func test_explains_sitting_out_after_repeated_timeouts():
+	# 规格 §2.8:连续超时的人从下一手起离座,点「回到牌桌」下一手接着发牌
+	var text := _book_text()
+	assert_string_contains(text, "连续 %d 次超时" % RulebookPoker.AWAY_TIMEOUTS)
+	assert_string_contains(text, "「回到牌桌」")
+
+
+func test_says_the_mode_is_fixed_once_the_room_is_open():
+	# 规格 §1:等待厅里不能改玩法,想换玩法就重开房间
+	var text := _book_text()
+	assert_string_contains(text, "开房后不能改")
+	assert_string_contains(text, "重新开一桌")
+
+
 func test_text_has_no_suit_symbols():
 	# 规格 §6.1:界面字体里没有花色字形(系统回退可能变成彩色 emoji),具体的牌一律画成小牌
 	var text := _book_text()
