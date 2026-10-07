@@ -1,10 +1,61 @@
 extends GutTest
-# 等待厅布局(德州 8 人也要在 1280×720 里放下,规格 §3.2):玩家列表最多露出 4 行、其余在列表里滚动;
+# 等待厅界面(规格 §3.2):按玩法摆桌(获准时就知道玩法,名单 meta 晚到且不同时再摆一次);
+# 德州 8 人也要在 1280×720 里放下:玩家列表最多露出 4 行、其余在列表里滚动;
 # 3D 铭牌单行「名字 ✓」不超过 130×44(8 人围坐时两行的铭牌会互相压住)。
 
 
 const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const LONG_NAME := "小明明明明明明明明明明明"   # 昵称上限 12 字
+
+
+class StubRig:
+	extends RefCounted
+	var moves := 0
+
+	func move_to(_xform: Transform3D, _time: float) -> void:
+		moves += 1
+
+
+class StubWorld:
+	extends RefCounted
+
+	func lobby_view() -> Transform3D:
+		return Transform3D.IDENTITY
+
+
+class StubTavern:
+	extends RefCounted
+	var camera_rig := StubRig.new()
+
+
+class StubApp:
+	extends Node
+	# 只记下按哪个玩法摆过桌子、镜头挪过几次
+	var applied: Array = []
+	var world := StubWorld.new()
+	var tavern := StubTavern.new()
+
+	func apply_table_mode(mode: String) -> void:
+		applied.append(mode)
+
+
+func after_each():
+	Net.game_mode = GameMode.DEFAULT   # 自动加载是全局的:别把玩法留给后面的测试
+
+
+func test_table_follows_the_mode_and_a_late_change_only_once():
+	var app: StubApp = autofree(StubApp.new())
+	var lobby: Control = autofree(LobbyScreen.new(app))
+	Net.game_mode = GameMode.HOLDEM
+	lobby._apply_table_mode()
+	assert_eq(app.applied, [GameMode.HOLDEM], "进等待厅就按玩法摆桌")
+	lobby._sync_table_mode()
+	assert_eq(app.applied, [GameMode.HOLDEM], "玩法没变:刷新名单不重摆")
+	Net.game_mode = GameMode.SHORT_DECK
+	lobby._sync_table_mode()
+	lobby._sync_table_mode()
+	assert_eq(app.applied, [GameMode.HOLDEM, GameMode.SHORT_DECK], "名单 meta 带来不同的玩法:只重摆一次")
+	assert_eq(app.tavern.camera_rig.moves, 2, "每次摆桌都换到等待厅机位")
 
 
 func test_list_shows_every_row_up_to_the_limit():

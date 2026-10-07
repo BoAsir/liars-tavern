@@ -178,8 +178,7 @@ static func _broadcast_warning_text() -> String:
 # —— 刷新 ——
 
 func _refresh(players: Array) -> void:
-	if Net.game_mode != _table_mode:
-		_apply_table_mode()
+	_sync_table_mode()
 	_title.text = Net.lobby_meta.get("room", _title.text)
 	_mode_label.text = GameMode.summary(Net.game_mode)
 	_address.text = _address_text()
@@ -200,6 +199,12 @@ func _refresh(players: Array) -> void:
 		_status.text += " · 等待全员准备"
 	if _start_button != null:
 		_start_button.disabled = not Net.can_start()
+
+
+func _sync_table_mode() -> void:
+	# 兜底:玩法本该在获准时就到;名单 meta 带来的玩法和已摆的桌子不一样时再摆一次
+	if Net.game_mode != _table_mode:
+		_apply_table_mode()
 
 
 func _apply_table_mode() -> void:
