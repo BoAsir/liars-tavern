@@ -15,10 +15,8 @@ const HOTKEY := RulebookContent.HOTKEY
 const PANEL_SIZE := Vector2(980, 600)      # 最小尺寸;高度随窗口放大到 PANEL_MAX_HEIGHT
 const PANEL_MAX_HEIGHT := 760.0
 const PANEL_MARGIN := 40.0
-const NAV_WIDTH := 200.0
+const NAV_WIDTH := 200.0                  # 目录最窄的宽度;实际取两本书里最长的章节名
 const NUMERALS := ["壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖", "拾"]
-const TAB_FONT_SIZE := 18
-const TAB_RADIUS := 8
 
 var _in_match := false
 var _book := RulebookContent.BOOK_LIARS
@@ -114,7 +112,7 @@ func show_section(index: int) -> void:
 		return
 	_current = index
 	var section := _sections[index]
-	_number.text = NUMERALS[index] if index < NUMERALS.size() else str(index + 1)
+	_number.text = _numeral(index)
 	_title.text = section["title"]
 	_tagline.text = section.get("tagline", "")
 	for child in _content.get_children():
@@ -223,15 +221,15 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 14)
 	_panel.add_child(root)
 	root.add_child(_build_header())
-	root.add_child(_rule(true))
+	root.add_child(RulebookStyle.divider(true))
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 26)
 	root.add_child(body)
 	body.add_child(_build_nav())
-	body.add_child(_rule(false))
+	body.add_child(RulebookStyle.divider(false))
 	body.add_child(_build_page())
-	root.add_child(_rule(true))
+	root.add_child(RulebookStyle.divider(true))
 	root.add_child(_build_footer())
 
 
@@ -276,7 +274,7 @@ func _build_tabs() -> Control:
 		tab.button_group = group
 		tab.button_pressed = book == _book
 		tab.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		_style_tab(tab, i == 0, i == books.size() - 1)
+		RulebookStyle.tab(tab, i == 0, i == books.size() - 1)
 		tab.pressed.connect(_on_tab_pressed.bind(book))
 		tab.mouse_entered.connect(Sfx.play.bind("ui_hover"))
 		row.add_child(tab)
@@ -288,40 +286,6 @@ func _on_tab_pressed(book: String) -> void:
 	if book != _book:
 		Sfx.play("flip")
 		show_book(book)
-
-
-func _style_tab(tab: Button, first: bool, last: bool) -> void:
-	# 只有两端圆角;相邻页签共用一条边框
-	var normal := UiTheme.panel_box(Color(0, 0, 0, 0.25), Color(UiTheme.BRASS, 0.5), 1, 0)
-	normal.content_margin_left = 16
-	normal.content_margin_right = 16
-	normal.content_margin_top = 5
-	normal.content_margin_bottom = 6
-	normal.border_width_left = 1 if first else 0
-	normal.corner_radius_top_left = TAB_RADIUS if first else 0
-	normal.corner_radius_bottom_left = TAB_RADIUS if first else 0
-	normal.corner_radius_top_right = TAB_RADIUS if last else 0
-	normal.corner_radius_bottom_right = TAB_RADIUS if last else 0
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(UiTheme.BRASS, 0.1)
-	var pressed: StyleBoxFlat = normal.duplicate()
-	pressed.bg_color = Color(UiTheme.BRASS, 0.26)
-	pressed.border_color = UiTheme.BRASS_BRIGHT
-	var focus: StyleBoxFlat = normal.duplicate()
-	focus.draw_center = false
-	focus.border_color = Color(UiTheme.BRASS_BRIGHT, 0.7)
-	tab.add_theme_stylebox_override("normal", normal)
-	tab.add_theme_stylebox_override("hover", hover)
-	tab.add_theme_stylebox_override("pressed", pressed)
-	tab.add_theme_stylebox_override("hover_pressed", pressed)
-	tab.add_theme_stylebox_override("focus", focus)
-	tab.add_theme_font_size_override("font_size", TAB_FONT_SIZE)
-	tab.add_theme_color_override("font_color", UiTheme.PARCHMENT_DIM)
-	# 聚焦但没选中的页签不能用主题的亮黄铜字,否则看着像选中了
-	tab.add_theme_color_override("font_focus_color", UiTheme.PARCHMENT)
-	tab.add_theme_color_override("font_hover_color", UiTheme.PARCHMENT)
-	tab.add_theme_color_override("font_pressed_color", UiTheme.BRASS_BRIGHT)
-	tab.add_theme_color_override("font_hover_pressed_color", UiTheme.BRASS_BRIGHT)
 
 
 func _build_nav() -> Control:
@@ -346,7 +310,7 @@ func _fill_nav() -> void:
 		button.button_group = group
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		_style_nav_button(button)
+		RulebookStyle.nav_button(button)
 		button.pressed.connect(func():
 			Sfx.play("flip")
 			show_section(i))
@@ -372,36 +336,12 @@ func _widest_nav_width() -> float:
 
 
 static func _nav_label(index: int, title: String) -> String:
-	var numeral: String = NUMERALS[index] if index < NUMERALS.size() else str(index + 1)
-	return "%s   %s" % [numeral, title]
+	return "%s   %s" % [_numeral(index), title]
 
 
-func _style_nav_button(button: Button) -> void:
-	var normal := UiTheme.flat(Color(0, 0, 0, 0), 6)
-	normal.content_margin_left = 14
-	normal.content_margin_right = 10
-	normal.content_margin_top = 8
-	normal.content_margin_bottom = 8
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(UiTheme.BRASS, 0.08)
-	var pressed: StyleBoxFlat = normal.duplicate()
-	pressed.bg_color = Color(UiTheme.BRASS, 0.16)
-	pressed.border_color = UiTheme.BRASS_BRIGHT
-	pressed.border_width_left = 3
-	var focus: StyleBoxFlat = normal.duplicate()
-	focus.draw_center = false
-	focus.border_color = Color(UiTheme.BRASS_BRIGHT, 0.7)
-	focus.set_border_width_all(1)
-	for state in ["normal", "disabled"]:
-		button.add_theme_stylebox_override(state, normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", pressed)
-	button.add_theme_stylebox_override("hover_pressed", pressed)
-	button.add_theme_stylebox_override("focus", focus)
-	button.add_theme_font_size_override("font_size", 19)
-	button.add_theme_color_override("font_color", UiTheme.PARCHMENT_DIM)
-	button.add_theme_color_override("font_pressed_color", UiTheme.BRASS_BRIGHT)
-	button.add_theme_color_override("font_hover_pressed_color", UiTheme.BRASS_BRIGHT)
+static func _numeral(index: int) -> String:
+	# 章节序号用大写数字,超出十章改用阿拉伯数字
+	return NUMERALS[index] if index < NUMERALS.size() else str(index + 1)
 
 
 func _build_page() -> Control:
@@ -460,14 +400,6 @@ func _build_footer() -> Control:
 	_next.pressed.connect(turn_page.bind(1))
 	row.add_child(_next)
 	return row
-
-
-func _rule(horizontal: bool) -> ColorRect:
-	var line := ColorRect.new()
-	line.color = Color(UiTheme.BRASS, 0.35)
-	line.custom_minimum_size = Vector2(0, 1) if horizontal else Vector2(1, 0)
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return line
 
 
 func _play_open() -> void:
