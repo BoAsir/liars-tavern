@@ -1,28 +1,35 @@
 class_name Patron
 extends Node3D
 # 酒客角色:坐在椅子上的卡通动物。原点在座位地面,面朝 -Z(牌桌中心)。
-# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪、中弹倒下、庆祝。
-# 拿着牌时双手也搭在桌上,牌扇自己立在胸前——爪子去扶牌会挡住牌面。
+# 坐姿:身体前倾趴在牌桌上,双手搭在桌面——拿着牌也一样,牌扇自己立在胸前(爪子去扶牌会挡住牌面)。
+# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直)。
 
 
 const ARM_LENGTH := 0.4
-# 肩略靠前:坐直时单节手臂才够得着桌沿,手掌能搭到桌面上
-const SHOULDER := Vector3(0.21, 0.52, -0.06)
+const SHOULDER := Vector3(0.21, 0.52, -0.02)
 const PAW_RADIUS := 0.058
 const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
 const HIP := Vector3(0, 0.5, 0.12)
-# 搭在桌沿上:恰好一臂之长,掌底贴着桌面(拿着牌时也是这个姿势)
-const HAND_REST := Vector3(0.16, 0.33, -0.41)
-const HAND_REACH := Vector3(0.06, 0.33, -0.66)
+# 前倾角(弧度,绕髋部):坐着时趴向牌桌,单节手臂才够得着桌面;轮到自己时再多倾一点
+const SEATED_LEAN := 0.18
+const TURN_LEAN := 0.13
+# 举枪、庆祝时坐直——仍留一点前倾,空着的那只手才搭得到桌面
+const SITTING_UP_LEAN := 0.08
+# 搭在桌上的手:掌心离身体中线的横向距离;拍桌落点更靠里
+const PAW_SPREAD := 0.15
+const SLAM_SPREAD := 0.08
+# 出牌手势:双手抬离桌面、朝桌心前推(座位坐标)
+const REACH_POINT := Vector3(0.06, SeatLayout.TABLE_TOP + 0.14, -0.75)
 const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
-const HAND_SLAM := Vector3(0.12, 0.29, -0.52)
 const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
-# 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线
+# 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线。
+# FAN_POS 为座位坐标(相对髋部):前倾坐着时牌扇停在这里,轮到他再前倾时下沉也碰不到桌面
 const FAN_TILT_DEG := -18.0
-# 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头
+const FAN_POS := Vector3(0, 0.46, -0.37)
+# 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头(座位坐标,相对髋部;越肩机位按它取景)
 const SELF_FAN_POS := Vector3(0.36, 0.62, -0.3)
 const SELF_FAN_SCALE := 1.4
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
@@ -54,8 +61,11 @@ var _time := 0.0
 var _phase := 0.0
 var _blink_in := 2.0
 var _breath_rate := 1.0
-var _lean := 0.0
+var _lean := SEATED_LEAN
+var _sitting_up := false   # 举枪、庆祝时坐直
 var _arms_locked := false
+var _resting := {}         # 手臂 → 是否搭在桌上:搭着的手每帧按身体姿态重新落点(单手动作时另一只手照样搭着)
+var _arm_serial := 0       # 每次手臂补间加一;歇手补间结束时据此判断期间有没有新动作
 var _cheer_tweens: Array[Tween] = []   # 庆祝中的蹦跳与举手,复位时中止
 var _noise := FastNoiseLite.new()
 
@@ -85,6 +95,7 @@ func _build() -> void:
 	}
 	PatronParts.build_chair(self)
 	body = MeshKit.pivot(self, HIP, "Body")
+	body.rotation.x = -SEATED_LEAN
 	MeshKit.add(body, MeshKit.capsule(0.2, 0.62), mats["coat"], Vector3(0, 0.27, 0), Vector3.ZERO, Vector3(1, 1, 0.85))
 	MeshKit.add(body, MeshKit.sphere(0.19, 20), mats["coat"], Vector3(0, 0.12, -0.05), Vector3.ZERO, Vector3(1.05, 0.85, 0.95))
 	# 衬衫前襟 + 领结
@@ -109,10 +120,11 @@ func _build() -> void:
 	_arm_l = _build_arm(-1.0, mats)
 	_arm_r = _build_arm(1.0, mats)
 	right_hand = _arm_r.get_node("Hand")
-	fan = MeshKit.pivot(body, Vector3(0, 0.44, -0.37), "Fan")
-	fan.basis = CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG))
-	_set_arm(_arm_l, _mirror(HAND_REST, -1.0))
-	_set_arm(_arm_r, HAND_REST)
+	fan = MeshKit.pivot(body, Vector3.ZERO, "Fan")
+	fan.transform = _in_seat(Transform3D(CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG)),
+		HIP + FAN_POS))
+	_resting = {_arm_l: true, _arm_r: true}
+	_plant_paws()
 
 
 func _build_head(spec: Dictionary, mats: Dictionary) -> void:
@@ -165,7 +177,9 @@ func _mat(color: Color, roughness: float) -> StandardMaterial3D:
 func _animate_idle(delta: float) -> void:
 	var breath := sin(_time * 1.6 * _breath_rate + _phase)
 	body.scale = Vector3(1.0 - breath * 0.004, 1.0 + breath * 0.012, 1.0)
-	body.rotation.x = lerpf(body.rotation.x, -_lean + breath * 0.01, minf(delta * 4.0, 1.0))
+	var lean := SITTING_UP_LEAN if _sitting_up else _lean
+	body.rotation.x = lerpf(body.rotation.x, -lean + breath * 0.01, minf(delta * 4.0, 1.0))
+	_plant_paws()
 	var yaw := 0.0
 	var pitch := 0.0
 	if _has_look:
@@ -218,7 +232,7 @@ func nameplate_anchor() -> Vector3:
 
 
 func set_active(active: bool) -> void:
-	_lean = 0.13 if active else 0.0
+	_lean = SEATED_LEAN + (TURN_LEAN if active else 0.0)
 	_breath_rate = 1.8 if active else 1.0
 
 
@@ -235,21 +249,45 @@ func set_expression(kind: String) -> void:
 # —— 手臂 ——
 
 func rest_arms(animate := true) -> void:
-	# 双手搭回桌上;动作进行中(动作锁)时不打断,动作结束后由动作自己调用
+	# 双手搭回桌上;动作进行中(动作锁)时不打断,动作结束后由动作自己调用。
+	# 搭好之后每帧重新落点,呼吸、前倾都不会让手悬空或按进桌里
 	if _arms_locked:
 		return
-	pose_arms(_mirror(HAND_REST, -1.0), HAND_REST, 0.3 if animate else 0.0)
+	var tween := pose_arms(rest_target(-1.0), rest_target(1.0), 0.3 if animate else 0.0)
+	var serial := _arm_serial
+	tween.finished.connect(func():
+		if serial == _arm_serial:
+			_resting = {_arm_l: true, _arm_r: true})
+
+
+func rest_target(side: float, spread := PAW_SPREAD) -> Vector3:
+	# 手搭在桌上的落点(身体局部坐标):按当前肩位,手臂伸直一臂之长、掌底贴着桌面
+	var shoulder := body.transform * _mirror(SHOULDER, side)
+	var paw_y := SeatLayout.TABLE_TOP + PAW_RADIUS * PAW_SCALE.y
+	var dy := paw_y - shoulder.y
+	var reach := sqrt(maxf(ARM_LENGTH * ARM_LENGTH - dy * dy, 0.0))
+	var dx := spread * side - shoulder.x
+	var dz := -sqrt(maxf(reach * reach - dx * dx, 0.0))
+	return _to_body(Vector3(shoulder.x + dx, paw_y, shoulder.z + dz))
+
+
+func _plant_paws() -> void:
+	if _resting.get(_arm_l, false):
+		_set_arm(_arm_l, rest_target(-1.0))
+	if _resting.get(_arm_r, false):
+		_set_arm(_arm_r, rest_target(1.0))
 
 
 func present_hand_to(viewer: Vector3) -> void:
 	# 第三人称:把牌扇移到右胸前并放大,牌面法线指向镜头、牌顶朝上,越肩即可看清点数
-	# 按座位的静止姿态计算(登场缩放动画期间 global 坐标不可靠)
+	# 按座位的静止姿态计算(登场缩放动画期间 global 坐标不可靠),并抵消坐姿前倾
 	var seat_basis := global_basis.orthonormalized()
-	var fan_world := global_position + seat_basis * (HIP + SELF_FAN_POS)
+	var fan_seat := HIP + SELF_FAN_POS
+	var fan_world := global_position + seat_basis * fan_seat
 	var normal := (viewer - fan_world).normalized()
 	var bottom := -(Vector3.UP - normal * Vector3.UP.dot(normal)).normalized()
 	var world_basis := Basis(normal.cross(bottom), normal, bottom)
-	fan.transform = Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), SELF_FAN_POS)
+	fan.transform = _in_seat(Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), fan_seat))
 
 
 func pose_arms(left_target: Vector3, right_target: Vector3, duration: float) -> Tween:
@@ -266,11 +304,11 @@ func pose_right(target: Vector3, duration: float, trans := Tween.TRANS_CUBIC) ->
 
 
 func reach_toward_center() -> void:
-	# 出牌手势:双手前推再收回
+	# 出牌手势:双手抬离桌面前推,再收回桌上
 	if _arms_locked or not alive:
 		return
 	_arms_locked = true
-	await pose_arms(_mirror(HAND_REACH, -1.0), HAND_REACH, 0.22).finished
+	await pose_arms(_to_body(_mirror(REACH_POINT, -1.0)), _to_body(REACH_POINT), 0.22).finished
 	await get_tree().create_timer(0.12).timeout
 	_arms_locked = false
 	rest_arms()
@@ -283,7 +321,7 @@ func slam_table() -> void:
 	_arms_locked = true
 	set_expression("angry")
 	await pose_right(HAND_RAISED, 0.2, Tween.TRANS_BACK).finished
-	await pose_right(HAND_SLAM, 0.08, Tween.TRANS_EXPO).finished
+	await pose_right(rest_target(1.0, SLAM_SPREAD), 0.08, Tween.TRANS_EXPO).finished
 	_finish_slam()
 
 
@@ -305,6 +343,7 @@ func pick_up(gun: Node3D, duration: float) -> void:
 
 
 func raise_gun_to_head(gun: Node3D, duration: float) -> void:
+	_sitting_up = true
 	var tween := pose_right(HAND_GUN_HEAD, duration, Tween.TRANS_BACK)
 	await tween.finished
 	# 枪口对准太阳穴
@@ -316,6 +355,7 @@ func raise_gun_to_head(gun: Node3D, duration: float) -> void:
 
 
 func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: float) -> void:
+	_sitting_up = false
 	set_expression("neutral")
 	await pose_right(body.to_local(rest.origin) + Vector3(0, 0.03, 0), duration).finished
 	gun.reparent(table_parent, true)
@@ -380,6 +420,7 @@ func celebrate() -> void:
 	if not alive:
 		return
 	_arms_locked = true
+	_sitting_up = true
 	set_expression("happy")
 	var bounce := create_tween().set_loops(CHEER_BOUNCES)
 	bounce.tween_property(body, "position:y", HIP.y + CHEER_JUMP, CHEER_BOUNCE_TIME) \
@@ -392,12 +433,13 @@ func celebrate() -> void:
 
 
 func reset_pose() -> void:
-	# 回到等待厅 / 新一局开始:停下庆祝,解除动作锁,恢复中性表情、坐正、空手
+	# 回到等待厅 / 新一局开始:停下庆祝,解除动作锁,恢复中性表情、前倾坐姿、双手搭回桌上
 	for tween in _cheer_tweens:
 		if tween.is_valid():
 			tween.kill()
 	_cheer_tweens = []
 	_arms_locked = false
+	_sitting_up = false
 	set_expression("neutral")
 	body.position = HIP
 	rest_arms(false)
@@ -424,6 +466,8 @@ func _set_arm(arm: Node3D, target: Vector3) -> void:
 
 
 func _tween_arm(tween: Tween, arm: Node3D, target: Vector3, duration: float, trans := Tween.TRANS_CUBIC) -> void:
+	_resting[arm] = false
+	_arm_serial += 1
 	tween.tween_property(arm, "quaternion", _arm_quat(arm, target), maxf(duration, 0.001)) \
 		.set_trans(trans).set_ease(Tween.EASE_IN_OUT if trans != Tween.TRANS_BACK else Tween.EASE_OUT)
 
@@ -432,6 +476,15 @@ func _arm_quat(arm: Node3D, target: Vector3) -> Quaternion:
 	var dir := target - arm.position
 	var up := Vector3.UP if absf(dir.normalized().dot(Vector3.UP)) < 0.95 else Vector3.BACK
 	return Basis.looking_at(dir, up).get_rotation_quaternion()
+
+
+func _to_body(seat_point: Vector3) -> Vector3:
+	return body.transform.affine_inverse() * seat_point
+
+
+static func _in_seat(seat_xform: Transform3D) -> Transform3D:
+	# 座位坐标 → 前倾坐姿下的身体局部坐标:挂在身体上的东西坐着时停在座位里调好的位置
+	return Transform3D(Basis(Vector3.RIGHT, -SEATED_LEAN), HIP).affine_inverse() * seat_xform
 
 
 static func _mirror(v: Vector3, side: float) -> Vector3:
