@@ -120,6 +120,25 @@ func test_players_without_patron_are_skipped():
 	assert_eq(sounds.count("deal"), 6)
 
 
+func test_folding_mid_deal_keeps_the_cards_in_the_muck():
+	# 发牌还在飞时就弃牌(视图与演出不同步):飞到一半的牌改去弃牌堆,发牌协程不会再把它塞回牌扇
+	var run := func(): await _deal_all()
+	run.call()
+	await _tween_wait(PokerCards.DEAL_STAGGER * 2.0)
+	await cards.fold(3)
+	await _tween_wait(PokerCards.deal_duration(8))
+	assert_eq(_fan_cards(3).size(), 0)
+	assert_eq(cards.muck_cards().size(), 2)
+
+
+func test_dealing_again_replaces_leftover_hole_cards():
+	await _deal_all()
+	await _deal_all()
+	await wait_process_frames(1)
+	for pid in [1, 2, 3, 4]:
+		assert_eq(_fan_cards(pid).size(), 2, "%d 号手里还是两张" % pid)
+
+
 # —— 公共牌 ——
 
 func test_board_cards_fly_to_the_rack_and_turn_face_up():

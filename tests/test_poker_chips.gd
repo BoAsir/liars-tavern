@@ -108,6 +108,13 @@ func test_sync_skips_players_without_a_seat():
 	assert_eq(_stack_nodes().size(), 1)
 
 
+func test_players_without_a_seat_never_get_chips():
+	# 没有座位的人(还没登场、离桌后已重排):不在桌心底下凭空建一摞
+	await chips.bet(9, 20, 1980)
+	await chips.rebuy(9, PokerRules.STARTING_STACK)
+	assert_eq(_stack_nodes().size(), 0)
+
+
 func test_clear_leaves_nothing():
 	chips.sync(_table(), [{"amount": 300, "eligible": []}])
 	chips.place_button(1)

@@ -25,10 +25,6 @@ const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.4)
 const DECK_SCALE := 0.5         # 牌在发牌处(飞出前、收回后)缩小
 const FLIGHT_ARC := 0.12
 const FLIGHT_META := &"poker_flight"
-# —— 公共牌架:桌上一块垫高的底座 + 斜面托板 + 前沿黄铜托条,斜面与公共牌同角度 ——
-const RACK_MARGIN := 0.025      # 托板比整排公共牌宽出的边
-const RACK_THICKNESS := 0.006
-const LIP_HEIGHT := 0.012       # 托条高出牌的下边
 
 var world: TableWorld
 var my_pid := 0
@@ -44,7 +40,7 @@ func _init(p_world: TableWorld) -> void:
 	world = p_world
 	name = "PokerCards"
 	_board.resize(PokerRules.BOARD_CARDS)
-	_build_rack()
+	add_child(BoardRack.new())
 
 
 # —— 查询 ——
@@ -76,6 +72,9 @@ func deal_hole(order: Array, p_my_pid: int, my_cards: Array) -> void:
 	var epoch := _epoch
 	my_pid = p_my_pid
 	_present_my_fan()
+	for pid in order:
+		_free_cards(_held.get(pid, []))   # 上一手没收走的(视图与演出不同步时):换成新发的
+		_held.erase(pid)
 	var dealt := 0
 	for round in PokerRules.HOLE_CARDS:
 		for pid in order:
@@ -97,17 +96,23 @@ func deal_hole(order: Array, p_my_pid: int, my_cards: Array) -> void:
 
 
 func _deal_one(card: Card3D, pid: int, index: int, delay: float) -> void:
+	# 每一步都先确认这张牌还归这手牌管:半路弃牌、亮牌、对账、收牌拿走了就不再动它
 	var epoch := _epoch
 	await _wait(delay)
-	if epoch != _epoch or not is_instance_valid(card) or not world.patrons.has(pid):
+	if not _still_held(card, pid, epoch) or not world.patrons.has(pid):
 		return
 	var fan: Node3D = world.patrons[pid].fan
 	card.visible = true
 	sfx.emit("deal")
 	_fly(card, fan.global_transform * CardTable.fan_slot(index, PokerRules.HOLE_CARDS, 0.0), DEAL_FLIGHT, FLIGHT_ARC * 1.5)
 	await _wait(DEAL_FLIGHT)
-	if epoch == _epoch and is_instance_valid(card) and is_instance_valid(fan):
+	if _still_held(card, pid, epoch) and is_instance_valid(fan):
 		card.reparent(fan, true)
+
+
+func _still_held(card: Variant, pid: int, epoch: int) -> bool:
+	# card 不标类型:已释放的牌传给 Card3D 类型的参数本身就是脚本错误
+	return epoch == _epoch and is_instance_valid(card) and _held.get(pid, []).has(card)
 
 
 func deal_board(cards: Array, first_index: int) -> void:
@@ -132,7 +137,7 @@ func deal_board(cards: Array, first_index: int) -> void:
 func _deal_board_card(card: Card3D, slot: int, delay: float) -> void:
 	var epoch := _epoch
 	await _wait(delay)
-	if epoch != _epoch or not is_instance_valid(card):
+	if epoch != _epoch or not is_instance_valid(card) or _board[slot] != card:
 		return
 	card.visible = true
 	sfx.emit("deal")
@@ -140,7 +145,7 @@ func _deal_board_card(card: Card3D, slot: int, delay: float) -> void:
 	face_down.basis = face_down.basis * Basis(Vector3.BACK, PI)
 	_fly(card, global_transform * face_down, BOARD_FLIGHT, FLIGHT_ARC)
 	await _wait(BOARD_FLIGHT)
-	if epoch != _epoch or not is_instance_valid(card):
+	if epoch != _epoch or not is_instance_valid(card) or _board[slot] != card:
 		return
 	sfx.emit("flip")
 	card.set_meta(FLIGHT_META, card.flip_to_face(BOARD_FLIP, 0.04))
@@ -345,28 +350,6 @@ func _present_my_fan() -> void:
 		return
 	var seat := world.seat_transform(world.seat_angles[my_pid])
 	world.patrons[my_pid].fan.transform = PokerLayout.fan_transform(seat, world.third_person_view(my_pid).origin)
-
-
-func _build_rack() -> void:
-	# 公共牌架:斜面托板与公共牌同角度、垫在牌下面;底座把托板撑到牌架高度;前沿托条挡住牌的下边
-	var rack := MeshKit.pivot(self, Vector3.ZERO, "BoardRack")
-	var tilt := deg_to_rad(PokerLayout.BOARD_TILT_DEG)
-	var width := PokerLayout.board_width() + RACK_MARGIN * 2.0
-	var card_len := Card3D.HEIGHT * PokerLayout.BOARD_SCALE
-	var front := PokerLayout.board_front_z()
-	var base_y := SeatLayout.TABLE_TOP + PokerLayout.RACK_HEIGHT
-	var board_mid := Vector3(0, base_y, front) + Basis(Vector3.RIGHT, tilt) * Vector3(0, -RACK_THICKNESS / 2.0, -card_len / 2.0)
-	MeshKit.add(rack, MeshKit.box(Vector3(width, RACK_THICKNESS, card_len + RACK_MARGIN)), WorldMaterials.wood("dark"),
-		board_mid, Vector3(rad_to_deg(tilt), 0, 0))
-	var wedge := MeshKit.prism(Vector3(card_len * cos(tilt), card_len * sin(tilt), width))
-	wedge.left_to_right = 1.0
-	MeshKit.add(rack, wedge, WorldMaterials.wood("table"),
-		Vector3(0, base_y + card_len * sin(tilt) / 2.0 - RACK_THICKNESS, front - card_len * cos(tilt) / 2.0), Vector3(0, 90, 0))
-	MeshKit.add(rack, MeshKit.box(Vector3(width, PokerLayout.RACK_HEIGHT, card_len * cos(tilt) + RACK_MARGIN)),
-		WorldMaterials.wood("dark"), Vector3(0, SeatLayout.TABLE_TOP + PokerLayout.RACK_HEIGHT / 2.0,
-		front - card_len * cos(tilt) / 2.0))
-	MeshKit.add(rack, MeshKit.box(Vector3(width, PokerLayout.RACK_HEIGHT + LIP_HEIGHT, 0.012)), WorldMaterials.brass(),
-		Vector3(0, SeatLayout.TABLE_TOP + (PokerLayout.RACK_HEIGHT + LIP_HEIGHT) / 2.0, front + 0.008))
 
 
 # —— 工具 ——

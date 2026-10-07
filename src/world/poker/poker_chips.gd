@@ -304,6 +304,8 @@ func _set_amount(nodes: Dictionary, pid: int, amount: int) -> void:
 			nodes.erase(pid)
 		return
 	if not nodes.has(pid):
+		if not world.seat_angles.has(pid):
+			return   # 没有座位的人不建:摆不到位置,会留在桌心底下
 		nodes[pid] = _new_stack()
 		# Dictionary 的 == 比内容,这里要比是不是同一个
 		_pin(nodes[pid], pid, _stack_spot(pid) if is_same(nodes, _stacks) else _bet_spot(pid))
