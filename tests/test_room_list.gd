@@ -23,12 +23,9 @@ func test_encode_decode_roundtrip_normalizes_numbers():
 	assert_true(decoded["open"])
 
 
-func test_decode_rejects_garbage_wrong_version_and_missing_fields():
+func test_decode_rejects_garbage_and_missing_fields():
 	assert_true(RoomList.decode("not json".to_utf8_buffer()).is_empty())
 	assert_true(RoomList.decode("[1,2]".to_utf8_buffer()).is_empty())
-	var wrong_version := _info()
-	wrong_version["version"] = Protocol.VERSION + 1
-	assert_true(RoomList.decode(RoomList.encode(wrong_version)).is_empty())
 	var missing := _info()
 	missing.erase("port")
 	assert_true(RoomList.decode(RoomList.encode(missing)).is_empty())
@@ -133,3 +130,30 @@ func test_clear_empties_list():
 	list.ingest(_info(), "192.168.1.20", 0.0)
 	list.clear()
 	assert_eq(list.rooms(), [])
+
+
+func test_other_protocol_versions_are_kept_but_marked_incompatible():
+	# 房主版本更新时也要列出来,界面据此提示从房主那里更新
+	var newer := _info()
+	newer["version"] = Protocol.VERSION + 1
+	var decoded := RoomList.decode(RoomList.encode(newer))
+	assert_false(decoded["compatible"])
+	assert_true(RoomList.decode(RoomList.encode(_info()))["compatible"])
+
+
+func test_build_fields_default_for_old_hosts_and_are_type_checked():
+	var old := RoomList.decode(RoomList.encode(_info()))
+	assert_eq(old["build"], 0)
+	assert_eq(old["ver"], "")
+	assert_false(old["update"])
+	var info := _info()
+	info.merge({"build": 12, "ver": "0.6.0\n", "update": true, "plat": "macos"})
+	var decoded := RoomList.decode(RoomList.encode(info))
+	assert_eq(decoded["build"], 12)
+	assert_eq(decoded["ver"], "0.6.0")
+	assert_true(decoded["update"])
+	assert_eq(decoded["plat"], "macos")
+	for bad in [{"build": "12"}, {"ver": 6}, {"update": "yes"}, {"plat": 1}]:
+		var forged := _info()
+		forged.merge(bad, true)
+		assert_true(RoomList.decode(RoomList.encode(forged)).is_empty(), str(bad))

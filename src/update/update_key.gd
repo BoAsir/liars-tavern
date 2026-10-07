@@ -1,0 +1,13 @@
+class_name UpdateKey
+# 更新签名公钥(tools/make_update_key.gd 生成)。私钥只在发布者电脑上,不进仓库。
+
+
+const PUBLIC_PEM := """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwUSNCu8wRAUoGR6cKDKj
+JIttKoysyGEYVQACQJuM5OHEIP5++GG90dS4of7y+rF3cb61Z/jtUKRqf97Nb/S+
+ngsh6X0ogGM2UjvVFSGFcYLNGukd4EZ8DKSJ0HgYphfqmuzxM8MgrQZHsrD8tWXW
+/t+Do93haosJo++MjS776BScW78ZSsrChj9FwpTtf4QfKScv5uZLKj0aTX2d9EGc
+TBpo920zzIImTZX7QN5CxS1xcNekrk5iFgvDh5k84U8gq2g6fdD0TRU1kmRt5TVT
+FCZUhoi1+8khgEYt1GaFngPEElXBZEsivwpGrOoNvp53UgvsDLq47uIt08I40WAP
+sQIDAQAB
+-----END PUBLIC KEY-----"""

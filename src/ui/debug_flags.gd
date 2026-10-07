@@ -11,6 +11,7 @@ extends Node
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
+#   --update-from=IP:端口 从这个房主下载更新并装好,装好后打印 UPDATE_READY 退出(失败退出码 1)
 
 
 const BOT_THINK := Vector2(0.6, 1.6)
@@ -51,6 +52,11 @@ func _ready() -> void:
 		set_process(false)
 		return
 	print("[debug] flags: ", opts)
+	print("[debug] build=%d active_update=%d installer=%d" % [BuildInfo.build(), UpdateBoot.active_build,
+		UpdateBoot.installer["build"]])
+	if opts.has("update-from"):
+		_update_from(opts["update-from"])
+		return
 	if opts.has("fast"):
 		Engine.time_scale = float(opts["fast"]) if opts["fast"] != "true" else 3.0
 	Net.joined_lobby.connect(_on_joined)
@@ -103,6 +109,24 @@ func _process(delta: float) -> void:
 		return
 	_think_timer = 999.0
 	_bot_act(screen)
+
+
+func _update_from(address: String) -> void:
+	var addr := Protocol.parse_address(address)
+	Updater.changed.connect(_on_update_changed)
+	Updater.check(Updater.lan_source(addr["ip"], addr["port"]), "房主")
+
+
+func _on_update_changed() -> void:
+	match Updater.state:
+		Updater.State.AVAILABLE:
+			Updater.download()
+		Updater.State.READY:
+			print("[debug] UPDATE_READY build=%d" % Updater.manifest["build"])
+			get_tree().quit(0)
+		Updater.State.BLOCKED, Updater.State.FAILED:
+			print("[debug] UPDATE_FAIL ", Updater.message)
+			get_tree().quit(1)
 
 
 func _fidget(delta: float) -> void:

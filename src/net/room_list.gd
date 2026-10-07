@@ -5,6 +5,8 @@ class_name RoomList
 const MAX_TEXT := 32
 # 局域网里不会有这么多真实房间;防止伪造报文(每包一个新 id)把列表与界面撑爆
 const MAX_ROOMS := 64
+const MAX_BUILD := 1_000_000
+const MAX_VERSION_TEXT := 16
 const TEXT_FIELDS := ["id", "room", "host"]
 const INT_FIELDS := ["players", "max", "version", "port"]
 
@@ -17,7 +19,7 @@ static func encode(info: Dictionary) -> PackedByteArray:
 
 
 static func decode(bytes: PackedByteArray) -> Dictionary:
-	# 不可信的网络输入:字段缺失、类型不符、版本不同、端口或人数越界一律丢弃
+	# 不可信的网络输入:字段缺失、类型不符、端口或人数越界一律丢弃
 	var json := JSON.new()
 	if json.parse(bytes.get_string_from_utf8()) != OK:
 		return {}
@@ -34,8 +36,8 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		if not (value is float or value is int):
 			return {}
 		out[key] = int(value)
-	if out["version"] != Protocol.VERSION:
-		return {}
+	# 协议版本不同的房间也留着(标成不兼容):房主版本更新时,界面可以提示从房主那里更新
+	out["compatible"] = out["version"] == Protocol.VERSION
 	if out["port"] < 1 or out["port"] > 65535:
 		return {}
 	if not _counts_valid(out["players"], out["max"]):
@@ -44,6 +46,21 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 	if not open is bool:
 		return {}  # 和其他字段一样按类型丢弃:非 bool 与 bool 比较在 GDScript 里是运行时错误
 	out["open"] = open
+	return _decode_build(parsed, out)
+
+
+static func _decode_build(parsed: Dictionary, out: Dictionary) -> Dictionary:
+	# 版本信息是后加的字段:旧房主不带,缺了按 0 / 空串 / 不提供更新处理;带了但类型不对照样整包丢弃
+	var build = parsed.get("build", 0)
+	var ver = parsed.get("ver", "")
+	var update = parsed.get("update", false)
+	var plat = parsed.get("plat", "")
+	if not (build is float or build is int) or not ver is String or not update is bool or not plat is String:
+		return {}
+	out["plat"] = Protocol.sanitize_text(plat, MAX_VERSION_TEXT)
+	out["build"] = clampi(int(build), 0, MAX_BUILD)
+	out["ver"] = Protocol.sanitize_text(ver, MAX_VERSION_TEXT)
+	out["update"] = update
 	return out
 
 

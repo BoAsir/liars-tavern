@@ -23,6 +23,7 @@ var _mute_button: Button
 var _scroll: ScrollContainer
 var _panel: PanelContainer
 var _busy := false
+var _last_join := ""    # 最近一次尝试加入的地址:被拒"版本不匹配"时据此去问房主要更新
 var _scan_dots := 0.0
 
 
@@ -39,6 +40,7 @@ func _ready() -> void:
 	var listening := Discovery.start_listening(self)
 	_scan_label.text = "正在搜索局域网房间" if listening else "无法监听局域网广播(端口被占用),请用 IP 直连"
 	_refresh_rooms(Discovery.get_rooms())
+	Updater.check_feed()
 	_play_intro()
 	_focus_default.call_deferred()
 
@@ -81,6 +83,7 @@ func _build() -> void:
 	box.add_theme_constant_override("separation", ROW_GAP)
 	_panel.add_child(box)
 	_build_title(box)
+	box.add_child(UpdateBanner.new())
 	_build_identity(box)
 	_build_rooms(box)
 	_build_direct(box)
@@ -166,7 +169,7 @@ func _build_footer(box: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
 	var addresses := Lan.local_private_ipv4s()
-	var version := UiTheme.label("协议 v%d · %s" % [Protocol.VERSION,
+	var version := UiTheme.label("v%s · 协议 v%d · %s" % [BuildInfo.version(), Protocol.VERSION,
 		"本机 " + ", ".join(addresses) if not addresses.is_empty() else "未检测到局域网地址"], 15, UiTheme.MUTED)
 	version.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	version.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 多网卡时地址很长:换行,不撑宽面板
@@ -243,14 +246,36 @@ func _room_row(room: Dictionary) -> Control:
 	row.add_child(_room_info(room))
 	var seats := clamp_seats(room["players"], room["max"])
 	row.add_child(UiTheme.label(seat_dots(seats), 18, UiTheme.BRASS))
-	var join := UiTheme.button("加入")
-	join.add_theme_font_size_override("font_size", 18)
-	if not room["open"]:
-		join.disabled = true
-		join.text = "对局中" if seats.x < seats.y else "已满"
-	join.pressed.connect(_join.bind(Protocol.format_address(room["ip"], room["port"])))
-	row.add_child(join)
+	var newer := offers_update(room, BuildInfo.build())
+	if newer:
+		var update := UiTheme.button("更新" if room["compatible"] else "更新后加入", not room["compatible"])
+		update.add_theme_font_size_override("font_size", 15 if room["compatible"] else 18)
+		update.tooltip_text = "房主是新版本 v%s,可以直接从房主这里更新" % room["ver"]
+		update.pressed.connect(_update_from.bind(room["ip"], room["port"], room["host"]))
+		row.add_child(update)
+	if room["compatible"] or not newer:
+		var join := UiTheme.button("加入")
+		join.add_theme_font_size_override("font_size", 18)
+		if not room["compatible"]:
+			join.disabled = true
+			join.text = "版本不同"
+			join.tooltip_text = "房主的游戏版本和你的不一样,请让版本旧的一方更新"
+		elif not room["open"]:
+			join.disabled = true
+			join.text = "对局中" if seats.x < seats.y else "已满"
+		join.pressed.connect(_join.bind(Protocol.format_address(room["ip"], room["port"])))
+		row.add_child(join)
 	return panel
+
+
+static func offers_update(room: Dictionary, my_build: int, my_platform := BuildInfo.platform()) -> bool:
+	# 房主提供更新文件、和自己同一平台、且比自己新:列表里给出"更新"按钮
+	return room.get("update", false) and room.get("plat", "") == my_platform and room.get("build", 0) > my_build
+
+
+func _update_from(ip: String, port: int, host_name: String) -> void:
+	Sfx.play("ui_click")
+	Updater.check(Updater.lan_source(ip, port), "房主 %s" % host_name)
 
 
 func _room_info(room: Dictionary) -> Control:
@@ -301,6 +326,7 @@ func _join(address: String) -> void:
 		return
 	Sfx.play("ui_click")
 	_set_busy(true)
+	_last_join = address
 	_show_status("正在连接 %s …" % address, UiTheme.PARCHMENT_DIM)
 	Net.join_game(pname, address)
 
@@ -309,6 +335,11 @@ func _on_join_failed(reason: String) -> void:
 	_set_busy(false)
 	_show_status(reason, UiTheme.LIE)
 	Sfx.play("thud")
+	if reason.contains("版本"):
+		# 版本不匹配:问问房主那里有没有能用的新版本(房主比自己旧时横幅会说明)
+		var addr := Protocol.parse_address(_last_join)
+		if addr["ok"]:
+			Updater.check(Updater.lan_source(addr["ip"], addr["port"]), "房主")
 	if not Discovery.is_listening():
 		Discovery.start_listening(self)
 

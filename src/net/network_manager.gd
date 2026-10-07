@@ -79,6 +79,8 @@ func host_game(pname: String, room_name: String, preferred_port := 0) -> Error:
 	_session_active = true
 	_lobby = LobbyModel.new()
 	_lobby.add_host(player_name)
+	# 游戏端口号的 TCP 上顺带提供更新文件(ENet 走 UDP,互不占用)
+	Updater.start_serving(_port)
 	Discovery.start_broadcast(_room_announcement)
 	joined_lobby.emit()
 	_broadcast_lobby()
@@ -110,6 +112,7 @@ func leave() -> void:
 	is_host = false
 	in_game = false
 	Discovery.stop_broadcast()
+	Updater.stop_serving()
 	_turn_timer.stop()
 	_join_timer.stop()
 	_anim_left = 0.0
@@ -158,6 +161,10 @@ func _room_announcement() -> Dictionary:
 		"version": Protocol.VERSION,
 		"port": _port,
 		"open": not in_game and _lobby != null and _lobby.size() < Protocol.MAX_PLAYERS,
+		"build": BuildInfo.build(),
+		"ver": BuildInfo.version(),
+		"update": Updater.is_serving(),   # 能从这个房主这里下载他正在运行的版本
+		"plat": BuildInfo.platform(),     # 更新包按平台分:只有同平台的玩家能从这里更新
 	}
 
 

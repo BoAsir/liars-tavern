@@ -8,6 +8,8 @@ config/icon="res://icon.png"
 
 [autoload]
 
+UpdateBoot="*res://src/update/update_boot.gd"
+Updater="*res://src/update/updater.gd"
 Discovery="*res://src/net/discovery.gd"
 Net="*res://src/net/network_manager.gd"
 Sfx="*res://src/ui/sfx.gd"

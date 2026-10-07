@@ -2,3 +2,5 @@
 .DS_Store
 .claude/worktrees/
 build/
+# 更新签名私钥绝不进仓库
+*.pem
