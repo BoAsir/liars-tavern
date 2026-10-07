@@ -130,6 +130,13 @@ func _flat_radius(node: Node3D) -> float:
 	return Vector2(node.position.x, node.position.z).length()
 
 
+func _tween_wait(seconds: float) -> void:
+	# 与换座补间同一个时钟:测试刚开始那一帧可能很长,按物理帧数的 wait_seconds 会落后
+	var tween := create_tween()
+	tween.tween_interval(seconds)
+	await tween.finished
+
+
 func test_poker_table_seats_patrons_further_out():
 	world.configure_table(POKER_R)
 	_arrange([1, 2, 3, 4, 5, 6, 7, 8])
@@ -228,7 +235,7 @@ func test_seat_angle_now_tracks_the_sliding_patron():
 	world.configure_table(POKER_R)
 	_arrange([1, 2, 3, 4])
 	_arrange([1, 3, 4])
-	await wait_seconds(TableWorld.SEAT_MOVE / 2.0)
+	await _tween_wait(TableWorld.SEAT_MOVE / 2.0)
 	var now := world.seat_angle_now(3)
 	assert_almost_eq(now, TableWorld.angle_of(world.patrons[3].position), 0.0001)
 	assert_between(now, deg_to_rad(120.0) + 0.01, PI - 0.01, "途中在旧座位与新座位之间")

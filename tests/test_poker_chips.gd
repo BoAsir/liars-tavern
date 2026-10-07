@@ -10,6 +10,7 @@ const R := SeatLayout.POKER_TABLE_RADIUS
 const SETTLE := 0.15   # 秒:补间结束后再等一会儿
 const FRAME_LAG := 0.08   # 米:换座滑动最快时一帧走过的距离(留足余量)
 const MID_SLIDE := 0.15   # 米:滑到一半时离起点、终点都至少这么远
+const TIMING_SLACK := 0.1   # 秒
 
 var world: TableWorld
 var chips: PokerChips
@@ -42,6 +43,26 @@ func _stack_nodes() -> Array:
 
 func _angle(pid: int) -> float:
 	return world.seat_angles[pid]
+
+
+func _assert_takes(seconds: float, action: Callable) -> void:
+	# 用同一帧建的补间计时:与被测动画同一个时钟(测试刚开始那一帧可能很长,补间一步就跨过去,
+	# 按物理帧数的 wait_seconds 会落后)。早于 seconds − TIMING_SLACK 没走完,晚于 seconds + TIMING_SLACK 已走完
+	var done := [false]
+	var run := func():
+		await action.call()
+		done[0] = true
+	run.call()
+	await _tween_wait(seconds - TIMING_SLACK)
+	assert_false(done[0], "不早于 %.2f 秒走完" % seconds)
+	await _tween_wait(TIMING_SLACK * 2.0)
+	assert_true(done[0], "%.2f 秒内走完" % seconds)
+
+
+func _tween_wait(seconds: float) -> void:
+	var tween := create_tween()
+	tween.tween_interval(seconds)
+	await tween.finished
 
 
 # —— 对账 ——
@@ -107,9 +128,7 @@ func test_every_chip_mesh_skips_shadows():
 
 func test_bet_slides_new_chips_from_the_stack_to_the_bet():
 	chips.sync([_player(1, 2000), _player(2, 2000)], [])
-	var started := Time.get_ticks_msec()
-	await chips.bet(1, 60, 1940)
-	assert_almost_eq((Time.get_ticks_msec() - started) / 1000.0, PokerChips.BET_SLIDE, 0.1)
+	await _assert_takes(PokerChips.BET_SLIDE, func(): await chips.bet(1, 60, 1940))
 	assert_eq([chips.bet_amount(1), chips.stack_amount(1)], [60, 1940])
 	assert_eq(sounds, ["chips"])
 	assert_eq(_stack_nodes().size(), 3, "飞行的临时筹码已收走")
@@ -211,7 +230,7 @@ func test_stacks_follow_patrons_sliding_to_new_seats():
 	chips.remove_seat(2)
 	var start := PokerLayout.stack_position(deg_to_rad(180.0), R)
 	var end := PokerLayout.stack_position(_angle(3), R)
-	await wait_seconds(TableWorld.SEAT_MOVE / 2.0)
+	await _tween_wait(TableWorld.SEAT_MOVE / 2.0)
 	# 补间在各节点的 _process 之后才走:筹码堆最多落后酒客一帧
 	var mid := PokerLayout.stack_position(world.seat_angle_now(3), R)
 	assert_almost_eq(chips.stack_node(3).position, mid, Vector3.ONE * FRAME_LAG, "途中跟着酒客")
@@ -233,9 +252,8 @@ func test_button_moves_round_the_table_to_the_new_seat():
 
 
 func test_first_button_appears_in_place():
-	var started := Time.get_ticks_msec()
-	await chips.move_button(2)
-	assert_lt((Time.get_ticks_msec() - started) / 1000.0, 0.1, "第一次出现直接落位")
+	chips.move_button(2)
+	assert_true(chips.button_node().visible, "第一次出现直接落位")
 	assert_almost_eq(chips.button_node().position, PokerLayout.button_position(_angle(2), R), Vector3.ONE * 0.0001)
 
 
