@@ -56,6 +56,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build()
+	_nav.custom_minimum_size.x = _widest_nav_width()
 	resized.connect(_fit_panel)
 	_fit_panel()
 	show_section(_bookmark())
@@ -339,9 +340,8 @@ func _fill_nav() -> void:
 	_nav_buttons.clear()
 	var group := ButtonGroup.new()
 	for i in _sections.size():
-		var numeral: String = NUMERALS[i] if i < NUMERALS.size() else str(i + 1)
 		var button := Button.new()
-		button.text = "%s   %s" % [numeral, _sections[i]["title"]]
+		button.text = _nav_label(i, _sections[i]["title"])
 		button.toggle_mode = true
 		button.button_group = group
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -353,6 +353,27 @@ func _fill_nav() -> void:
 		button.mouse_entered.connect(Sfx.play.bind("ui_hover"))
 		_nav.add_child(button)
 		_nav_buttons.append(button)
+
+
+func _widest_nav_width() -> float:
+	# 目录宽度取两本书里最长的章节名:切书时目录与正文不左右跳。
+	# 按目录按钮实际用的字体与边距量(界面字体随系统回退,写死宽度换台机器就不准)
+	var probe := _nav_buttons[0]
+	var font := probe.get_theme_font("font")
+	var font_size := probe.get_theme_font_size("font_size")
+	var padding := probe.get_theme_stylebox("normal").get_minimum_size().x
+	var widest := NAV_WIDTH
+	for book in RulebookContent.BOOKS:
+		var sections := RulebookContent.sections(book)
+		for i in sections.size():
+			var text := _nav_label(i, sections[i]["title"])
+			widest = maxf(widest, font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + padding)
+	return ceilf(widest)
+
+
+static func _nav_label(index: int, title: String) -> String:
+	var numeral: String = NUMERALS[index] if index < NUMERALS.size() else str(index + 1)
+	return "%s   %s" % [numeral, title]
 
 
 func _style_nav_button(button: Button) -> void:

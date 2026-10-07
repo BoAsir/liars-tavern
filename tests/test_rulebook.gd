@@ -140,6 +140,17 @@ func test_switching_books_rebuilds_nav_and_redraws_from_page_zero():
 	assert_false(book._tabs[LIARS].button_pressed)
 
 
+func test_chapter_list_keeps_its_width_across_books():
+	# 目录宽度按两本书里最长的章节名定:切书时目录与正文不左右跳
+	var widths := []
+	for book_id in RulebookContent.BOOKS:
+		book.show_book(book_id)
+		widths.append(book._nav.get_combined_minimum_size().x)
+		for button in book._nav_buttons:
+			assert_lte(button.get_combined_minimum_size().x, book._nav.custom_minimum_size.x, button.text)
+	assert_eq(widths[0], widths[1])
+
+
 func test_switching_books_frees_the_old_chapter_buttons_at_once():
 	# 旧目录按钮当场释放:留到帧末的话,同一帧里还挂着一批移出树的孤儿按钮
 	var old := book._nav_buttons.duplicate()
