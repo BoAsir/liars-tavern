@@ -1,8 +1,8 @@
 class_name Revolver
-# 六膛左轮:整局装 1 发子弹于随机膛位,空枪后弹巢前进。
+# 五膛左轮:整局装 1 发子弹于随机膛位,空枪后弹巢前进,第 5 枪必中。
 
 
-const CHAMBERS := 6
+const CHAMBERS := 5
 
 var bullet_chamber: int
 var next_chamber := 1

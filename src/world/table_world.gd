@@ -7,9 +7,9 @@ extends Node3D
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
 const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
-const THIRD_PERSON_BACK := 2.1
-const THIRD_PERSON_HEIGHT := 1.92
-const THIRD_PERSON_SIDE := 0.55
+const THIRD_PERSON_BACK := 2.45
+const THIRD_PERSON_HEIGHT := 2.05
+const THIRD_PERSON_SIDE := 0.6
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
 # 翻牌机位朝出牌者偏转的权重(0 = 只看翻牌行,1 = 只看出牌者头部)

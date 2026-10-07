@@ -2,7 +2,7 @@ class_name Protocol
 # 网络协议常量与地址解析。版本不匹配的客户端会被拒绝加入。
 
 
-const VERSION := 3   # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移
+const VERSION := 4   # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了)
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800

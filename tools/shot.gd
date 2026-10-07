@@ -44,7 +44,8 @@ func _place_camera(rig: CameraRig, view: String) -> void:
 	match view:
 		"seat":
 			# 与 TableWorld.third_person_view(本机座位)一致的越肩机位
-			rig.snap(Vector3(0.55, 1.92, 2.1), Vector3(0, top, -0.12))
+			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK),
+				Vector3(0, top, -0.12))
 			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
 		"selfshot":
 			rig.snap(Vector3(-0.35, 1.42, 0.15), Vector3(0, 1.19, 1.37))

@@ -142,10 +142,10 @@ func _held_neck_direction() -> Vector3:
 
 
 static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Vector3:
-	# 按住方向键时头朝那个方向持续移动(斜向不更快),最远到 NECK_REACH;松开就停在原处,按反方向收回
+	# 按住方向键时头朝那个方向持续移动(斜向不更快),范围同 Patron.clamp_neck;松开就停在原处,按反方向收回
 	if held == Vector3.ZERO:
 		return current
-	return (current + held.normalized() * NECK_SPEED * delta).limit_length(Patron.NECK_REACH)
+	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta)
 
 
 func _follow_remote_gazes(delta: float) -> void:
