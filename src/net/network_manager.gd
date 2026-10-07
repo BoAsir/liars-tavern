@@ -278,8 +278,9 @@ func _handle_join_request(id: int, pname: String, version: int) -> void:
 		_disconnect_peer_later(id)
 		return
 	_lobby.add_member(id, pname)
+	# 获准里带上玩法:客户端一进等待厅就要按玩法摆桌,带 meta 的名单比它晚到。
 	# 对局中入座(德州)的人先不进等待厅:客户端保持「加入中」,等随后发来的牌局信息
-	_send_to(id, "rpc_join_accepted", [{"in_game": in_game}])
+	_send_to(id, "rpc_join_accepted", [{"in_game": in_game, "mode": game_mode}])
 	_broadcast_lobby()
 
 
@@ -300,10 +301,12 @@ func rpc_join_denied(reason: String) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func rpc_join_accepted(info: Dictionary) -> void:
-	# info = {"in_game": bool}。对局中入座:不进等待厅,「加入中」与加入计时都保持,
-	# 直到 rpc_game_started 到达;超时按「房主没有发来牌局信息」失败
+	# info = {"in_game": bool, "mode": String}。玩法在发 joined_lobby 之前写好:等待厅一建起来就按它摆桌。
+	# 对局中入座:不进等待厅,「加入中」与加入计时都保持,直到 rpc_game_started 到达;
+	# 超时按「房主没有发来牌局信息」失败
 	if not _joining:
 		return
+	_take_mode(info.get("mode"))
 	var late = info.get("in_game", false)
 	if late is bool and late:
 		_awaiting_game = true
@@ -316,6 +319,13 @@ func _finish_join() -> void:
 	_joining = false
 	_awaiting_game = false
 	_join_timer.stop()
+
+
+func _take_mode(mode: Variant) -> void:
+	# 客户端的玩法来自房主(获准、等待厅 meta、开局 info),是不可信输入:
+	# 认识的才写入,不认识的忽略并保留当前玩法
+	if GameMode.is_valid(mode):
+		game_mode = mode
 
 
 # —— 等待厅 ——
@@ -370,10 +380,7 @@ func rpc_lobby_state(players: Array, meta: Dictionary) -> void:
 
 
 func _apply_lobby(players: Array, meta: Dictionary) -> void:
-	# 客户端的玩法来自这里:先校验,不认识的值忽略(保留当前玩法)
-	var mode = meta.get("mode")
-	if GameMode.is_valid(mode):
-		game_mode = mode
+	_take_mode(meta.get("mode"))
 	lobby_players = players
 	lobby_meta = meta
 	lobby_updated.emit(players)
@@ -434,11 +441,11 @@ func start_game() -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func rpc_game_started(p_seats: Array, info: Dictionary) -> void:
-	# info = {"mode", "late"}:发出 game_started 之前玩法已设好;对局中入座的人到这里才算加入完成,
-	# 直接进牌桌、不经过等待厅
-	var mode = info.get("mode")
-	if GameMode.is_valid(mode):
-		game_mode = mode
+	# info = {"mode", "late"}:发出 game_started 之前玩法已设好。对局中入座的人到这里才算加入完成,
+	# 直接进牌桌、不经过等待厅;房主总是先发获准(可靠有序),没获准就到的牌局信息不理
+	if _joining and not _awaiting_game:
+		return
+	_take_mode(info.get("mode"))
 	if _joining:
 		_finish_join()
 	in_game = true

@@ -147,8 +147,17 @@ func test_join_request_is_accepted_into_the_lobby():
 	net._handle_join_request(20, "新人", Protocol.VERSION)
 	assert_true(net._lobby.has(20))
 	assert_eq(_methods_sent_to(20), ["rpc_join_accepted", "rpc_lobby_state"], "先告诉他获准,再发名单")
-	assert_eq(_sent_to(20)[0][2], [{"in_game": false}])
+	assert_eq(_sent_to(20)[0][2], [{"in_game": false, "mode": GameMode.LIARS}])
 	assert_eq(net.lobby_players.size(), 2, "名单广播出去了")
+
+
+func test_acceptance_tells_the_client_the_mode():
+	# 等待厅一进来就要按玩法摆桌,名单(带 meta)比获准晚到
+	for mode in GameMode.ALL:
+		_host(mode)
+		net.sent = []
+		net._handle_join_request(21, "新人", Protocol.VERSION)
+		assert_eq(_sent_to(21)[0][2] if not _sent_to(21).is_empty() else [], [{"in_game": false, "mode": mode}], mode)
 
 
 func test_join_request_denials_keep_the_lobby_unchanged():
@@ -178,7 +187,7 @@ func test_running_poker_table_accepts_and_flags_the_late_joiner():
 	net._handle_join_request(50, "迟到", Protocol.VERSION)
 	assert_true(net._lobby.has(50))
 	assert_eq(_methods_sent_to(50).front(), "rpc_join_accepted")
-	assert_eq(_sent_to(50)[0][2], [{"in_game": true}], "客户端据此保持「加入中」,等牌局信息")
+	assert_eq(_sent_to(50)[0][2], [{"in_game": true, "mode": GameMode.HOLDEM}], "客户端据此保持「加入中」,等牌局信息")
 	net.in_game = false
 
 
@@ -216,15 +225,34 @@ func _begin_joining() -> void:
 
 func test_lobby_join_finishes_on_acceptance():
 	_begin_joining()
-	net.rpc_join_accepted({"in_game": false})
+	net.rpc_join_accepted({"in_game": false, "mode": GameMode.LIARS})
 	assert_false(net._joining)
 	assert_true(net._join_timer.is_stopped())
 	assert_signal_emitted(net, "joined_lobby")
 
 
+func test_client_knows_the_mode_when_it_enters_the_lobby():
+	# 等待厅在 joined_lobby 里建起来、立刻按玩法摆桌:玩法必须在发信号之前写好
+	_begin_joining()
+	var seen := []
+	net.joined_lobby.connect(func(): seen.append(net.game_mode))
+	net.rpc_join_accepted({"in_game": false, "mode": GameMode.SHORT_DECK})
+	assert_eq(seen, [GameMode.SHORT_DECK])
+
+
+func test_unknown_mode_in_the_acceptance_is_ignored():
+	for junk in [{"mode": "mahjong"}, {"mode": 7}, {"mode": null}, {}]:
+		net.game_mode = GameMode.DEFAULT
+		_begin_joining()
+		net.rpc_join_accepted({"in_game": false}.merged(junk))
+		assert_false(net._joining, str(junk))
+		assert_eq(net.game_mode, GameMode.DEFAULT, "不认识的玩法不写入:等名单的 meta 再定 %s" % str(junk))
+
+
 func test_late_joiner_stays_joining_until_the_table_arrives():
 	_begin_joining()
-	net.rpc_join_accepted({"in_game": true})
+	net.rpc_join_accepted({"in_game": true, "mode": GameMode.HOLDEM})
+	assert_eq(net.game_mode, GameMode.HOLDEM)
 	assert_true(net._joining, "对局中入座:还不算加入完成")
 	assert_false(net._join_timer.is_stopped(), "加入计时照走")
 	assert_signal_not_emitted(net, "joined_lobby")
@@ -238,9 +266,18 @@ func test_late_joiner_stays_joining_until_the_table_arrives():
 	assert_signal_not_emitted(net, "joined_lobby", "迟到者直接进牌桌,不经过等待厅")
 
 
+func test_table_info_before_acceptance_is_ignored():
+	# 房主总是先发获准再发牌局信息(可靠有序);没获准就到的牌局信息不能把人带上牌桌
+	_begin_joining()
+	net.rpc_game_started([{"pid": 1, "name": "房主"}], {"mode": GameMode.HOLDEM, "late": true})
+	assert_true(net._joining)
+	assert_false(net.in_game)
+	assert_signal_not_emitted(net, "game_started")
+
+
 func test_late_joiner_times_out_when_the_table_never_arrives():
 	_begin_joining()
-	net.rpc_join_accepted({"in_game": true})
+	net.rpc_join_accepted({"in_game": true, "mode": GameMode.HOLDEM})
 	net._on_join_timeout()
 	assert_false(net._joining)
 	assert_signal_emitted_with_parameters(net, "join_failed", ["房主没有发来牌局信息"])
