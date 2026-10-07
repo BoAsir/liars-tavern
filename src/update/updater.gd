@@ -10,6 +10,7 @@ enum State { IDLE, CHECKING, AVAILABLE, BLOCKED, DOWNLOADING, READY, FAILED }
 
 const HEALTHY_FRAMES := 3      # 主场景先跑过这么多帧(主菜单已经画出来)
 const HEALTHY_SECONDS := 2.0   # 再稳稳跑这么久(真实时间,不受加速影响),才算更新后的内容启动成功
+const NO_UPDATE_ARG := "--no-update"   # 启动参数:丢掉更新、回到安装包自带的版本(由 UpdateBoot 处理)
 const DOWNLOAD_PART := "download.part"
 
 var state := State.IDLE
@@ -145,13 +146,18 @@ func download() -> void:
 
 func restart() -> void:
 	# 用同样的启动参数重开,启动引导会叠加刚装好的更新包
-	var args := OS.get_cmdline_args()
-	var user_args := OS.get_cmdline_user_args()
-	if not user_args.is_empty():
-		args.append("--")
-		args.append_array(user_args)
-	OS.set_restart_on_exit(true, args)
+	OS.set_restart_on_exit(true, restart_args(OS.get_cmdline_args(), OS.get_cmdline_user_args()))
 	get_tree().quit()
+
+
+static func restart_args(engine_args: PackedStringArray, user_args: PackedStringArray) -> PackedStringArray:
+	# 去掉 --no-update(与安装包里 UpdateBoot.SKIP_ARG 相同):带着它重开,刚装好的更新会被启动引导当场丢掉
+	var kept := Array(user_args).filter(func(arg: String) -> bool: return arg != NO_UPDATE_ARG)
+	var args := engine_args.duplicate()
+	if not kept.is_empty():
+		args.append("--")
+		args.append_array(PackedStringArray(kept))
+	return args
 
 
 # —— 房主转发 ——
