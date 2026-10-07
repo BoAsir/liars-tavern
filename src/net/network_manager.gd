@@ -153,20 +153,35 @@ func _create_server(preferred_port: int) -> Dictionary:
 
 
 func _room_announcement() -> Dictionary:
+	var cap := max_players()
+	var seated := _lobby.size() if _lobby != null else 0
+	var legacy_max := mini(cap, Protocol.LEGACY_MAX_PLAYERS)
 	return {
 		"id": _room_id,
 		"room": _room_name,
 		"host": player_name,
-		"players": _lobby.size() if _lobby != null else 0,
-		"max": Protocol.MAX_PLAYERS,
+		# 旧字段压在已发布的 v3 客户端接受的范围里(上限 4):旧玩家也看得到德州房间、能从房主更新;
+		# 真实人数与玩法上限在 v4 字段 seated/cap 里
+		"players": mini(seated, legacy_max),
+		"max": legacy_max,
+		"seated": seated,
+		"cap": cap,
+		"mode": game_mode,
+		"playing": in_game,
 		"version": Protocol.VERSION,
 		"port": _port,
-		"open": not in_game and _lobby != null and _lobby.size() < Protocol.MAX_PLAYERS,
+		"open": _lobby != null and seated < cap and (not in_game or _accepting_late_join()),
 		"build": BuildInfo.build(),
 		"ver": BuildInfo.version(),
 		"update": Updater.is_serving(),   # 能从这个房主这里下载他正在运行的版本
 		"plat": BuildInfo.platform(),     # 更新包按平台分:只有同平台的玩家能从这里更新
 	}
+
+
+func _accepting_late_join() -> bool:
+	# 对局中还收不收新玩家(规格 §3.3):德州现金局在会话没散局、没结算时收,骗子酒馆永远不收。
+	# 德州会话由网络会话部分接入(规格 §4.2),在那之前没有能接人的会话
+	return false
 
 
 # —— 连接生命周期 ——
@@ -253,7 +268,7 @@ func _join_denial(id: int, pname: String, version: int) -> String:
 		push_warning("拒绝连接 %d 的加入请求:昵称长度 %d 超过上限 %d"
 			% [id, pname.length(), Protocol.MAX_RAW_NAME_LENGTH])
 		return "昵称过长"
-	return _lobby.check_join(version, in_game)
+	return _lobby.check_join(version, in_game, game_mode, _accepting_late_join())
 
 
 @rpc("authority", "call_remote", "reliable")

@@ -244,7 +244,7 @@ func _room_row(room: Dictionary) -> Control:
 	row.add_theme_constant_override("separation", 12)
 	panel.add_child(row)
 	row.add_child(_room_info(room))
-	var seats := clamp_seats(room["players"], room["max"])
+	var seats := clamp_seats(room["seated"], room["cap"])
 	row.add_child(UiTheme.label(seat_dots(seats), 18, UiTheme.BRASS))
 	var newer := offers_update(room, BuildInfo.build())
 	if newer:

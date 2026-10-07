@@ -163,7 +163,7 @@ func _refresh(players: Array) -> void:
 		_list.add_child(_player_row(players[i], i))
 		_track_nameplate(players[i])
 	var ready_count := players.filter(func(p): return p["ready"]).size()
-	_status.text = "%d/%d 人 · %d 人已准备" % [players.size(), Protocol.MAX_PLAYERS, ready_count]
+	_status.text = "%d/%d 人 · %d 人已准备" % [players.size(), Net.max_players(), ready_count]
 	if players.size() < Protocol.MIN_PLAYERS:
 		_status.text += " · 至少 %d 人才能开局" % Protocol.MIN_PLAYERS
 	elif Net.is_host and not Net.can_start():
