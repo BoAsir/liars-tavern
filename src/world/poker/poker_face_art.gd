@@ -17,20 +17,28 @@ const SUIT_COLORS := [
 ]
 
 # —— 角标 ——
+# 两个角标各占一侧,中央花色夹在中间:点数框右下角(2 的底横、A 与 K 的右腿、Q 的尾巴)和「10」的「0」
+# 离中央花色最近,宽度与中央花色的大小一起定,保证留得出 MIN_CLEARANCE 的纸缝
 const RANK_HEIGHT := 140.0                # 约占牌高 38%:缩到 30×42 像素时仍有约 16 像素高
-const RANK_WIDTH := 78.0                  # 窄体:两个角标之间还要放中央花色
-const TEN_WIDTH := 104.0                  # 「10」两个字并排
+const RANK_WIDTH := 74.0                  # 窄体
+const TEN_WIDTH := 88.0                   # 「10」两个字并排,比单字宽
 const STROKE := 21.0                      # 笔画粗细:缩到 30×42 时仍有两个多像素
-const INDEX_ORIGIN := Vector2(15, 17)     # 左上角标点数框的左上角
-const INDEX_SUIT_HEIGHT := 48.0
-const INDEX_SUIT_GAP := 12.0              # 点数与下方花色的间距
+const TEN_STROKE := 18.0                  # 「10」挤在一格里:笔画稍细,两字之间与「0」的空心才留得出来
+const TEN_ONE_X := 0.13                   # 「1」的竖笔位置(单位框):左边留给短旗
+const TEN_ZERO_HALF_WIDTH := 0.23         # 「0」的半宽(单位框)
+const INDEX_ORIGIN := Vector2(12, 12)     # 左上角标点数框的左上角
+const INDEX_SUIT_HEIGHT := 46.0
+const INDEX_SUIT_GAP := 11.0              # 点数与下方花色的间距:角标花色正好与中央花色在同一条水平线上
 # —— 中央 ——
-const CENTER_SUIT_HEIGHT := 80.0
-const FACE_SUIT_HEIGHT := 62.0            # J/Q/K 的花色缩小,让出冠饰的位置
-const CROWN_SIZE := Vector2(62, 32)
+const CENTER_SUIT_HEIGHT := 76.0
+const FACE_SUIT_HEIGHT := 64.0            # J/Q/K 的花色缩小,让出冠饰的位置
+const CROWN_SIZE := Vector2(56, 30)
 const CROWN_GAP := 6.0
 const CROWN_POINTS := {PokerCard.JACK: 4, PokerCard.QUEEN: 5, PokerCard.KING: 3}
 const JEWEL_RADIUS := 4.5
+
+# 角标、中央花色与冠饰之间至少留这么宽的纸:缩到 30×42 像素(约 1/8.5)时还有一个多像素的缝,不粘成一团
+const MIN_CLEARANCE := 10.0
 
 const ARC_STEP := 0.12                    # 弧线每段约 7°:放大到 140 像素也看不出折线
 const CIRCLE_SEGMENTS := 40
@@ -124,18 +132,24 @@ static func crown_jewels(rect: Rect2, points: int) -> PackedVector2Array:
 
 static func rank_polygons(rank: int, box: Rect2) -> Array[PackedVector2Array]:
 	# 笔画中心线映射到点数框内缩半个笔画的范围,再加粗成圆头圆角的多边形:笔画外缘正好贴着框
-	var inner := box.grow(-STROKE / 2.0)
+	var half := rank_stroke(rank) / 2.0
+	var inner := box.grow(-half)
 	var polys: Array[PackedVector2Array] = []
 	for line in rank_strokes(rank):
 		var pts := PackedVector2Array()
 		for p in line:
 			pts.append(inner.position + p * inner.size)
-		polys.append_array(Geometry2D.offset_polyline(pts, STROKE / 2.0, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND))
+		polys.append_array(Geometry2D.offset_polyline(pts, half, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND))
 	return polys
 
 
+static func rank_stroke(rank: int) -> float:
+	return TEN_STROKE if rank == 10 else STROKE
+
+
 static func rank_strokes(rank: int) -> Array[PackedVector2Array]:
-	# 每个点数的笔画中心线,单位框 [0,1]²(y 向下)。闭合的圈拆成两半画,免得加粗时把圈里填实
+	# 每个点数的笔画中心线,单位框 [0,1]²(y 向下)。
+	# 围成圈的笔画要拆成几段分别加粗:一整条加粗时圈里会多出一个「洞」多边形,画家填色就把空心填实了
 	match rank:
 		2:
 			return [_chain([_arc(Vector2(0.5, 0.27), Vector2(0.5, 0.27), PI + 0.5, TAU + 0.6),
@@ -144,7 +158,8 @@ static func rank_strokes(rank: int) -> Array[PackedVector2Array]:
 			return [_arc(Vector2(0.5, 0.25), Vector2(0.46, 0.25), PI + 0.5, TAU + PI / 2.0 + 0.3),
 				_arc(Vector2(0.5, 0.72), Vector2(0.5, 0.28), PI * 1.5 - 0.3, TAU + PI / 2.0 + 0.9)]
 		4:
-			return [_pts([0.74, 1.0, 0.74, 0.0, 0.0, 0.68, 1.0, 0.68])]
+			# 竖笔单独一段:斜笔、横笔与竖笔围出的三角形空心才留得住
+			return [_pts([0.74, 1.0, 0.74, 0.0]), _pts([0.74, 0.0, 0.0, 0.68, 1.0, 0.68])]
 		5:
 			return [_chain([_pts([0.92, 0.0, 0.14, 0.0, 0.08, 0.45]),
 				_arc(Vector2(0.5, 0.69), Vector2(0.5, 0.31), PI * 1.5 - 0.95, TAU + PI / 2.0 + 0.9)])]
@@ -163,8 +178,9 @@ static func rank_strokes(rank: int) -> Array[PackedVector2Array]:
 			nine.append(_pts([1.0, 0.36, 0.4, 1.0]))
 			return nine
 		10:
-			var ten := _ring(Vector2(0.73, 0.5), Vector2(0.27, 0.5))
-			ten.append(_pts([0.0, 0.17, 0.2, 0.0, 0.2, 1.0]))
+			# 「1」只留一个短旗,「0」是窄椭圆:两字之间与「0」的空心都要在缩小后还看得出来
+			var ten := _ring(Vector2(1.0 - TEN_ZERO_HALF_WIDTH, 0.5), Vector2(TEN_ZERO_HALF_WIDTH, 0.5))
+			ten.append(_pts([0.0, 0.17, TEN_ONE_X, 0.0, TEN_ONE_X, 1.0]))
 			return ten
 		PokerCard.JACK:
 			return [_chain([_pts([0.36, 0.0, 0.92, 0.0, 0.92, 0.66]),

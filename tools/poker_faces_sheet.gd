@@ -1,6 +1,6 @@
 extends SceneTree
 # 德州牌面验收图(需要窗口渲染,不能 --headless):
-#   faces_full.png             52 张全尺寸(256×372)总览,一行一种花色
+#   faces_full.png             52 张全尺寸(256×372)总览,一行一种花色;faces_detail.png 几张难点牌原尺寸一排
 #   faces_40x58.png / _30x42   按 2D 小牌的实际过滤(带 mipmap 的线性过滤)缩到说明书与摊牌条的尺寸,1:1 像素
 #   faces_40x58_x3.png 等      上图按最近邻放大,逐像素看缩小后点数与花色是否一眼认得出(宽度不超过 2000,Read 不再缩)
 #   tavern_*.png(--tavern)    放进酒馆:吊灯暖光与牌面着色器下的公共牌(放大 1.8、倾斜 35°)与平放的整副牌,
@@ -9,6 +9,8 @@ extends SceneTree
 # 用法:godot --path . -s tools/poker_faces_sheet.gd -- --out=/tmp/faces [--tavern]
 
 
+# 原尺寸细看的几张(一排不超过 2000 像素宽):离中央最近的 10♥ 2♥ A♥、带冠饰的 Q♣ K♣、有空心的 4♠、倒过来像 9 的 6♠
+const DETAIL_CARDS := [[10, 1], [2, 1], [14, 1], [12, 3], [13, 3], [4, 0], [6, 0]]
 const SMALL_SIZES := [Vector2i(40, 58), Vector2i(30, 42)]
 const SMALL_ZOOMS := [3, 4]                 # 与 SMALL_SIZES 对应的放大倍数
 const GAP := 4
@@ -51,6 +53,7 @@ func _run() -> void:
 		quit(1)
 		return
 	_save(_full_sheet(), out_dir + "/faces_full.png")
+	_save(_detail_sheet(), out_dir + "/faces_detail.png")
 	for i in SMALL_SIZES.size():
 		var card_size: Vector2i = SMALL_SIZES[i]
 		var zoom: int = SMALL_ZOOMS[i]
@@ -90,12 +93,25 @@ func _full_sheet() -> Image:
 	var sheet := Image.create(13 * cell.x + GAP, 4 * cell.y + GAP, false, Image.FORMAT_RGBA8)
 	sheet.fill(BACKDROP)
 	for card in PokerFaces.cards():
-		var face: Image = PokerFaces.texture(card).get_image().duplicate()
-		face.clear_mipmaps()
-		face.convert(Image.FORMAT_RGBA8)
-		var at := Vector2i(GAP, GAP) + Vector2i(PokerCard.rank(card) - PokerCard.RANK_MIN, PokerCard.suit(card)) * cell
-		sheet.blend_rect(face, Rect2i(Vector2i.ZERO, face.get_size()), at)
+		_blit_face(sheet, card, Vector2i(PokerCard.rank(card) - PokerCard.RANK_MIN, PokerCard.suit(card)) * cell)
 	return sheet
+
+
+func _detail_sheet() -> Image:
+	# 离得最近、最容易粘连或认错的几张,原尺寸一排:看笔画、纸缝与金边
+	var cell := PokerFaces.SIZE + Vector2i(GAP, GAP)
+	var sheet := Image.create(DETAIL_CARDS.size() * cell.x + GAP, cell.y + GAP, false, Image.FORMAT_RGBA8)
+	sheet.fill(BACKDROP)
+	for i in DETAIL_CARDS.size():
+		_blit_face(sheet, PokerCard.make(DETAIL_CARDS[i][0], DETAIL_CARDS[i][1]), Vector2i(i * cell.x, 0))
+	return sheet
+
+
+func _blit_face(sheet: Image, card: int, at: Vector2i) -> void:
+	var face: Image = PokerFaces.texture(card).get_image().duplicate()
+	face.clear_mipmaps()
+	face.convert(Image.FORMAT_RGBA8)
+	sheet.blend_rect(face, Rect2i(Vector2i.ZERO, face.get_size()), Vector2i(GAP, GAP) + at)
 
 
 func _small_sheet(card_size: Vector2i) -> Image:

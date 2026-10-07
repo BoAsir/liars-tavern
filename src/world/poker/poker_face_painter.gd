@@ -6,9 +6,9 @@ extends Control
 
 const CORNER_RADIUS := 18          # 与 CardFaces 的圆角同比例
 const PAPER_INSET := 3.0
-const FRAME_INSET := 7.0           # 金边贴着纸边走,给超大角标让出地方
+const FRAME_INSET := 5.0           # 金边贴着纸边走,给超大角标让出地方(角标离金边还有 5 像素)
 const FRAME_WIDTH := 2
-const FRAME_RADIUS := 12
+const FRAME_RADIUS := CORNER_RADIUS - int(FRAME_INSET)   # 与牌的圆角同心
 const SPECKLES := 140              # 纸面杂点(按面积从 CardFaces 的 260 折算)
 const EDGE_SHADES := 5             # 纸边做旧的层数
 const CROWN_OUTLINE := 2.5
