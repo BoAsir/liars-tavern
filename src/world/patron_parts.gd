@@ -1,5 +1,5 @@
 class_name PatronParts
-# 酒客的静态部件构建:物种外观表、椅子、耳朵、帽子、口鼻。动画逻辑在 Patron 中。
+# 酒客的静态部件构建:物种外观表、耳朵、帽子、口鼻(椅子见 ChairModel)。动画逻辑在 Patron 中。
 
 
 const SPECIES := [
@@ -30,25 +30,17 @@ static func species(index: int) -> Dictionary:
 	return SPECIES[posmod(index, SPECIES.size())]
 
 
+static func prewarm() -> void:
+	# 开场(Tavern._ready)时调用:提前建好各物种要用的网格与着色器,中途加入、复活时不再现场拼装
+	pass
+
+
 static func first_free_species(used: Array) -> int:
 	# 新酒客取第一个没人用的物种,同桌不撞脸;物种全被占用(人数超过物种数)时才轮流重复
 	for i in SPECIES.size():
 		if not used.has(i):
 			return i
 	return posmod(used.size(), SPECIES.size())
-
-
-static func build_chair(parent: Node3D) -> void:
-	var wood := WorldMaterials.wood("dark")
-	MeshKit.add(parent, MeshKit.box(Vector3(0.48, 0.05, 0.44)), wood, Vector3(0, 0.45, 0.14))
-	for x in [-0.2, 0.2]:
-		for z in [-0.04, 0.32]:
-			MeshKit.add(parent, MeshKit.cylinder(0.02, 0.018, 0.45, 8), wood, Vector3(x, 0.225, z))
-		MeshKit.add(parent, MeshKit.cylinder(0.022, 0.022, 0.62, 8), wood, Vector3(x, 0.76, 0.34))
-		MeshKit.add(parent, MeshKit.sphere(0.03, 10), wood, Vector3(x, 1.08, 0.34))
-	MeshKit.add(parent, MeshKit.box(Vector3(0.44, 0.09, 0.035)), wood, Vector3(0, 1.0, 0.34))
-	for x in [-0.1, 0.0, 0.1]:
-		MeshKit.add(parent, MeshKit.box(Vector3(0.035, 0.42, 0.02)), wood, Vector3(x, 0.74, 0.34))
 
 
 static func build_ears(head: Node3D, kind: String, fur: Material, inner: Material) -> Array:

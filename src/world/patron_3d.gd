@@ -106,7 +106,7 @@ func _build() -> void:
 		"nose": _mat(Color(0.05, 0.04, 0.04), 0.15), "white": _mat(Color(0.97, 0.96, 0.93), 0.25),
 		"pupil": _mat(Color(0.03, 0.03, 0.04), 0.1), "hat": _mat(spec["dark"].darkened(0.4), 0.7),
 	}
-	PatronParts.build_chair(self)
+	ChairModel.build(self)
 	body = MeshKit.pivot(self, HIP, "Body")
 	body.rotation.x = -SEATED_LEAN
 	MeshKit.add(body, MeshKit.capsule(0.2, 0.62), mats["coat"], Vector3(0, 0.27, 0), Vector3.ZERO, Vector3(1, 1, 0.85))
