@@ -1,14 +1,17 @@
 extends Control
-# 主菜单:昵称 / 开设房间 / 局域网房间列表(自动发现)/ IP 直连。
+# 主菜单:昵称 / 开设房间(选玩法)/ 局域网房间列表(自动发现)/ IP 直连。
 # 左侧木牌面板,右侧是环绕镜头下的酒馆。面板在可滚动的侧栏里:1280x720 逻辑分辨率下整块放得下,
 # 窗口再矮也只是滚动,底部的 IP 直连、状态行与页脚不会被裁掉。
 
 
+const RoomRow := preload("res://src/ui/main_menu/room_row.gd")
 const PANEL_WIDTH := 480.0
 const SIDE_MARGIN := 48
 const EDGE_MARGIN := 24
 const ROW_GAP := 6
 const ROOM_LIST_HEIGHT := 80.0   # 正好露出一个房间行,更多房间在列表内滚动
+const MODE_FONT_SIZE := 15
+const MODE_PADDING := Vector2(10, 4)   # 玩法按钮的内边距(左右, 上下):和小节标题挤在一行,不额外占高度
 
 var app: Node
 var _name_edit: LineEdit
@@ -23,6 +26,7 @@ var _mute_button: Button
 var _scroll: ScrollContainer
 var _panel: PanelContainer
 var _busy := false
+var _mode := GameMode.DEFAULT   # 开房用的玩法:预选上次的选择
 var _last_join := ""    # 最近一次尝试加入的地址:被拒"版本不匹配"时据此去问房主要更新
 var _scan_dots := 0.0
 
@@ -119,7 +123,7 @@ func _build_identity(box: VBoxContainer) -> void:
 	_name_edit.max_length = Protocol.MAX_NAME_LENGTH
 	_name_edit.text = Settings.get_string(Settings.KEY_NAME)
 	box.add_child(_name_edit)
-	box.add_child(_section("开一桌"))
+	box.add_child(_mode_section())
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
@@ -132,6 +136,75 @@ func _build_identity(box: VBoxContainer) -> void:
 	_host_button = UiTheme.button("开设房间", true)
 	_host_button.pressed.connect(_on_host_pressed)
 	row.add_child(_host_button)
+
+
+func _mode_section() -> Control:
+	# 「开一桌」小节标题那一行放玩法三段切换:不另占一行,1280×720 下面板不用滚动
+	_mode = Settings.last_mode()
+	var row := _section("开一桌")
+	var group := ButtonGroup.new()
+	for mode in GameMode.ALL:
+		row.add_child(_mode_button(mode, group))
+	return row
+
+
+func _mode_button(mode: String, group: ButtonGroup) -> Button:
+	var button := Button.new()
+	button.text = GameMode.short_label(mode)
+	button.tooltip_text = GameMode.summary(mode)
+	button.toggle_mode = true
+	button.button_group = group
+	button.button_pressed = mode == _mode
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.add_theme_font_size_override("font_size", MODE_FONT_SIZE)
+	_style_mode_button(button)
+	button.toggled.connect(func(on: bool):
+		if on:
+			_select_mode(mode))
+	return button
+
+
+func _style_mode_button(button: Button) -> void:
+	# 小号分段按钮:没选中的暗木底细描边,选中的用主按钮的酒红底;不要投影,挤在标题行里不显脏。
+	# 每种状态都要换成小内边距:按钮的最小尺寸取各状态样式里最大的那个
+	var states := {
+		"normal": [Color(0.16, 0.11, 0.07), Color(UiTheme.BRASS, 0.45)],
+		"hover": [Color(0.26, 0.17, 0.09), UiTheme.BRASS_BRIGHT],
+		"pressed": [Color(0.42, 0.09, 0.08), UiTheme.BRASS_BRIGHT],
+		"hover_pressed": [Color(0.58, 0.13, 0.1), UiTheme.BRASS_BRIGHT],
+		"disabled": [Color(0.1, 0.08, 0.07, 0.8), Color(UiTheme.BRASS, 0.3)],
+		"focus": [Color.TRANSPARENT, UiTheme.BRASS_BRIGHT],
+	}
+	for state: String in states:
+		var box := UiTheme.panel_box(states[state][0], states[state][1], 1, 6)
+		box.content_margin_left = MODE_PADDING.x
+		box.content_margin_right = MODE_PADDING.x
+		box.content_margin_top = MODE_PADDING.y
+		box.content_margin_bottom = MODE_PADDING.y
+		if state == "focus":
+			_as_focus_ring(box)
+		button.add_theme_stylebox_override(state, box)
+	button.add_theme_color_override("font_color", UiTheme.PARCHMENT_DIM)
+	button.add_theme_color_override("font_pressed_color", UiTheme.PARCHMENT)
+	button.add_theme_color_override("font_hover_pressed_color", UiTheme.PARCHMENT)
+
+
+static func _as_focus_ring(box: StyleBoxFlat) -> void:
+	# 键盘焦点只画一圈亮黄铜框,略向外扩,压在选中/悬停的底色上也看得见
+	box.draw_center = false
+	box.set_border_width_all(2)
+	box.expand_margin_left = 2
+	box.expand_margin_right = 2
+	box.expand_margin_top = 2
+	box.expand_margin_bottom = 2
+
+
+func _select_mode(mode: String) -> void:
+	if mode == _mode:
+		return
+	_mode = mode
+	Sfx.play("ui_click")
+	Settings.set_value(Settings.KEY_LAST_MODE, mode)
 
 
 func _build_rooms(box: VBoxContainer) -> void:
@@ -209,16 +282,6 @@ func _divider() -> ColorRect:
 
 # —— 房间列表 ——
 
-static func clamp_seats(players: int, capacity: int) -> Vector2i:
-	# 人数与上限来自局域网报文,不可信:夹到 0..MAX_PLAYERS 且上限不小于人数,超大数字撑不爆界面
-	var taken := clampi(players, 0, Protocol.MAX_PLAYERS)
-	return Vector2i(taken, clampi(capacity, taken, Protocol.MAX_PLAYERS))
-
-
-static func seat_dots(seats: Vector2i) -> String:
-	return "●".repeat(seats.x) + "○".repeat(seats.y - seats.x)
-
-
 func _refresh_rooms(rooms: Array) -> void:
 	for child in _room_box.get_children():
 		child.queue_free()
@@ -229,43 +292,9 @@ func _refresh_rooms(rooms: Array) -> void:
 		return
 	_scan_label.text = "发现 %d 个房间" % rooms.size()
 	for room in rooms:
-		_room_box.add_child(_room_row(room))
-
-
-func _room_row(room: Dictionary) -> Control:
-	var panel := PanelContainer.new()
-	var style := UiTheme.panel_box(Color(0.13, 0.09, 0.06, 0.9), Color(UiTheme.BRASS, 0.35), 1, 8)
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	style.content_margin_left = 14
-	style.content_margin_right = 10
-	panel.add_theme_stylebox_override("panel", style)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	panel.add_child(row)
-	row.add_child(_room_info(room))
-	var seats := clamp_seats(room["seated"], room["cap"])
-	row.add_child(UiTheme.label(seat_dots(seats), 18, UiTheme.BRASS))
-	var newer := offers_update(room, BuildInfo.build())
-	if newer:
-		var update := UiTheme.button("更新" if room["compatible"] else "更新后加入", not room["compatible"])
-		update.add_theme_font_size_override("font_size", 15 if room["compatible"] else 18)
-		update.tooltip_text = "房主是新版本 v%s,可以直接从房主这里更新" % room["ver"]
-		update.pressed.connect(_update_from.bind(room["ip"], room["port"], room["host"]))
-		row.add_child(update)
-	if room["compatible"] or not newer:
-		var join := UiTheme.button("加入")
-		join.add_theme_font_size_override("font_size", 18)
-		if not room["compatible"]:
-			join.disabled = true
-			join.text = "版本不同"
-			join.tooltip_text = "房主的游戏版本和你的不一样,请让版本旧的一方更新"
-		elif not room["open"]:
-			join.disabled = true
-			join.text = "对局中" if seats.x < seats.y else "已满"
-		join.pressed.connect(_join.bind(Protocol.format_address(room["ip"], room["port"])))
-		row.add_child(join)
-	return panel
+		var on_join := _join.bind(Protocol.format_address(room["ip"], room["port"]))
+		var on_update := _update_from.bind(room["ip"], room["port"], room["host"])
+		_room_box.add_child(RoomRow.build(room, offers_update(room, BuildInfo.build()), on_join, on_update))
 
 
 static func offers_update(room: Dictionary, my_build: int, my_platform := BuildInfo.platform()) -> bool:
@@ -278,20 +307,6 @@ func _update_from(ip: String, port: int, host_name: String) -> void:
 	Updater.check(Updater.lan_source(ip, port), "房主 %s" % host_name)
 
 
-func _room_info(room: Dictionary) -> Control:
-	# 房名与房主名来自局域网报文:过长时省略号截断,不撑宽面板
-	var info := VBoxContainer.new()
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_theme_constant_override("separation", 0)
-	var title := UiTheme.label(room["room"], 20, UiTheme.PARCHMENT, UiTheme.display_font())
-	var host := UiTheme.label("房主 %s · %s" % [room["host"], Protocol.format_address(room["ip"], room["port"])],
-		15, UiTheme.MUTED)
-	for label: Label in [title, host]:
-		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		info.add_child(label)
-	return info
-
-
 # —— 操作 ——
 
 func _on_host_pressed() -> void:
@@ -301,13 +316,18 @@ func _on_host_pressed() -> void:
 	Sfx.play("ui_click")
 	var room_name := _room_edit.text.strip_edges()
 	if room_name == "":
-		room_name = "%s 的酒馆" % pname
+		room_name = default_room_name(pname, _mode)
 	Discovery.stop_listening(self)
-	var err := Net.host_game(pname, room_name)
+	var err := Net.host_game(pname, room_name, 0, _mode)
 	if err != OK:
 		_show_status("开设房间失败:端口 %d-%d 都被占用(%s)" % [
 			Protocol.GAME_PORT, Protocol.GAME_PORT + Protocol.GAME_PORT_ATTEMPTS - 1, error_string(err)], UiTheme.LIE)
 		Discovery.start_listening(self)
+
+
+static func default_room_name(pname: String, mode: String) -> String:
+	# 没填房名时:骗子酒馆「X 的酒馆」,德州「X 的牌局」
+	return ("%s 的牌局" if GameMode.is_poker(mode) else "%s 的酒馆") % pname
 
 
 func _on_direct_pressed() -> void:
