@@ -7,6 +7,16 @@ const BODY_SIZE := 17
 const CARD_SIZE := Vector2(66, 95)
 const CARD_FAN_DEGREES := 3.0
 const TONES := {"brass": UiTheme.BRASS_BRIGHT, "truth": UiTheme.TRUTH, "lie": UiTheme.LIE}
+# 牌面小图上记着自己的牌值:牌面纹理生成完后按它重新取(refresh_cards)
+const CARD_META := &"rulebook_card"
+
+# 德州牌型表
+const HAND_CARD_SIZE := Vector2(40, 58)     # 规格 §6.6:示例小牌不超过 40×58
+const HAND_CARD_GAP := 4
+const HAND_NAME_WIDTH := 150.0
+const HAND_PLACE_WIDTH := 76.0
+const HAND_COLUMN_GAP := 16
+const HANDS_HIGHLIGHT := UiTheme.BRASS_BRIGHT   # 长短牌名次不同的那两行
 
 
 static func build(block: Dictionary) -> Control:
@@ -27,8 +37,27 @@ static func build(block: Dictionary) -> Control:
 			return _odds(block["items"])
 		"keys":
 			return _keys(block["items"])
+		"hands":
+			return _hands(block)
 	push_warning("说明书:未知的块类型 %s" % block["type"])
 	return Control.new()
+
+
+static func refresh_cards(root: Node) -> void:
+	# 牌面纹理生成完后调用:把 root 下所有牌面小图重新取一遍纹理(生成前取到的是占位色块)
+	for face in root.find_children("*", "TextureRect", true, false):
+		if face.has_meta(CARD_META):
+			(face as TextureRect).texture = CardFaces.texture(face.get_meta(CARD_META))
+
+
+static func _card_face(card: int, card_size: Vector2) -> TextureRect:
+	var face := TextureRect.new()
+	face.texture = CardFaces.texture(card)
+	face.set_meta(CARD_META, card)
+	face.custom_minimum_size = card_size
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return face
 
 
 # —— 文字 ——
@@ -84,11 +113,7 @@ static func _cards(items: Array) -> Control:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 6)
 		row.add_child(col)
-		var face := TextureRect.new()
-		face.texture = CardFaces.texture(item["kind"])
-		face.custom_minimum_size = CARD_SIZE
-		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var face := _card_face(item["kind"], CARD_SIZE)
 		face.pivot_offset = CARD_SIZE / 2.0
 		face.rotation = deg_to_rad((i - (items.size() - 1) / 2.0) * CARD_FAN_DEGREES)
 		col.add_child(face)
@@ -225,3 +250,91 @@ static func _keycap(text: String) -> Control:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(label)
 	return panel
+
+
+# —— 德州牌型表:每行牌型名、5 张示例小牌、长牌与短牌的名次 ——
+
+static func _hands(block: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 3)
+	box.add_child(_hands_header())
+	for item in block["items"]:
+		box.add_child(_hand_row(item))
+	var note := _paragraph(block.get("note", ""), 14, UiTheme.PARCHMENT_DIM)
+	note.add_theme_constant_override("line_spacing", 3)
+	box.add_child(note)
+	return box
+
+
+static func _hands_header() -> Control:
+	var cells := HBoxContainer.new()
+	cells.add_child(_header_cell("牌型", HAND_NAME_WIDTH))
+	cells.add_child(_header_cell("示例", _hand_cards_width()))
+	for title in ["长牌名次", "短牌名次"]:
+		var place := _header_cell(title, HAND_PLACE_WIDTH)
+		place.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cells.add_child(place)
+	return _hands_line(cells, Color(0, 0, 0, 0), false)
+
+
+static func _header_cell(text: String, width: float) -> Label:
+	var label := UiTheme.label(text, 13, UiTheme.MUTED)
+	label.custom_minimum_size.x = width
+	return label
+
+
+static func _hand_row(item: Dictionary) -> Control:
+	var highlight: bool = item["highlight"]
+	var cells := HBoxContainer.new()
+	var names := VBoxContainer.new()
+	names.custom_minimum_size.x = HAND_NAME_WIDTH
+	names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	names.add_theme_constant_override("separation", 0)
+	names.add_child(UiTheme.label(item["name"], 20, UiTheme.PARCHMENT, UiTheme.display_font()))
+	names.add_child(UiTheme.label(item["caption"], 13, UiTheme.MUTED))
+	cells.add_child(names)
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", HAND_CARD_GAP)
+	for card in item["cards"]:
+		var face := _card_face(card, HAND_CARD_SIZE)
+		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 从大纹理缩小很多倍(规格 §5.3)
+		cards.add_child(face)
+	cells.add_child(cards)
+	cells.add_child(_place_cell("LongPlace", str(item["long"]), UiTheme.PARCHMENT_DIM))
+	# 短牌名次不同的两行:黄铜高亮并标出升降,一眼看出「同花与葫芦对调」
+	var short_text := str(item["short"])
+	if highlight:
+		short_text += " ↑" if item["short"] < item["long"] else " ↓"
+	cells.add_child(_place_cell("ShortPlace", short_text, HANDS_HIGHLIGHT if highlight else UiTheme.PARCHMENT_DIM))
+	return _hands_line(cells, Color(UiTheme.BRASS, 0.13) if highlight else Color(0, 0, 0, 0.18), highlight)
+
+
+static func _hands_line(cells: HBoxContainer, tint: Color, accent: bool) -> PanelContainer:
+	# 表格的一行:底色条里放各列;表头与各行用同样的边距与列间距,列才对得齐
+	cells.add_theme_constant_override("separation", HAND_COLUMN_GAP)
+	var panel := PanelContainer.new()
+	var style := UiTheme.flat(tint, 6)
+	style.content_margin_left = 12
+	style.content_margin_right = 8
+	style.content_margin_top = 4
+	style.content_margin_bottom = 4
+	if accent:
+		style.border_width_left = 3
+		style.border_color = HANDS_HIGHLIGHT
+	panel.add_theme_stylebox_override("panel", style)
+	panel.add_child(cells)
+	return panel
+
+
+static func _place_cell(cell_name: String, text: String, color: Color) -> Label:
+	var label := UiTheme.label(text, 20, color, UiTheme.latin_font())
+	label.name = cell_name
+	label.custom_minimum_size.x = HAND_PLACE_WIDTH
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return label
+
+
+static func _hand_cards_width() -> float:
+	var count := RulebookPoker.STRAIGHT_LENGTH
+	return HAND_CARD_SIZE.x * count + HAND_CARD_GAP * (count - 1)
