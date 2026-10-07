@@ -27,6 +27,8 @@ var table_root: Node3D
 var environment: Environment
 
 var _lamp_pivot: Node3D
+var _table: Node3D                       # 牌桌模型:德州时按半径放大
+var _table_decor: Array[Node3D] = []     # 桌面摆设(烛台):德州时隐藏,给筹码与公共牌让位
 var _lamp_swing := 0.015
 var _flickers: Array = []   # [{"light": Light3D, "base": float, "speed": float, "depth": float, "seed": float}]
 var _time := 0.0
@@ -64,6 +66,19 @@ func _process(delta: float) -> void:
 
 func kick_lamp(strength: float) -> void:
 	_lamp_swing = maxf(_lamp_swing, strength)
+
+
+func set_table_radius(radius: float) -> void:
+	# 接口桩:整张桌子按半径在水平方向缩放。3D 模型重做分支(feature/model-detail)会换成
+	# 按半径重建桌面、包边、铜圈与绒布且桌腿不动的正式实现,合并时以那边为准
+	var k := radius / SeatLayout.TABLE_RADIUS
+	_table.scale = Vector3(k, 1.0, k)
+
+
+func set_table_decor_visible(shown: bool) -> void:
+	# 接口桩:烛台连同它们的灯一起显示/隐藏(正式实现同上)
+	for holder in _table_decor:
+		holder.visible = shown
 
 
 # —— 环境 ——
@@ -159,6 +174,7 @@ func _window_wall(room: Node3D) -> void:
 
 func _build_table() -> void:
 	var table := MeshKit.pivot(self, Vector3.ZERO, "Table")
+	_table = table
 	var top_y := SeatLayout.TABLE_TOP
 	var r := SeatLayout.TABLE_RADIUS
 	MeshKit.add(table, MeshKit.cylinder(r, r, 0.06, 64), WorldMaterials.wood("table"), Vector3(0, top_y - 0.03, 0))
@@ -222,6 +238,7 @@ func _build_candles() -> void:
 	for spec in [[PI * 0.76, 3, 1.0], [PI * 1.31, 2, 7.0]]:
 		var base := SeatLayout.direction(spec[0]) * 0.7 + Vector3(0, top_y, 0)
 		var holder := MeshKit.pivot(self, base, "Candles")
+		_table_decor.append(holder)
 		MeshKit.add(holder, MeshKit.cylinder(0.07, 0.08, 0.012, 24), WorldMaterials.brass(), Vector3(0, 0.006, 0))
 		for i in spec[1]:
 			var offset := Vector3(cos(i * 2.1) * 0.035, 0, sin(i * 2.1) * 0.035) if spec[1] > 1 else Vector3.ZERO

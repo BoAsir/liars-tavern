@@ -118,8 +118,9 @@ static func short_label(mode: String) -> String      # 骗子酒馆 / 德州·�
 static func min_players(mode: String) -> int         # 2
 static func max_players(mode: String) -> int         # 骗子酒馆 4,德州 8
 static func allows_late_join(mode: String) -> bool   # 德州 true
-static func table_radius(mode: String) -> float      # 骗子酒馆 SeatLayout.TABLE_RADIUS,德州 SeatLayout.POKER_TABLE_RADIUS
 ```
+
+桌子尺寸属于 3D 层:`SeatLayout.table_radius_for(mode)`(骗子酒馆 `TABLE_RADIUS`,德州 `POKER_TABLE_RADIUS`)与 `SeatLayout.seat_radius_for(table_radius)`。
 
 ### 3.2 开房与等待厅
 

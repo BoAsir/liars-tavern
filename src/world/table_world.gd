@@ -22,6 +22,8 @@ var patrons := {}      # pid -> Patron
 var revolvers := {}    # pid -> Revolver3D
 var seat_angles := {}  # pid -> float
 var my_pid := 0
+var table_radius := SeatLayout.TABLE_RADIUS   # 当前桌面半径:德州时放大
+var seat_radius := SeatLayout.SEAT_RADIUS     # 座位到桌心的距离 = 桌面半径 + SEAT_GAP
 var _show_self := true
 
 
@@ -35,6 +37,16 @@ func _ready() -> void:
 
 
 # —— 座位 ——
+
+func configure_table(radius: float) -> void:
+	# 桌子按玩法放大或复原(德州 POKER_TABLE_RADIUS,骗子酒馆 TABLE_RADIUS);
+	# 座位跟着桌沿走,已落座的酒客滑到新位置
+	table_radius = radius
+	seat_radius = SeatLayout.seat_radius_for(radius)
+	tavern.set_table_radius(radius)
+	for pid in patrons:
+		_place_patron(pid, seat_angles.get(pid, 0.0))
+
 
 func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: bool) -> void:
 	# players: [{"pid", ...}] 按座位顺序;新玩家弹出登场,离开的玩家消失
@@ -133,7 +145,7 @@ func _clear_debris() -> void:
 # —— 几何查询 ——
 
 func seat_transform(angle: float) -> Transform3D:
-	var pos := SeatLayout.seat_position(angle)
+	var pos := SeatLayout.seat_position(angle, seat_radius)
 	return Transform3D(Basis.looking_at(-SeatLayout.direction(angle), Vector3.UP), pos)
 
 
@@ -173,7 +185,7 @@ func head_position(pid: int) -> Vector3:
 	if patrons.has(pid):
 		return patrons[pid].head_position()
 	var angle: float = seat_angles.get(pid, 0.0)
-	return SeatLayout.seat_position(angle) + Vector3(0, 1.32, 0)
+	return SeatLayout.seat_position(angle, seat_radius) + Vector3(0, 1.32, 0)
 
 
 func overview_view() -> Transform3D:

@@ -129,11 +129,20 @@ func is_rules_open() -> bool:
 	return is_instance_valid(_rulebook)
 
 
+func apply_table_mode(mode: String) -> void:
+	# 桌子跟着玩法走:德州桌更大,不摆烛台与目标牌立牌;主菜单与骗子酒馆用原来的桌子
+	var poker := GameMode.is_poker(mode)
+	world.configure_table(SeatLayout.table_radius_for(mode))
+	tavern.set_table_decor_visible(not poker)
+	world.cards.set_stand_visible(not poker)
+
+
 # —— 屏幕切换 ——
 
 func _show_menu() -> void:
 	world.clear()
 	labels.clear()
+	apply_table_mode(GameMode.LIARS)
 	tavern.camera_rig.parallax_enabled = false
 	tavern.camera_rig.orbit(Vector3(0, 0.9, -0.2), 3.3, 1.15, 0.045, 2.2)
 	_switch_to(MainMenuScreen.new(self))

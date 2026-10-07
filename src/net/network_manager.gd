@@ -28,6 +28,7 @@ var lobby_meta := {}       # {"room", "host", "addresses", "port"}
 var seats: Array = []      # 本局座位顺序 [{"pid", "name"}]
 var last_public := {}
 var last_private := {}
+var game_mode := GameMode.DEFAULT   # 房主:房间玩法;客户端:来自等待厅 meta 或开局 info
 
 var _session_active := false
 var _joining := false
@@ -432,6 +433,36 @@ func submit_challenge() -> void:
 		_handle_intent(HOST_ID, "challenge", [])
 	else:
 		rpc_id(HOST_ID, "rpc_intent_challenge")
+
+
+func max_players() -> int:
+	# 当前玩法的人数上限
+	return GameMode.max_players(game_mode)
+
+
+# —— 玩法与德州意图:接口先行(德州规格 §4.3),由玩法接入与网络会话实现 ——
+
+func set_game_mode(_mode: String) -> bool:
+	# 仅房主、等待厅中;当前人数超过目标玩法上限时返回 false
+	return false
+
+
+func submit_poker_action(_action: String, _amount := 0) -> void:
+	# fold / check / call / raise(amount 为「加注到」)/ allin
+	pass
+
+
+func request_rebuy() -> void:
+	submit_poker_action(PokerRules.REBUY)
+
+
+func request_spectate() -> void:
+	submit_poker_action(PokerRules.SPECTATE)
+
+
+func end_poker_session() -> void:
+	# 仅房主:有进行中的手牌就打完这一手再结算
+	pass
 
 
 @rpc("any_peer", "call_remote", "reliable")
