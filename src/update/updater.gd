@@ -24,6 +24,7 @@ var _sig := PackedByteArray()
 var _client: UpdateClient
 var _server: UpdateServer
 var _feed_checked := false
+var _queued: Array = []   # 检查进行中又来的检查请求 [网址, 来源, quiet]:等这次查完再查(只留最新一个)
 
 
 func _ready() -> void:
@@ -62,9 +63,22 @@ func is_busy() -> bool:
 # —— 检查 ——
 
 func check(base_url: String, source_label: String, quiet := false) -> void:
-	# quiet:后台检查(如启动时查网络更新源),失败或没有新版本都不打扰玩家
+	# quiet:后台检查(如启动时查网络更新源),失败或没有新版本都不打扰玩家。
+	# 正在检查时(如启动时的后台检查)点了房间的"更新":排队,查完这次接着查,不能悄悄丢掉
+	if state == State.CHECKING:
+		_queued = [base_url, source_label, quiet]
+		return
 	if is_busy():
 		return
+	await _check_now(base_url, source_label, quiet)
+	if not _queued.is_empty() and state != State.AVAILABLE:
+		var next := _queued
+		_queued = []
+		check(next[0], next[1], next[2])
+	_queued = []
+
+
+func _check_now(base_url: String, source_label: String, quiet: bool) -> void:
 	_set_state(State.CHECKING)
 	var fetched: Dictionary = await _client.fetch_manifest(base_url)
 	if not fetched["ok"]:
