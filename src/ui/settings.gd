@@ -1,5 +1,5 @@
 class_name Settings
-# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音。
+# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音、上次选的玩法。
 # 启动流程与主菜单共用这组键。设置文件是外部数据:读不出或类型不对时回退默认值并告警。
 
 
@@ -8,6 +8,7 @@ const SECTION := "player"
 const KEY_NAME := "name"
 const KEY_LAST_IP := "last_ip"
 const KEY_MUTED := "muted"
+const KEY_LAST_MODE := "last_mode"
 
 
 static func get_string(key: String, fallback := "", path := PATH) -> String:

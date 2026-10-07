@@ -140,6 +140,14 @@ func test_switching_books_rebuilds_nav_and_redraws_from_page_zero():
 	assert_false(book._tabs[LIARS].button_pressed)
 
 
+func test_switching_books_frees_the_old_chapter_buttons_at_once():
+	# 旧目录按钮当场释放:留到帧末的话,同一帧里还挂着一批移出树的孤儿按钮
+	var old := book._nav_buttons.duplicate()
+	book.show_book(POKER)
+	for button in old:
+		assert_false(is_instance_valid(button))
+
+
 func test_page_turning_stays_within_the_current_book():
 	book.show_book(POKER)
 	for i in RulebookContent.sections(POKER).size() + 2:

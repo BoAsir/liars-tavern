@@ -332,10 +332,10 @@ func _build_nav() -> Control:
 
 
 func _fill_nav() -> void:
-	# 按当前这本书(重)建章节目录。旧按钮先移出树再释放,本帧里不会再收到点击
+	# 按当前这本书(重)建章节目录。旧按钮立即释放:切书由页签触发,目录按钮不在发信号的途中,
+	# 不必留到帧末(那样同一帧里还挂着一批移出树的孤儿按钮)
 	for button in _nav_buttons:
-		_nav.remove_child(button)
-		button.queue_free()
+		button.free()
 	_nav_buttons.clear()
 	var group := ButtonGroup.new()
 	for i in _sections.size():
