@@ -1,13 +1,15 @@
 extends GutTest
 # SeatGaze:骗子酒馆与德州牌桌共用的视线与探头。
-# 光标落点按当前桌面半径判断是不是看桌面;按住方向键探头有上限,松开停在原处,拍特写时缩回、回座位再探回;
+# 光标落点按当前桌面半径判断是不是看桌面(不论离镜头多远);按住方向键探头,范围以真酒客的头为准,
+# 松开停在原处,拍特写时缩回、回座位再探回;
 # 他人的视线只套在桌上有酒客、没被排除(出局/观战)的人身上,停发后看回牌桌给的落点;不在树内时 forget 也安全。
 
 
-# 越肩机位(规格 §5.5):骗子酒馆桌取 TableWorld 的机位常量(机位调整时测试跟着走);
-# 德州桌的机位随座位往后移桌面放大的那么多,现在是 (0.55, 1.92, 2.60)
-const LIARS_CAMERA := Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK)
-const POKER_CAMERA := LIARS_CAMERA + Vector3(0, 0, SeatLayout.POKER_TABLE_RADIUS - SeatLayout.TABLE_RADIUS)
+# 越肩机位(规格 §5.5):骗子酒馆桌与德州桌。写成字面值,不引用 TableWorld 的机位常量:
+# 几个分支正在改这些常量的名字与数值,引用失效时整个测试脚本解析失败,GUT 会悄悄跳过它;
+# 机位以后拉远也不影响这里的结论(见 PULL_BACK)
+const LIARS_CAMERA := Vector3(0.55, 1.92, 2.1)
+const POKER_CAMERA := Vector3(0.55, 1.92, 2.60)
 const BIG_TABLE_SPOT := Vector3(1.2, SeatLayout.TABLE_TOP, 0.3)   # 德州桌面上、骗子酒馆桌外的一点
 const FAR_SIDE_SPOT := Vector3(0, SeatLayout.TABLE_TOP, -1.35)    # 德州桌对面靠桌沿:对手的筹码与亮牌一带
 const PULL_BACK := Vector3(0, 0.5, 1.0)   # 越肩机位再往后上方拉远一些(以后调机位时)

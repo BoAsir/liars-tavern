@@ -2,7 +2,7 @@ extends GutTest
 # SeatGaze 的纯函数:光标 → 视线目标(射线落在桌面上看桌面那一点,否则看射线上远处一点);WASD → 脖子伸出的目标偏移。
 
 
-const SEAT_CAMERA := Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK)
+const SEAT_CAMERA := Vector3(0.55, 1.92, 2.1)
 
 
 func test_ray_onto_the_table_looks_at_the_tabletop_point():
