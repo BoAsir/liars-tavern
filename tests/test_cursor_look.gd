@@ -1,5 +1,5 @@
 extends GutTest
-# 光标 → 视线目标:射线落在桌面上看桌面那一点,否则看射线上远处一点。
+# 光标 → 视线目标:射线落在桌面上看桌面那一点,否则看射线上远处一点。WASD → 脖子伸出的目标偏移。
 
 
 const TableScreenScript := preload("res://src/ui/table/table_screen.gd")
@@ -31,3 +31,22 @@ func test_ray_hitting_the_floor_beyond_the_table_does_not_snap_to_the_table_plan
 func test_unnormalized_direction_is_handled():
 	var target: Vector3 = TableScreenScript.cursor_look_target(SEAT_CAMERA, Vector3(0, 0, -10))
 	assert_almost_eq(target.distance_to(SEAT_CAMERA), TableScreenScript.CURSOR_LOOK_FAR, 0.001)
+
+
+func test_neck_input_grows_while_held_and_caps_at_reach():
+	var input := Vector3.ZERO
+	input = TableScreenScript.next_neck_input(input, Vector3(0, 0, -1), 0.1)
+	assert_almost_eq(input.z, -TableScreenScript.NECK_SPEED * 0.1, 0.0001, "按住 W 朝桌心伸出")
+	for i in 100:
+		input = TableScreenScript.next_neck_input(input, Vector3(0, 0, -1), 0.1)
+	assert_almost_eq(input.length(), Patron.NECK_REACH, 0.0001, "伸到上限为止")
+
+
+func test_neck_input_diagonal_is_not_faster():
+	var input := TableScreenScript.next_neck_input(Vector3.ZERO, Vector3(1, 0, -1), 0.1)
+	assert_almost_eq(input.length(), TableScreenScript.NECK_SPEED * 0.1, 0.0001)
+
+
+func test_neck_input_resets_when_released():
+	var input := TableScreenScript.next_neck_input(Vector3.ZERO, Vector3(-1, 0, 0), 0.3)
+	assert_eq(TableScreenScript.next_neck_input(input, Vector3.ZERO, 0.016), Vector3.ZERO, "松开就弹回")

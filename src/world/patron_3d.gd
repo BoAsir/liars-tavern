@@ -10,6 +10,14 @@ const SHOULDER := Vector3(0.21, 0.52, -0.02)
 const PAW_RADIUS := 0.058
 const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
+# 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
+const NECK_BASE := Vector3(0, 0.55, -0.02)
+const NECK_REACH := 0.65      # 头最远水平伸出(米)
+const NECK_RISE := 0.25       # 每伸出 1 米头抬高这么多:像潜望镜一样往上探,不会贴着桌面
+const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:欠阻尼,松开时冲过原位一点再弹回
+const NECK_DAMPING := 9.0
+const NECK_MIN_THICKNESS := 0.55   # 拉长时脖子变细,最细到原粗细的这个比例
+const NECK_MAX_STEP := 1.0 / 60.0  # 弹簧积分的最大步长(秒):掉帧时分步积分,不会弹飞
 const HIP := Vector3(0, 0.5, 0.12)
 # 前倾角(弧度,绕髋部):坐着时趴向牌桌,单节手臂才够得着桌面;轮到自己时再多倾一点
 const SEATED_LEAN := 0.18
@@ -68,6 +76,10 @@ var _resting := {}         # 手臂 → 是否搭在桌上:搭着的手每帧按
 var _arm_serial := 0       # 每次手臂补间加一;歇手补间结束时据此判断期间有没有新动作
 var _cheer_tweens: Array[Tween] = []   # 庆祝中的蹦跳与举手,复位时中止
 var _noise := FastNoiseLite.new()
+var _neck: Node3D
+var _neck_target := Vector3.ZERO     # 座位坐标的头部偏移目标
+var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
+var _neck_velocity := Vector3.ZERO
 
 
 func _init(p_species_index := 0) -> void:
@@ -81,6 +93,7 @@ func _process(delta: float) -> void:
 	_time += delta
 	if alive:
 		_animate_idle(delta)
+	_update_neck(delta)
 
 
 # —— 构建 ——
@@ -112,11 +125,13 @@ func _build() -> void:
 			Vector3(-8, 0, 18 * side))
 	for y in [0.3, 0.2, 0.1]:
 		MeshKit.add(body, MeshKit.sphere(0.014, 8), WorldMaterials.brass(), Vector3(0, y, -0.205 + (0.3 - y) * 0.15))
-	# 宽肩 + 短脖子 + 领口
+	# 宽肩 + 脖子(单位高的圆柱,按领口到头的距离拉长)+ 领口
 	MeshKit.add(body, MeshKit.sphere(0.2, 20), mats["coat"], Vector3(0, 0.47, -0.01), Vector3.ZERO, Vector3(1.22, 0.55, 0.85))
-	MeshKit.add(body, MeshKit.cylinder(0.075, 0.085, 0.1, 16), mats["fur"], Vector3(0, 0.6, -0.02))
+	_neck = MeshKit.pivot(body, NECK_BASE, "Neck")
+	MeshKit.add(_neck, MeshKit.cylinder(0.075, 0.085, 1.0, 16), mats["fur"], Vector3(0, 0.5, 0))
 	MeshKit.add(body, MeshKit.torus(0.075, 0.1, 24), mats["coat"], Vector3(0, 0.565, -0.02))
 	_build_head(spec, mats)
+	_fit_neck()
 	_arm_l = _build_arm(-1.0, mats)
 	_arm_r = _build_arm(1.0, mats)
 	right_hand = _arm_r.get_node("Hand")
@@ -183,7 +198,7 @@ func _animate_idle(delta: float) -> void:
 	var yaw := 0.0
 	var pitch := 0.0
 	if _has_look:
-		var local := body.to_local(_look_target) - HEAD_PIVOT
+		var local := body.to_local(_look_target) - head.position
 		yaw = clampf(atan2(-local.x, -local.z), -0.7, 0.7)
 		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), -0.45, 0.35)
 	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08
@@ -216,6 +231,39 @@ func _blink() -> void:
 		var twitch := create_tween()
 		twitch.tween_property(ear, "rotation:x", base - 0.3, 0.07)
 		twitch.tween_property(ear, "rotation:x", base, 0.15)
+
+
+# —— 弹簧脖子 ——
+
+func set_neck_target(seat_offset: Vector3) -> void:
+	# 座位坐标的水平偏移(-Z 朝桌心);超出 NECK_REACH 截断,伸得越远头抬得越高
+	var flat := Vector3(seat_offset.x, 0.0, seat_offset.z).limit_length(NECK_REACH)
+	_neck_target = flat + Vector3.UP * flat.length() * NECK_RISE
+
+
+func neck_offset() -> Vector3:
+	return _neck_offset
+
+
+func _update_neck(delta: float) -> void:
+	var target := _neck_target if alive else Vector3.ZERO
+	var left := delta
+	while left > 0.0:
+		var step := minf(left, NECK_MAX_STEP)
+		var accel := (target - _neck_offset) * NECK_STIFFNESS - _neck_velocity * NECK_DAMPING
+		_neck_velocity += accel * step
+		_neck_offset += _neck_velocity * step
+		left -= step
+	# 偏移按座位坐标给出:换到(前倾、出局时歪倒的)身体局部坐标,头才是水平地探出去
+	head.position = HEAD_PIVOT + body.quaternion.inverse() * _neck_offset
+	_fit_neck()
+
+
+func _fit_neck() -> void:
+	var span := head.position - NECK_BASE
+	var length := maxf(span.length(), 0.001)
+	var thickness := clampf(sqrt((HEAD_PIVOT - NECK_BASE).length() / length), NECK_MIN_THICKNESS, 1.0)
+	_neck.basis = Basis(Quaternion(Vector3.UP, span / length)) * Basis.from_scale(Vector3(thickness, length, thickness))
 
 
 func look_at_point(point: Vector3) -> void:
@@ -440,6 +488,7 @@ func reset_pose() -> void:
 	_cheer_tweens = []
 	_arms_locked = false
 	_sitting_up = false
+	_neck_target = Vector3.ZERO
 	set_expression("neutral")
 	body.position = HIP
 	rest_arms(false)

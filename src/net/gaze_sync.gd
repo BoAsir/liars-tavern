@@ -1,6 +1,6 @@
 class_name GazeSync
 extends RefCounted
-# 视线同步:每位玩家的角色看向自己光标所指之处,其他人的屏幕上也跟着转头。
+# 视线同步:每位玩家的角色看向自己光标所指之处、按 WASD 伸出的脖子,其他人的屏幕上也跟着动。
 # 每台机器都把"自己"摆在前排,座位整体转了不同角度,所以视线落点按发送者自己的座位坐标系传输。
 # 发送端:节流 + 心跳(视线不动时也定期补发);交还给演出时立即发一次释放。
 # 接收端:超过 STALE 秒收不到就视为释放,交还给本地演出。纯逻辑,不碰网络与场景。
@@ -11,11 +11,13 @@ const HEARTBEAT := 0.4       # 视线不动时的补发间隔(秒),须明显短�
 const MIN_MOVE := 0.03       # 落点移动小于此距离(米)不算变化
 const STALE := 1.2           # 接收端多久收不到就释放(秒)
 const MAX_RANGE := 8.0       # 合法落点离发送者座位的最远距离(米;牌桌加酒馆的尺度)
+const MAX_NECK := 1.0        # 合法脖子偏移的最大长度(米;角色自己还会再截断到伸出上限)
 
 var _sent_point := Vector3.ZERO
+var _sent_neck := Vector3.ZERO
 var _sent_active := false
 var _since_send := INF
-var _remote := {}            # pid -> {"point": Vector3, "age": float}
+var _remote := {}            # pid -> {"point": Vector3, "neck": Vector3, "age": float}
 var _released: Array = []    # 已收到释放、等下一次 tick 交还演出的 pid
 
 
@@ -27,36 +29,38 @@ static func from_seat_local(seat: Transform3D, local_point: Vector3) -> Vector3:
 	return seat * local_point
 
 
-static func is_valid(point: Vector3) -> bool:
-	return point.is_finite() and point.length() <= MAX_RANGE
+static func is_valid(point: Vector3, neck := Vector3.ZERO) -> bool:
+	return point.is_finite() and point.length() <= MAX_RANGE and neck.is_finite() and neck.length() <= MAX_NECK
 
 
-func outgoing(delta: float, point: Vector3, active: bool) -> Dictionary:
-	# 返回这一帧要发的 {"point", "active"};不用发时返回空字典
+func outgoing(delta: float, point: Vector3, neck: Vector3, active: bool) -> Dictionary:
+	# 返回这一帧要发的 {"point", "neck", "active"};不用发时返回空字典
 	_since_send += delta
 	if not active:
 		if not _sent_active:
 			return {}
-		return _mark_sent(point, false)
+		return _mark_sent(point, Vector3.ZERO, false)
 	if not _sent_active:
-		return _mark_sent(point, true)
+		return _mark_sent(point, neck, true)
 	if _since_send < SEND_INTERVAL:
 		return {}
-	if point.distance_to(_sent_point) < MIN_MOVE and _since_send < HEARTBEAT:
+	var moved := point.distance_to(_sent_point) >= MIN_MOVE or neck.distance_to(_sent_neck) >= MIN_MOVE
+	if not moved and _since_send < HEARTBEAT:
 		return {}
-	return _mark_sent(point, true)
+	return _mark_sent(point, neck, true)
 
 
-func _mark_sent(point: Vector3, active: bool) -> Dictionary:
+func _mark_sent(point: Vector3, neck: Vector3, active: bool) -> Dictionary:
 	_sent_point = point
+	_sent_neck = neck
 	_sent_active = active
 	_since_send = 0.0
-	return {"point": point, "active": active}
+	return {"point": point, "neck": neck, "active": active}
 
 
-func receive(pid: int, point: Vector3, active: bool) -> void:
+func receive(pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
 	if active:
-		_remote[pid] = {"point": point, "age": 0.0}
+		_remote[pid] = {"point": point, "neck": neck, "age": 0.0}
 		_released.erase(pid)
 	elif _remote.has(pid):
 		_remote.erase(pid)
@@ -77,10 +81,10 @@ func tick(delta: float) -> Array:
 
 
 func live_targets() -> Dictionary:
-	# pid -> 发送者座位坐标系里的落点
+	# pid -> {"point": 发送者座位坐标系里的视线落点, "neck": 座位坐标的脖子偏移}
 	var targets := {}
 	for pid in _remote:
-		targets[pid] = _remote[pid]["point"]
+		targets[pid] = {"point": _remote[pid]["point"], "neck": _remote[pid]["neck"]}
 	return targets
 
 

@@ -15,6 +15,7 @@ extends Node
 
 const BOT_THINK := Vector2(0.6, 1.6)
 const CHALLENGE_CHANCE := 0.35
+const BOT_FIDGET := 1.5    # bot 每隔这么久按下/松开一次 W 伸脖子(秒),冒烟测试据此确认脖子偏移走通了网络
 
 var app: Node
 var opts := {}
@@ -22,6 +23,9 @@ var _think_timer := 0.0
 var _shot_counts := {}
 var _match_finished := false
 var _gaze_from := {}   # 收到过谁的视线同步(冒烟测试据此确认视线消息走通)
+var _neck_from := {}   # 收到过谁伸出的脖子
+var _fidget_timer := BOT_FIDGET
+var _fidget_down := false
 
 
 func _init(p_app: Node) -> void:
@@ -52,7 +56,10 @@ func _ready() -> void:
 	Net.lobby_updated.connect(_on_lobby)
 	Net.game_events.connect(_on_events)
 	Net.game_started.connect(_on_game_started)
-	Net.gaze_updated.connect(func(pid: int, _point: Vector3, _active: bool): _gaze_from[pid] = true)
+	Net.gaze_updated.connect(func(pid: int, _point: Vector3, neck: Vector3, _active: bool):
+		_gaze_from[pid] = true
+		if neck != Vector3.ZERO:
+			_neck_from[pid] = true)
 	Net.join_failed.connect(_fail.bind("join_failed"))
 	Net.left_lobby.connect(_on_left)
 	if opts.has("shots"):
@@ -85,6 +92,7 @@ func _join_discovered(rooms: Array, player_name: String) -> void:
 func _process(delta: float) -> void:
 	if not opts.has("bot"):
 		return
+	_fidget(delta)
 	var screen: Node = app.current_screen()
 	if screen == null or not screen.has_method("_my_turn") or not screen._my_turn():
 		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
@@ -94,6 +102,19 @@ func _process(delta: float) -> void:
 		return
 	_think_timer = 999.0
 	_bot_act(screen)
+
+
+func _fidget(delta: float) -> void:
+	# 对局中隔一会儿按住 W 再松开:走与真人相同的按键读取,脖子伸出去又弹回来
+	_fidget_timer -= delta
+	if not Net.in_game or _fidget_timer > 0.0:
+		return
+	_fidget_timer = BOT_FIDGET
+	_fidget_down = not _fidget_down
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_W
+	key.pressed = _fidget_down
+	Input.parse_input_event(key)
 
 
 func _bot_act(screen: Node) -> void:
@@ -135,7 +156,7 @@ func _on_lobby(players: Array) -> void:
 func _on_events(events: Array) -> void:
 	for ev in events:
 		if ev["type"] == "match_over":
-			print("[debug] GAZE peers=%d" % _gaze_from.size())
+			print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
 			print("[debug] MATCH_OVER winner=", ev["winner"])
 			_match_finished = true
 

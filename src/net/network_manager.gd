@@ -14,7 +14,7 @@ signal state_private_updated(state: Dictionary)
 signal game_events(events: Array)
 signal intent_rejected(code: String)
 signal returned_to_lobby
-signal gaze_updated(pid: int, point: Vector3, active: bool)   # 他人视线落点(发送者座位坐标系)
+signal gaze_updated(pid: int, point: Vector3, neck: Vector3, active: bool)   # 他人视线落点(发送者座位坐标系)与脖子偏移
 
 const HOST_ID := LobbyModel.HOST_ID
 const DISCONNECT_GRACE := 1.0
@@ -498,35 +498,35 @@ func rpc_game_events(events: Array) -> void:
 # 方法名刻意排在 rpc_join_* 之后:RPC 按方法名排序编号,握手消息的编号不变,
 # 旧版本仍能收到"版本不匹配"的明确拒绝
 
-func send_gaze(point: Vector3, active: bool) -> void:
+func send_gaze(point: Vector3, neck: Vector3, active: bool) -> void:
 	if not in_game or multiplayer.multiplayer_peer == null:
 		return
 	if is_host:
-		_relay_gaze(HOST_ID, point, active)
+		_relay_gaze(HOST_ID, point, neck, active)
 	else:
-		rpc_id(HOST_ID, "rpc_look", point, active)
+		rpc_id(HOST_ID, "rpc_look", point, neck, active)
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", Protocol.GAZE_CHANNEL)
-func rpc_look(point: Vector3, active: bool) -> void:
+func rpc_look(point: Vector3, neck: Vector3, active: bool) -> void:
 	var sender := multiplayer.get_remote_sender_id()
-	if not is_host or not in_game or not _match_names.has(sender) or not GazeSync.is_valid(point):
+	if not is_host or not in_game or not _match_names.has(sender) or not GazeSync.is_valid(point, neck):
 		return
-	gaze_updated.emit(sender, point, active)
-	_relay_gaze(sender, point, active)
+	gaze_updated.emit(sender, point, neck, active)
+	_relay_gaze(sender, point, neck, active)
 
 
-func _relay_gaze(from_pid: int, point: Vector3, active: bool) -> void:
+func _relay_gaze(from_pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
 	for seat in seats:
 		var id: int = seat["pid"]
 		if id != HOST_ID and id != from_pid and _is_connected(id):
-			rpc_id(id, "rpc_look_relay", from_pid, point, active)
+			rpc_id(id, "rpc_look_relay", from_pid, point, neck, active)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered", Protocol.GAZE_CHANNEL)
-func rpc_look_relay(pid: int, point: Vector3, active: bool) -> void:
-	if in_game and GazeSync.is_valid(point):
-		gaze_updated.emit(pid, point, active)
+func rpc_look_relay(pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
+	if in_game and GazeSync.is_valid(point, neck):
+		gaze_updated.emit(pid, point, neck, active)
 
 
 # —— 回合限时(仅房主):超时代打手牌第一张 ——

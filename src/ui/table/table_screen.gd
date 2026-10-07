@@ -5,6 +5,9 @@ extends Control
 
 const PLATE_KEY := "plate:%d"   # WorldLabels 里对手铭牌的键
 const CURSOR_LOOK_FAR := 4.0    # 光标指向桌面以上时,取射线上这么远的一点作为视线目标(米)
+const NECK_SPEED := 0.9         # 按住 WASD 时头部伸出的速度(米/秒);松开后脖子弹回
+# WASD → 座位坐标的方向(-Z 朝桌心,+X 是越肩镜头里的右边);按物理键位,换键盘布局也在同一位置
+const NECK_KEYS := {KEY_W: Vector3(0, 0, -1), KEY_S: Vector3(0, 0, 1), KEY_A: Vector3(-1, 0, 0), KEY_D: Vector3(1, 0, 0)}
 
 var app: Node
 var my_pid := 0
@@ -20,6 +23,7 @@ var current_pid = null
 
 var _clock := TurnClock.new()
 var _gaze := GazeSync.new()
+var _neck_input := Vector3.ZERO   # 按住 WASD 累积的头部偏移(座位坐标)
 var _queue: Array = []
 var _intro_done := false
 var _initial_hands := {}    # round -> 该局初始手牌(发牌动画使用)
@@ -103,38 +107,67 @@ func _gaze_free() -> bool:
 
 
 func _follow_cursor_with_head(delta: float) -> void:
-	# 自己的角色转头、转眼看向光标所指之处,并把落点(换算到自己座位坐标系)同步给其他人
+	# 自己的角色转头、转眼看向光标所指之处,按住 WASD 伸长脖子把头探出去;
+	# 落点(换算到自己座位坐标系)与脖子偏移同步给其他人
 	var me: Patron = world.patrons.get(my_pid)
 	var active := _gaze_free() and director.is_at_seat() and not _dead.has(my_pid) and me != null
 	var target := Vector3.ZERO
+	_neck_input = next_neck_input(_neck_input, _held_neck_direction() if active else Vector3.ZERO, delta)
 	if active:
 		var camera: Camera3D = app.tavern.camera_rig.camera
 		var mouse := get_viewport().get_mouse_position()
 		target = cursor_look_target(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
 		me.look_at_point(target)
 		target = GazeSync.to_seat_local(_seat_of(my_pid), target)
-	var out := _gaze.outgoing(delta, target, active)
+	if me != null:
+		me.set_neck_target(_neck_input)
+	var out := _gaze.outgoing(delta, target, _neck_input, active)
 	if not out.is_empty():
-		Net.send_gaze(out["point"], out["active"])
+		Net.send_gaze(out["point"], out["neck"], out["active"])
+
+
+func _held_neck_direction() -> Vector3:
+	# 说明书、确认框打开时不读;输入框有焦点时(如聊天)也不读
+	if app.is_modal_open() or get_viewport().gui_get_focus_owner() is LineEdit:
+		return Vector3.ZERO
+	var dir := Vector3.ZERO
+	for key in NECK_KEYS:
+		if Input.is_physical_key_pressed(key):
+			dir += NECK_KEYS[key]
+	return dir
+
+
+static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Vector3:
+	# 按住方向键时头朝那个方向持续伸出(斜向不更快),最远到 NECK_REACH;一松开目标归零,脖子弹回
+	if held == Vector3.ZERO:
+		return Vector3.ZERO
+	return (current + held.normalized() * NECK_SPEED * delta).limit_length(Patron.NECK_REACH)
 
 
 func _follow_remote_gazes(delta: float) -> void:
-	# 其他玩家的角色看向他们各自光标所指之处;对方停发或超时后看回桌心,等下一段演出接管
+	# 其他玩家的角色看向他们各自光标所指之处、伸出脖子;对方停发或超时后缩回脖子看回桌心,等下一段演出接管
 	var released := _gaze.tick(delta)
 	if not _gaze_free():
+		# 拍特写时所有人的脖子都缩回来,别让伸长的脖子闯进镜头
+		for pid in world.patrons:
+			if pid != my_pid:
+				world.patrons[pid].set_neck_target(Vector3.ZERO)
 		return
 	for pid in released:
 		if world.patrons.has(pid) and not _dead.has(pid):
 			world.patrons[pid].look_at_point(cards.stand_position())
+			world.patrons[pid].set_neck_target(Vector3.ZERO)
 	var targets := _gaze.live_targets()
 	for pid in targets:
 		if world.patrons.has(pid) and not _dead.has(pid):
-			world.patrons[pid].look_at_point(GazeSync.from_seat_local(_seat_of(pid), targets[pid]))
+			var patron: Patron = world.patrons[pid]
+			patron.look_at_point(GazeSync.from_seat_local(_seat_of(pid), targets[pid]["point"]))
+			patron.set_neck_target(targets[pid]["neck"])
 
 
-func _on_gaze(pid: int, point: Vector3, active: bool) -> void:
-	if pid != my_pid and names.has(pid) and GazeSync.is_valid(point):
-		_gaze.receive(pid, point, active)
+func _on_gaze(pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
+	if pid != my_pid and names.has(pid) and GazeSync.is_valid(point, neck):
+		_gaze.receive(pid, point, neck, active)
 
 
 func _seat_of(pid: int) -> Transform3D:

@@ -119,6 +119,11 @@ func show_rules() -> void:
 	_rulebook.show_section(_rules_page)
 
 
+func is_modal_open() -> bool:
+	# 说明书或确认框盖在牌桌上:牌桌不再读取持续按住的按键(如 WASD 伸脖子)
+	return is_rules_open() or not _confirms.is_empty()
+
+
 func is_rules_open() -> bool:
 	# is_instance_valid:说明书若没走 close() 就被释放,引用不会卡住
 	return is_instance_valid(_rulebook)

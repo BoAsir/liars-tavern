@@ -204,6 +204,8 @@ static func _keys(items: Array) -> Control:
 		caps.add_theme_constant_override("separation", 6)
 		for key in item["keys"]:
 			caps.add_child(_keycap(key))
+		if item["keys"].is_empty():
+			caps.add_child(UiTheme.label("—", 15, UiTheme.PARCHMENT_DIM))
 		grid.add_child(caps)
 		grid.add_child(UiTheme.label(item["mouse"] if item["mouse"] != "" else "—", 15, UiTheme.PARCHMENT_DIM))
 	return grid
