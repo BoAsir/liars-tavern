@@ -21,6 +21,7 @@ var opts := {}
 var _think_timer := 0.0
 var _shot_counts := {}
 var _match_finished := false
+var _gaze_from := {}   # 收到过谁的视线同步(冒烟测试据此确认视线消息走通)
 
 
 func _init(p_app: Node) -> void:
@@ -51,6 +52,7 @@ func _ready() -> void:
 	Net.lobby_updated.connect(_on_lobby)
 	Net.game_events.connect(_on_events)
 	Net.game_started.connect(_on_game_started)
+	Net.gaze_updated.connect(func(pid: int, _point: Vector3, _active: bool): _gaze_from[pid] = true)
 	Net.join_failed.connect(_fail.bind("join_failed"))
 	Net.left_lobby.connect(_on_left)
 	if opts.has("shots"):
@@ -133,6 +135,7 @@ func _on_lobby(players: Array) -> void:
 func _on_events(events: Array) -> void:
 	for ev in events:
 		if ev["type"] == "match_over":
+			print("[debug] GAZE peers=%d" % _gaze_from.size())
 			print("[debug] MATCH_OVER winner=", ev["winner"])
 			_match_finished = true
 

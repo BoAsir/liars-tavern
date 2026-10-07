@@ -2,7 +2,7 @@ class_name Protocol
 # 网络协议常量与地址解析。版本不匹配的客户端会被拒绝加入。
 
 
-const VERSION := 1
+const VERSION := 2   # v2:新增视线同步消息(rpc_look / rpc_look_relay)
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800
@@ -23,6 +23,8 @@ const MAX_PLAYERS := 4
 # ENet 传输层多留几个槽位,满员时仍能完成握手并收到"房间已满"的明确提示
 const MAX_TRANSPORT_CLIENTS := MAX_PLAYERS + 2
 const TURN_TIMEOUT := 30.0
+# 视线同步走的 ENet 通道:与可靠的状态/事件分开,丢包重传不会拖住它们
+const GAZE_CHANNEL := 1
 const MAX_NAME_LENGTH := 12
 const MAX_ROOM_NAME_LENGTH := 20
 # 加入请求里的原始昵称超过这个长度直接拒绝(正常客户端只发清洗过的短昵称)

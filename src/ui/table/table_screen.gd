@@ -19,6 +19,7 @@ var animating := true
 var current_pid = null
 
 var _clock := TurnClock.new()
+var _gaze := GazeSync.new()
 var _queue: Array = []
 var _intro_done := false
 var _initial_hands := {}    # round -> 该局初始手牌(发牌动画使用)
@@ -68,6 +69,7 @@ func _ready() -> void:
 	Net.state_private_updated.connect(_on_private)
 	Net.game_events.connect(_on_events)
 	Net.intent_rejected.connect(_on_rejected)
+	Net.gaze_updated.connect(_on_gaze)
 	if not Net.last_public.is_empty():
 		_on_public(Net.last_public)
 	if not Net.last_private.is_empty():
@@ -91,19 +93,52 @@ func _process(delta: float) -> void:
 	_clock.tick(delta)
 	var show_ring: bool = current_pid != null and not animating and not pub.is_empty()
 	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
-	_follow_cursor_with_head()
+	_follow_cursor_with_head(delta)
+	_follow_remote_gazes(delta)
 
 
-func _follow_cursor_with_head() -> void:
-	# 自己的角色转头、转眼看向光标所指之处;特写镜头、观战、结算时交还给演出控制视线
-	if director == null or not director.is_at_seat() or _dead.has(my_pid) or _settlement != null:
-		return
+func _gaze_free() -> bool:
+	# 镜头没在拍特写(越肩机位或观战俯视)、对局没结算:视线归各玩家自己;否则交还给演出
+	return director != null and director.is_camera_at_rest() and _settlement == null
+
+
+func _follow_cursor_with_head(delta: float) -> void:
+	# 自己的角色转头、转眼看向光标所指之处,并把落点(换算到自己座位坐标系)同步给其他人
 	var me: Patron = world.patrons.get(my_pid)
-	if me == null:
+	var active := _gaze_free() and director.is_at_seat() and not _dead.has(my_pid) and me != null
+	var target := Vector3.ZERO
+	if active:
+		var camera: Camera3D = app.tavern.camera_rig.camera
+		var mouse := get_viewport().get_mouse_position()
+		target = cursor_look_target(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
+		me.look_at_point(target)
+		target = GazeSync.to_seat_local(_seat_of(my_pid), target)
+	var out := _gaze.outgoing(delta, target, active)
+	if not out.is_empty():
+		Net.send_gaze(out["point"], out["active"])
+
+
+func _follow_remote_gazes(delta: float) -> void:
+	# 其他玩家的角色看向他们各自光标所指之处;对方停发或超时后看回桌心,等下一段演出接管
+	var released := _gaze.tick(delta)
+	if not _gaze_free():
 		return
-	var camera: Camera3D = app.tavern.camera_rig.camera
-	var mouse := get_viewport().get_mouse_position()
-	me.look_at_point(cursor_look_target(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse)))
+	for pid in released:
+		if world.patrons.has(pid) and not _dead.has(pid):
+			world.patrons[pid].look_at_point(cards.stand_position())
+	var targets := _gaze.live_targets()
+	for pid in targets:
+		if world.patrons.has(pid) and not _dead.has(pid):
+			world.patrons[pid].look_at_point(GazeSync.from_seat_local(_seat_of(pid), targets[pid]))
+
+
+func _on_gaze(pid: int, point: Vector3, active: bool) -> void:
+	if pid != my_pid and names.has(pid) and GazeSync.is_valid(point):
+		_gaze.receive(pid, point, active)
+
+
+func _seat_of(pid: int) -> Transform3D:
+	return world.seat_transform(world.seat_angles.get(pid, 0.0))
 
 
 static func cursor_look_target(origin: Vector3, direction: Vector3) -> Vector3:
@@ -257,6 +292,7 @@ func mark_eliminated(pid: int) -> void:
 	if _dead.has(pid):
 		return
 	_dead[pid] = true
+	_gaze.forget(pid)
 	_elimination_order.append(pid)
 	_out_round[pid] = _round_now
 	if pid == my_pid:

@@ -267,6 +267,11 @@ func is_at_seat() -> bool:
 	return _at_seat and not spectator
 
 
+func is_camera_at_rest() -> bool:
+	# 镜头停在常驻机位(越肩或观战俯视),没在拍特写
+	return _at_seat
+
+
 func back_to_seat(duration: float) -> void:
 	_at_seat = true
 	if spectator:
