@@ -25,6 +25,9 @@ static var _building := false
 
 
 static func texture(kind: int) -> Texture2D:
+	# 德州牌(取值 8–59)另有缓存与生成时机,转给 PokerFaces;-1 牌背与 0–3 骗子酒馆的牌仍在这里
+	if PokerCard.is_card(kind):
+		return PokerFaces.texture(kind)
 	if _textures.has(kind):
 		return _textures[kind]
 	return _fallback(kind)
