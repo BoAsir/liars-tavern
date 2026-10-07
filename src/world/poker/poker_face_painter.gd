@@ -38,11 +38,14 @@ func _draw() -> void:
 func _draw_paper() -> void:
 	_rounded(Rect2(Vector2.ZERO, size), CardFaces.PAPER_EDGE, CORNER_RADIUS)
 	_rounded(_inset(PAPER_INSET), CardFaces.PAPER, CORNER_RADIUS - int(PAPER_INSET))
+	# 杂点画成小方块:一两个像素、几乎透明,看不出与圆点的区别;draw_circle 每个都要建一个多边形,
+	# 13 张一批时光杂点就占掉十几毫秒,生成那几帧会卡
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4321 + card
 	for i in SPECKLES:
 		var p := Vector2(rng.randf_range(8, size.x - 8), rng.randf_range(8, size.y - 8))
-		draw_circle(p, rng.randf_range(0.5, 1.6), Color(CardFaces.INK, rng.randf_range(0.02, 0.06)))
+		var half := Vector2.ONE * rng.randf_range(0.5, 1.6)
+		draw_rect(Rect2(p - half, half * 2.0), Color(CardFaces.INK, rng.randf_range(0.02, 0.06)))
 	for i in EDGE_SHADES:
 		_rounded(_inset(PAPER_INSET + i * 2), Color.TRANSPARENT, CORNER_RADIUS - int(PAPER_INSET), 2,
 			Color(0.55, 0.42, 0.25, 0.05), false)

@@ -16,6 +16,7 @@ const SMALL_ZOOMS := [3, 4]                 # 与 SMALL_SIZES 对应的放大倍
 const GAP := 4
 const BACKDROP := Color(0.09, 0.07, 0.06)   # 接近酒馆暗处的底色
 const SETTLE_FRAMES := 3
+const BUILD_WARMUP := 30                    # 计时生成之前空转的帧数
 const TAVERN_WARMUP := 45                   # 与 tools/shot.gd 相同:等灯光与后处理稳定
 # 规格 §5.5 德州越肩机位(本机座位):牌桌世界的机位函数由 3D 世界任务实现,这里只为看牌面
 const SEAT_EYE := Vector3(0.55, 1.92, 2.60)
@@ -71,21 +72,25 @@ func _run() -> void:
 
 
 func _timed_build(host: Node) -> void:
-	var stamps: Array[int] = []
+	# 先空转几帧:刚开窗时的头几帧本来就慢,算进来就看不出生成本身卡不卡
+	for i in BUILD_WARMUP:
+		await process_frame
+	var stamps: Array[int] = [Time.get_ticks_usec()]
 	var peak := [0]
 	var tick := func():
 		stamps.append(Time.get_ticks_usec())
 		peak[0] = maxi(peak[0], root.find_children("*", "SubViewport", true, false).size())
 	process_frame.connect(tick)
-	var start := Time.get_ticks_usec()
 	await PokerFaces.build(host)
-	var total := Time.get_ticks_usec() - start
 	process_frame.disconnect(tick)
+	stamps.append(Time.get_ticks_usec())
+	var frames := PackedStringArray()
 	var worst := 0
 	for i in range(1, stamps.size()):
 		worst = maxi(worst, stamps[i] - stamps[i - 1])
-	print("PokerFaces.build: %.0f ms, %d frames, peak %d SubViewports, worst frame %.1f ms" % [
-		total / 1000.0, stamps.size(), peak[0], worst / 1000.0])
+		frames.append("%.1f" % ((stamps[i] - stamps[i - 1]) / 1000.0))
+	print("PokerFaces.build: %.0f ms, peak %d SubViewports, worst frame %.1f ms, frames [%s]" % [
+		(stamps[-1] - stamps[0]) / 1000.0, peak[0], worst / 1000.0, " ".join(frames)])
 
 
 func _full_sheet() -> Image:

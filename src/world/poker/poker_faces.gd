@@ -128,6 +128,8 @@ static func _render_viewports(tree: SceneTree, batch: Array) -> Array:
 		images.append(vp.get_texture().get_image() if is_instance_valid(vp) else null)
 	if is_instance_valid(holder):
 		holder.queue_free()
+	# 读回(等 GPU)与转纹理(生成 mipmap、上传)各占一帧:挤在同一帧里,生成那几帧会掉帧
+	await tree.process_frame
 	return images
 
 
