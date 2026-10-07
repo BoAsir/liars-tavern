@@ -26,6 +26,7 @@ var _rules_page := 0
 
 func _ready() -> void:
 	get_window().min_size = Vector2i(1024, 600)
+	RenderBudget.follow(get_window())
 	get_tree().auto_accept_quit = false
 	tavern = Tavern.new()
 	add_child(tavern)
