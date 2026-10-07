@@ -1,6 +1,6 @@
 extends GutTest
 # 弹簧脖子:头按座位坐标的水平偏移伸出去(越远越往上探),脖子自动拉长连着头;
-# 松开后弹回原位(带一点回弹);伸出距离有上限;出局时缩回。
+# 追到目标就停稳(不过冲);伸出距离有上限;出局时缩回。
 
 
 const SETTLE := 1.5      # 秒:登场缩放与弹簧都稳定下来
@@ -55,16 +55,22 @@ func test_reach_is_limited():
 	assert_almost_eq(flat.length(), Patron.NECK_REACH, EPS)
 
 
-func test_springs_back_with_overshoot_when_released():
+func test_settles_without_overshoot():
+	# 临界阻尼:头追到目标就停,不冲过头再晃回来(伸出去、收回来都一样)
 	patron.set_neck_target(Vector3(0, 0, -0.5))
+	var furthest := 0.0
+	for i in 60:
+		await wait_frames(1)
+		furthest = minf(furthest, patron.neck_offset().z)
+	assert_gt(furthest, -0.5 - 0.005, "伸出去不过冲")
 	await wait_seconds(SETTLE)
 	patron.set_neck_target(Vector3.ZERO)
-	var max_overshoot := 0.0
-	for i in 40:
+	var max_back := 0.0
+	for i in 60:
 		await wait_frames(1)
-		max_overshoot = maxf(max_overshoot, patron.neck_offset().z)
+		max_back = maxf(max_back, patron.neck_offset().z)
+	assert_lt(max_back, 0.005, "收回来不冲过原位")
 	await wait_seconds(SETTLE)
-	assert_gt(max_overshoot, 0.005, "弹回时冲过原位一点(像弹簧)")
 	assert_lt(patron.neck_offset().length(), 0.01, "最终回到原位")
 
 

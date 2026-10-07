@@ -15,7 +15,8 @@ extends Node
 
 const BOT_THINK := Vector2(0.6, 1.6)
 const CHALLENGE_CHANCE := 0.35
-const BOT_FIDGET := 1.5    # bot 每隔这么久按下/松开一次 W 伸脖子(秒),冒烟测试据此确认脖子偏移走通了网络
+const BOT_FIDGET := 1.5    # bot 按住 W 探头、松开、按住 S 收回、松开,每步这么久(秒);冒烟测试据此确认脖子偏移走通了网络
+const BOT_FIDGET_KEYS := [KEY_W, KEY_S]
 
 var app: Node
 var opts := {}
@@ -25,7 +26,7 @@ var _match_finished := false
 var _gaze_from := {}   # 收到过谁的视线同步(冒烟测试据此确认视线消息走通)
 var _neck_from := {}   # 收到过谁伸出的脖子
 var _fidget_timer := BOT_FIDGET
-var _fidget_down := false
+var _fidget_step := 0
 
 
 func _init(p_app: Node) -> void:
@@ -105,16 +106,16 @@ func _process(delta: float) -> void:
 
 
 func _fidget(delta: float) -> void:
-	# 对局中隔一会儿按住 W 再松开:走与真人相同的按键读取,脖子伸出去又弹回来
+	# 对局中轮流按住 W、S:走与真人相同的按键读取,头探出去再收回来
 	_fidget_timer -= delta
 	if not Net.in_game or _fidget_timer > 0.0:
 		return
 	_fidget_timer = BOT_FIDGET
-	_fidget_down = not _fidget_down
 	var key := InputEventKey.new()
-	key.physical_keycode = KEY_W
-	key.pressed = _fidget_down
+	key.physical_keycode = BOT_FIDGET_KEYS[floori(_fidget_step / 2.0) % BOT_FIDGET_KEYS.size()]
+	key.pressed = _fidget_step % 2 == 0
 	Input.parse_input_event(key)
+	_fidget_step += 1
 
 
 func _bot_act(screen: Node) -> void:

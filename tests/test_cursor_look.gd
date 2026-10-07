@@ -47,6 +47,12 @@ func test_neck_input_diagonal_is_not_faster():
 	assert_almost_eq(input.length(), TableScreenScript.NECK_SPEED * 0.1, 0.0001)
 
 
-func test_neck_input_resets_when_released():
+func test_neck_input_stays_when_released():
 	var input := TableScreenScript.next_neck_input(Vector3.ZERO, Vector3(-1, 0, 0), 0.3)
-	assert_eq(TableScreenScript.next_neck_input(input, Vector3.ZERO, 0.016), Vector3.ZERO, "松开就弹回")
+	assert_eq(TableScreenScript.next_neck_input(input, Vector3.ZERO, 0.016), input, "松开就停在原处,不弹回")
+
+
+func test_opposite_key_brings_the_head_back():
+	var input := TableScreenScript.next_neck_input(Vector3.ZERO, Vector3(0, 0, -1), 0.5)
+	input = TableScreenScript.next_neck_input(input, Vector3(0, 0, 1), 0.5)
+	assert_almost_eq(input.length(), 0.0, 0.0001, "按 S 同样时长,头回到原位")
