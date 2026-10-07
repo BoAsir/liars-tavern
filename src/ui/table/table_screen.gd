@@ -4,6 +4,7 @@ extends Control
 
 
 const PLATE_KEY := "plate:%d"   # WorldLabels 里对手铭牌的键
+const CURSOR_LOOK_FAR := 4.0    # 光标指向桌面以上时,取射线上这么远的一点作为视线目标(米)
 
 var app: Node
 var my_pid := 0
@@ -90,6 +91,32 @@ func _process(delta: float) -> void:
 	_clock.tick(delta)
 	var show_ring: bool = current_pid != null and not animating and not pub.is_empty()
 	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
+	_follow_cursor_with_head()
+
+
+func _follow_cursor_with_head() -> void:
+	# 自己的角色转头、转眼看向光标所指之处;特写镜头、观战、结算时交还给演出控制视线
+	if director == null or not director.is_at_seat() or _dead.has(my_pid) or _settlement != null:
+		return
+	var me: Patron = world.patrons.get(my_pid)
+	if me == null:
+		return
+	var camera: Camera3D = app.tavern.camera_rig.camera
+	var mouse := get_viewport().get_mouse_position()
+	me.look_at_point(cursor_look_target(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse)))
+
+
+static func cursor_look_target(origin: Vector3, direction: Vector3) -> Vector3:
+	# 光标射线落在桌面上就看桌面上那一点(低头看牌、看出牌区);
+	# 指向桌面以上或桌外(对手、墙、天花板)时取射线上远处一点
+	var dir := direction.normalized()
+	if dir.y < -0.01:
+		var t := (SeatLayout.TABLE_TOP - origin.y) / dir.y
+		if t > 0.0 and t < CURSOR_LOOK_FAR:
+			var hit := origin + dir * t
+			if Vector2(hit.x, hit.z).length() <= SeatLayout.TABLE_RADIUS:
+				return hit
+	return origin + dir * CURSOR_LOOK_FAR
 
 
 # —— 网络输入 ——

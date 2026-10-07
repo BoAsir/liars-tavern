@@ -262,6 +262,11 @@ func _match_over(ev: Dictionary) -> void:
 
 # —— 工具 ——
 
+func is_at_seat() -> bool:
+	# 镜头在自己座位的越肩机位(不是特写、不是观战)
+	return _at_seat and not spectator
+
+
 func back_to_seat(duration: float) -> void:
 	_at_seat = true
 	if spectator:
