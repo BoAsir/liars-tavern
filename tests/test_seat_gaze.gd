@@ -4,13 +4,16 @@ extends GutTest
 # 他人的视线只套在桌上有酒客、没被排除(出局/观战)的人身上,停发后看回牌桌给的落点;不在树内时 forget 也安全。
 
 
-# 越肩机位(规格 §5.5):骗子酒馆桌与德州桌
-const LIARS_CAMERA := Vector3(0.55, 1.92, 2.1)
-const POKER_CAMERA := Vector3(0.55, 1.92, 2.60)
+# 越肩机位(规格 §5.5):骗子酒馆桌取 TableWorld 的机位常量(机位调整时测试跟着走);
+# 德州桌的机位随座位往后移桌面放大的那么多,现在是 (0.55, 1.92, 2.60)
+const LIARS_CAMERA := Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK)
+const POKER_CAMERA := LIARS_CAMERA + Vector3(0, 0, SeatLayout.POKER_TABLE_RADIUS - SeatLayout.TABLE_RADIUS)
 const BIG_TABLE_SPOT := Vector3(1.2, SeatLayout.TABLE_TOP, 0.3)   # 德州桌面上、骗子酒馆桌外的一点
 const FAR_SIDE_SPOT := Vector3(0, SeatLayout.TABLE_TOP, -1.35)    # 德州桌对面靠桌沿:对手的筹码与亮牌一带
 const PULL_BACK := Vector3(0, 0.5, 1.0)   # 越肩机位再往后上方拉远一些(以后调机位时)
 const FELT_SAMPLES := 12                  # 每圈取几个点检查桌面
+const NECK_SETTLE := 1.5    # 秒:真酒客的登场缩放与弹簧脖子都停稳(同 test_patron_neck)
+const HEAD_NEAR := 0.005    # 米
 const FRAME := 0.1
 const ME := 1
 const NEAR := 0.001
@@ -185,6 +188,33 @@ func test_neck_is_kept_but_not_used_away_from_the_seat_camera():
 	_frames(3)
 	assert_eq(gaze.neck_input(), reached, "离开越肩机位时按着键也不再探")
 	assert_eq(_patron(ME).asked_neck, Vector3.ZERO)
+
+
+func test_neck_input_is_where_the_real_head_settles():
+	# 按键攒下的偏移(也是发给别人的)就是头最终停住的位置,探头范围以 Patron 为准:
+	# 头去不了的方向(超出上限、往后)若也攒进输入,松手后头不动,反方向键得先把这段暗量抵消掉,头才开始动
+	var real := TableWorld.new(null)
+	add_child_autofree(real)
+	real.arrange([{"pid": 1}, {"pid": 2}, {"pid": 3}], 1, true, false)
+	var presses := {
+		1: [[Vector3(0, 0, 1), 0.5]],                            # 在原位按 S
+		2: [[Vector3(1, 0, -1), 0.4], [Vector3(0, 0, 1), 1.5]],  # 斜着探出去,再按住 S 收回
+		3: [[Vector3(-1, 0, -1), 1.5]],                          # 斜着探到上限以外
+	}
+	var gazes := {}
+	for pid in presses:
+		var own: ScriptedGaze = autofree(ScriptedGaze.new(null, real, pid))
+		for press in presses[pid]:
+			own.held = press[0]
+			for i in roundi(press[1] / FRAME):
+				own._process(FRAME)
+		gazes[pid] = own
+	await wait_seconds(NECK_SETTLE)
+	for pid in gazes:
+		var input: Vector3 = gazes[pid].neck_input()
+		var head: Vector3 = real.patrons[pid].neck_offset()
+		assert_lt(Vector2(head.x - input.x, head.z - input.z).length(), HEAD_NEAR,
+			"按键 %s:输入停在 %s,头停在 %s" % [presses[pid], input, head])
 
 
 func test_excluded_self_drops_the_neck():
