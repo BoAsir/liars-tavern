@@ -15,8 +15,9 @@ const COLORS := {
 	1000: Color(0.88, 0.66, 0.18),
 	5000: Color(0.46, 0.18, 0.66),
 }
-const CHIP_RADIUS := 0.024
-const CHIP_HEIGHT := 0.0075
+# 比真筹码(直径 3.9 厘米)大一圈:德州桌直径近 3 米、越肩镜头离桌心 2.6 米,真尺寸的筹码在 1280×720 下只剩几个像素
+const CHIP_RADIUS := 0.03
+const CHIP_HEIGHT := 0.0094
 const CHIP_SEGMENTS := 20
 const COLUMN_MAX := 10
 const DISPLAY_MAX := 40

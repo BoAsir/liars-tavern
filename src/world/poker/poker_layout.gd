@@ -22,9 +22,10 @@ const BET_INSET := 0.53
 const BET_SIDE := 0.10
 const BUTTON_INSET := 0.33
 const BUTTON_SIDE := -0.30
-# —— 底池:公共牌靠本机一侧,主池与边池从左到右并排 ——
+# —— 底池:公共牌靠本机一侧,主池与边池从左到右并排;多于 POTS_PER_ROW 个时往本机方向另起一排 ——
 const POT_Z := 0.30
-const POT_SPACING := 0.2
+const POT_SPACING := 0.25
+const POTS_PER_ROW := 4
 # —— 发牌处与弃牌堆:牌架后面(越肩看过去被公共牌挡住一半,不抢眼)——
 const DECK_SPOT := Vector2(-0.15, -0.5)
 const MUCK_SPOT := Vector2(0.15, -0.5)
@@ -55,7 +56,10 @@ static func board_width() -> float:
 
 
 static func pot_position(index: int, count: int) -> Vector3:
-	return Vector3((index - (count - 1) / 2.0) * POT_SPACING, SeatLayout.TABLE_TOP, POT_Z)
+	var row := index / POTS_PER_ROW
+	var in_row := mini(count - row * POTS_PER_ROW, POTS_PER_ROW)
+	var col := index % POTS_PER_ROW
+	return Vector3((col - (in_row - 1) / 2.0) * POT_SPACING, SeatLayout.TABLE_TOP, POT_Z + row * POT_SPACING)
 
 
 static func facing(angle: float) -> Basis:
