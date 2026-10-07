@@ -57,13 +57,14 @@ const CATEGORY_NAMES := {
 }
 const ROYAL_FLUSH_NAME := "皇家同花顺"   # A 高的同花顺:只是名字,大小同同花顺
 
-# 牌型从小到大。短牌(Triton / GGPoker 现行规则):同花 > 葫芦,三条 > 顺子
+# 牌型从小到大。短牌只有一处不同:同花 > 葫芦(36 张牌里同花比葫芦难成)。
+# 三条与顺子的先后各家曾不一致,这里取 Triton 2019 年起与多数平台的现行版本:顺子 > 三条,与长牌相同
 const LONG_DECK_ORDER := [
 	Category.HIGH_CARD, Category.ONE_PAIR, Category.TWO_PAIR, Category.THREE_OF_A_KIND, Category.STRAIGHT,
 	Category.FLUSH, Category.FULL_HOUSE, Category.FOUR_OF_A_KIND, Category.STRAIGHT_FLUSH,
 ]
 const SHORT_DECK_ORDER := [
-	Category.HIGH_CARD, Category.ONE_PAIR, Category.TWO_PAIR, Category.STRAIGHT, Category.THREE_OF_A_KIND,
+	Category.HIGH_CARD, Category.ONE_PAIR, Category.TWO_PAIR, Category.THREE_OF_A_KIND, Category.STRAIGHT,
 	Category.FULL_HOUSE, Category.FLUSH, Category.FOUR_OF_A_KIND, Category.STRAIGHT_FLUSH,
 ]
 

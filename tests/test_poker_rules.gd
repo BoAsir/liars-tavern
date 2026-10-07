@@ -31,12 +31,16 @@ func test_long_deck_order():
 	assert_eq(PokerRules.strength(C.STRAIGHT_FLUSH, false), PokerRules.Category.size() - 1)
 
 
-func test_short_deck_flush_beats_full_house_and_trips_beat_straight():
+func test_short_deck_only_swaps_flush_and_full_house():
 	var C := PokerRules.Category
 	assert_gt(PokerRules.strength(C.FLUSH, true), PokerRules.strength(C.FULL_HOUSE, true))
-	assert_gt(PokerRules.strength(C.THREE_OF_A_KIND, true), PokerRules.strength(C.STRAIGHT, true))
+	assert_gt(PokerRules.strength(C.STRAIGHT, true), PokerRules.strength(C.THREE_OF_A_KIND, true), "顺子 > 三条,同长牌")
 	assert_gt(PokerRules.strength(C.FOUR_OF_A_KIND, true), PokerRules.strength(C.FLUSH, true))
-	assert_gt(PokerRules.strength(C.STRAIGHT, true), PokerRules.strength(C.TWO_PAIR, true))
+	var differences := 0
+	for category in PokerRules.Category.values():
+		if PokerRules.strength(category, true) != PokerRules.strength(category, false):
+			differences += 1
+	assert_eq(differences, 2, "只有同花与葫芦两个牌型互换了位置")
 
 
 func test_action_sets():

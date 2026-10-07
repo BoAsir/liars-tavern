@@ -28,7 +28,7 @@ var lobby_meta := {}       # {"room", "host", "addresses", "port"}
 var seats: Array = []      # 本局座位顺序 [{"pid", "name"}]
 var last_public := {}
 var last_private := {}
-var game_mode := GameMode.DEFAULT   # 房主:房间玩法;客户端:来自等待厅 meta 或开局 info
+var game_mode := GameMode.DEFAULT   # 房主:开房时选的玩法;客户端:来自等待厅 meta 或开局 info
 
 var _session_active := false
 var _joining := false
@@ -440,12 +440,7 @@ func max_players() -> int:
 	return GameMode.max_players(game_mode)
 
 
-# —— 玩法与德州意图:接口先行(德州规格 §4.3),由玩法接入与网络会话实现 ——
-
-func set_game_mode(_mode: String) -> bool:
-	# 仅房主、等待厅中;当前人数超过目标玩法上限时返回 false
-	return false
-
+# —— 德州意图:接口先行(德州规格 §4.3),由网络会话实现 ——
 
 func submit_poker_action(_action: String, _amount := 0) -> void:
 	# fold / check / call / raise(amount 为「加注到」)/ allin
