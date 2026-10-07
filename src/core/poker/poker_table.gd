@@ -2,17 +2,14 @@ class_name PokerTable
 extends RefCounted
 # 德州状态机(规格 §2、§4.4、§4.5):只在房主端运行,不依赖节点/网络/UI。
 # 动作方法返回 {"ok": bool, "error"?: String, "events"?: Array};座位变化直接返回事件数组。
-# 一条街的下注细节在 BettingRound,边池/退回/分池在 PotBuilder,牌型在 HandEvaluator。
+# 这里管座位与整场:入座/加入/离开、按钮与盲注位置、发牌、输光/再领/观战/离座、一手结束的收尾、散局与结算。
+# 一手牌的流程在 PokerHand,一条街的下注在 BettingRound,边池/退回/分池在 PotBuilder,牌型在 HandEvaluator。
 # 筹码守恒(规格 §7):在座者筹码 + 本手已投入 + 已离开者带走的 = 累计领取总额。
 
 
 enum Phase { IDLE, BETTING, OVER }        # IDLE:两手之间/等人;OVER:已散局
 
 const HEADS_UP := 2                       # 单挑:按钮下小盲,翻牌前按钮先说话
-const NEXT_STREET := {
-	PokerRules.PREFLOP: PokerRules.FLOP, PokerRules.FLOP: PokerRules.TURN, PokerRules.TURN: PokerRules.RIVER,
-}
-const STREET_CARDS := {PokerRules.FLOP: PokerRules.FLOP_CARDS, PokerRules.TURN: 1, PokerRules.RIVER: 1}
 # 不在本手中的人:不发牌,按钮与盲注跳过
 const SITTING_OUT := [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY]
 
@@ -24,22 +21,12 @@ var _short_deck: bool
 var _rng: RandomNumberGenerator
 var _players := {}          # pid → 玩家记录:在座的人,含要到这一手结束才移出的离开者
 var _seat_order := []       # 座位顺序 = 行动顺序(俯视顺时针);新人排在末尾
-var _hand_seats := []       # 本手 hand_started 的座位表(两手之间为上一手的);开局前为开局入座的人
+var _opening_seats := []    # 开局入座的人:第一手之前他们就有酒客
 var _departed := []         # 已移出座位的离开者 [{"pid", "stack", "buyins"}],筹码已定格
 var _phase := Phase.IDLE
 var _hand_number := 0
 var _ending := false
-var _street := ""
-var _board := []
-var _pending_board := []    # 本手要发的 5 张公共牌:没发出去的不外露
-var _pots := []             # 已收进底池的部分(不含本轮下注)
-var _dealt := []            # 本手发到牌的人,从小盲起
-var _button: Variant = null
-var _sb: Variant = null
-var _bb: Variant = null
-var _current: Variant = null
-var _anchor: Variant = null    # 找下一位行动者的起点:刚出手的人;翻牌前为大盲,新的一条街为按钮
-var _round: BettingRound = null
+var _hand: PokerHand = null # 进行中的一手;两手之间是刚结束的那一手(公共视图还显示它)
 
 
 func _init(short_deck: bool, rng: RandomNumberGenerator) -> void:
@@ -50,12 +37,12 @@ func _init(short_deck: bool, rng: RandomNumberGenerator) -> void:
 # —— 座位 ——
 
 func seat(pid: int) -> void:
-	# 开局入座:筹码 2000、领取 1 次、等着发牌;开局入座的人一开始就有酒客
+	# 开局入座:筹码 2000、领取 1 次、等着发牌
 	if _players.has(pid):
 		return
 	_players[pid] = _new_player()
 	_seat_order.append(pid)
-	_hand_seats.append(pid)
+	_opening_seats.append(pid)
 
 
 func add_player(pid: int) -> Array:
@@ -80,11 +67,8 @@ func remove_player(pid: int) -> Array:
 	var folds: bool = p["status"] == PokerRules.STATUS_ACTIVE
 	var events := [_left_event(pid, folds)]
 	if folds:
-		p["status"] = PokerRules.STATUS_FOLDED
-		if _current == pid:
-			_anchor = pid
-			_current = null
-		_advance(events)
+		events.append_array(_hand.fold(pid))
+		_settle_if_over(events)
 	return events
 
 
@@ -139,27 +123,19 @@ func start_hand() -> Array:
 	rigged = {}
 	for pid in rig.get("stacks", {}):
 		_players[pid]["stack"] = rig["stacks"][pid]
-	_choose_positions(_ready_players())
+	var positions := _positions(_ready_players())
 	_hand_number += 1
-	_hand_seats = _seat_order.duplicate()
-	button_pid = _button
-	_board = []
-	_pots = []
-	_street = PokerRules.PREFLOP
+	button_pid = positions["button"]
+	_reset_seats_for_hand(positions["dealt"])
+	var board := _deal(rig, positions["dealt"])
+	_hand = PokerHand.new(_hand_number, _players, _short_deck, positions, _seat_order.duplicate(), board)
 	_phase = Phase.BETTING
-	_reset_seats_for_hand()
-	_deal_cards(rig)
 	var events := [{
-		"type": "hand_started", "hand": _hand_number, "button": _button, "sb": _sb, "bb": _bb,
-		"seats": _hand_seats.duplicate(), "dealt": _dealt.duplicate(),
+		"type": "hand_started", "hand": _hand_number, "button": positions["button"], "sb": positions["sb"],
+		"bb": positions["bb"], "seats": _seat_order.duplicate(), "dealt": positions["dealt"].duplicate(),
 	}]
-	_round = BettingRound.new(_players, _dealt, PokerRules.BIG_BLIND)
-	events.append(_round.post_blind(_sb, "sb", PokerRules.SMALL_BLIND))
-	events.append(_round.post_blind(_bb, "bb", PokerRules.BIG_BLIND))
-	events.append({"type": "hole_cards", "hand": _hand_number, "pids": _dealt.duplicate()})
-	_anchor = _bb
-	_current = null
-	_advance(events)
+	events.append_array(_hand.start())
+	_settle_if_over(events)
 	return events
 
 
@@ -169,7 +145,7 @@ func act(pid: int, action: String, amount := 0) -> Dictionary:
 		error = "invalid_action"
 	if error == "" and _phase != Phase.BETTING:
 		error = "no_hand"
-	if error == "" and pid != _current:
+	if error == "" and pid != _hand.current:
 		error = "not_your_turn"
 	if error != "":
 		return _fail(error)
@@ -180,18 +156,17 @@ func timeout_action() -> Dictionary:
 	# 回合超时代打:不欠跟注就过牌,否则弃牌;记一次连续超时
 	if _phase == Phase.OVER:
 		return _fail("session_over")
-	if _phase != Phase.BETTING or _current == null:
+	if _phase != Phase.BETTING or _hand.current == null:
 		return _fail("no_hand")
-	var pid: int = _current
-	var action := PokerRules.CHECK if _round.to_call(pid) == 0 else PokerRules.FOLD
-	return _bet_action(pid, action, 0, true)
+	var pid: int = _hand.current
+	return _bet_action(pid, PokerRules.CHECK if _hand.to_call(pid) == 0 else PokerRules.FOLD, 0, true)
 
 
 func legal_actions(pid: int) -> Dictionary:
 	# 不轮到他时为 {};否则 {"to_call", "call_amount", "can_check", "can_raise", "can_allin", "min_raise_to", "max_raise_to"}
-	if _phase != Phase.BETTING or pid != _current:
+	if _phase != Phase.BETTING or pid != _hand.current:
 		return {}
-	return _round.legal(pid)
+	return _hand.legal(pid)
 
 
 func results() -> Array:
@@ -232,18 +207,19 @@ func hole_cards(pid: int) -> Array:
 
 func best_hand(pid: int) -> Dictionary:
 	# 公共牌 ≥ 3 张时的当前最大牌型 {"category", "name", "detail", "cards"};没发到牌或还没翻牌为 {}
-	if not _players.has(pid) or _players[pid]["hole"].is_empty() or _board.size() < PokerRules.FLOP_CARDS:
+	var cards := board()
+	if not _players.has(pid) or _players[pid]["hole"].is_empty() or cards.size() < PokerRules.FLOP_CARDS:
 		return {}
-	var hand := HandEvaluator.evaluate(_players[pid]["hole"] + _board, _short_deck)
+	var hand := HandEvaluator.evaluate(_players[pid]["hole"] + cards, _short_deck)
 	return {"category": hand["category"], "name": hand["name"], "detail": hand["detail"], "cards": hand["cards"]}
 
 
 func board() -> Array:
-	return _board.duplicate()
+	return _hand.board.duplicate() if _hand != null else []
 
 
 func pots() -> Array:
-	return _pots.duplicate(true)
+	return _hand.pots.duplicate(true) if _hand != null else []
 
 
 func hand_number() -> int:
@@ -251,7 +227,7 @@ func hand_number() -> int:
 
 
 func street() -> String:
-	return _street
+	return _hand.street if _hand != null else ""
 
 
 func phase() -> Phase:
@@ -259,23 +235,23 @@ func phase() -> Phase:
 
 
 func current_pid() -> Variant:
-	return _current
+	return _hand.current if _hand != null else null
 
 
 func current_bet() -> int:
-	return _round.current_bet if _phase == Phase.BETTING else 0
+	return _hand.current_bet() if _hand != null else 0
 
 
 func button() -> Variant:
-	return _button
+	return _hand.button if _hand != null else null
 
 
 func small_blind() -> Variant:
-	return _sb
+	return _hand.small_blind if _hand != null else null
 
 
 func big_blind() -> Variant:
-	return _bb
+	return _hand.big_blind if _hand != null else null
 
 
 func is_ending() -> bool:
@@ -284,7 +260,7 @@ func is_ending() -> bool:
 
 func seats_with_patrons() -> Array:
 	# 桌上有酒客的人(规格 §4.6 的 seats):本手(空闲时为上一手)的座位表去掉已离开的;新人要等下一手才登场
-	return _hand_seats.filter(func(pid): return _is_seated(pid))
+	return _hand_seats().filter(_is_seated)
 
 
 func chips_in_play() -> int:
@@ -313,7 +289,7 @@ func departed_stacks() -> Dictionary:
 	return stacks
 
 
-# —— 开一手 ——
+# —— 开一手:位置与发牌 ——
 
 func _ready_players() -> Array:
 	# 下一手的上桌者,按座位顺序
@@ -326,37 +302,33 @@ func _is_ready(pid: int) -> bool:
 	return not p["left"] and p["stack"] > 0 and not SITTING_OUT.has(p["status"])
 
 
-func _choose_positions(dealt: Array) -> void:
-	# 按钮、小盲(按钮之后的下一位上桌者)、大盲(再下一位);单挑时按钮下小盲。发牌从小盲起
-	_button = _next_button(dealt)
-	var i := dealt.find(_button)
-	if dealt.size() == HEADS_UP:
-		_sb = _button
-		_bb = dealt[(i + 1) % dealt.size()]
-	else:
-		_sb = dealt[(i + 1) % dealt.size()]
-		_bb = dealt[(i + 2) % dealt.size()]
-	var s := dealt.find(_sb)
-	_dealt = dealt.slice(s) + dealt.slice(0, s)
+func _positions(ready: Array) -> Dictionary:
+	# 按钮;小盲 = 按钮之后的下一位上桌者(单挑时就是按钮),大盲 = 再下一位;发牌从小盲起
+	var button_at := ready.find(_next_button(ready))
+	var sb_at := button_at if ready.size() == HEADS_UP else (button_at + 1) % ready.size()
+	return {
+		"button": ready[button_at], "sb": ready[sb_at], "bb": ready[(sb_at + 1) % ready.size()],
+		"dealt": ready.slice(sb_at) + ready.slice(0, sb_at),
+	}
 
 
-func _next_button(dealt: Array) -> Variant:
+func _next_button(ready: Array) -> int:
 	# 第一手随机;之后在上一手的座位表里,从上一手按钮顺时针往后找第一位本手上桌者(按钮本人离开或输光也一样),
 	# 所以排在末尾的新人不会抢按钮
 	if button_pid == null:
-		return dealt[_rng.randi_range(0, dealt.size() - 1)]
-	if dealt.size() == HEADS_UP and _dealt.size() > HEADS_UP and dealt.has(_bb):
-		return _bb   # 从 ≥3 人变成单挑:上一手的大盲拿按钮改下小盲,免得连下两次大盲(TDA)
-	var ring := _hand_seats if _hand_seats.has(button_pid) else _seat_order
+		return ready[_rng.randi_range(0, ready.size() - 1)]
+	if _hand != null and ready.size() == HEADS_UP and _hand.dealt.size() > HEADS_UP and ready.has(_hand.big_blind):
+		return _hand.big_blind   # 从 ≥3 人变成单挑:上一手的大盲拿按钮改下小盲,免得连下两次大盲(TDA)
+	var ring := _hand_seats() if _hand_seats().has(button_pid) else _seat_order
 	var start := ring.find(button_pid)
 	for i in range(1, ring.size() + 1):
 		var pid: int = ring[(start + i) % ring.size()]
-		if dealt.has(pid):
+		if ready.has(pid):
 			return pid
-	return dealt[0]
+	return ready[0]
 
 
-func _reset_seats_for_hand() -> void:
+func _reset_seats_for_hand(dealt: Array) -> void:
 	# 上一手的手牌、亮牌、投入清零;上桌者改为 active,其余人保持 waiting/busted/spectating/away
 	for pid in _seat_order:
 		var p: Dictionary = _players[pid]
@@ -364,12 +336,12 @@ func _reset_seats_for_hand() -> void:
 		p["hole"] = []
 		p["bet"] = 0
 		p["committed"] = 0
-		if _dealt.has(pid):
+		if dealt.has(pid):
 			p["status"] = PokerRules.STATUS_ACTIVE
 
 
-func _deal_cards(rig: Dictionary) -> void:
-	# 测试钩子指定的牌先从牌堆里拿走,其余从洗好的牌堆发;5 张公共牌一开始就定好,按街翻开
+func _deal(rig: Dictionary, dealt: Array) -> Array:
+	# 发手牌并定好这一手的 5 张公共牌(按街翻开)。测试钩子指定的牌先从牌堆里拿走,其余从洗好的牌堆发
 	var holes: Dictionary = rig.get("holes", {})
 	var fixed_board: Array = rig.get("board", [])
 	var used := {}
@@ -377,9 +349,9 @@ func _deal_cards(rig: Dictionary) -> void:
 		for card in cards:
 			used[card] = true
 	var deck := Array(PokerDeck.shuffled(_short_deck, _rng)).filter(func(card): return not used.has(card))
-	for pid in _dealt:
+	for pid in dealt:
 		_players[pid]["hole"] = holes[pid].duplicate() if holes.has(pid) else _draw(deck, PokerRules.HOLE_CARDS)
-	_pending_board = fixed_board.duplicate() + _draw(deck, PokerRules.BOARD_CARDS - fixed_board.size())
+	return fixed_board.duplicate() + _draw(deck, PokerRules.BOARD_CARDS - fixed_board.size())
 
 
 static func _draw(deck: Array, count: int) -> Array:
@@ -389,148 +361,28 @@ static func _draw(deck: Array, count: int) -> Array:
 	return cards
 
 
-# —— 推进 ——
+# —— 行动与一手结束 ——
 
 func _bet_action(pid: int, action: String, amount: int, timed_out: bool) -> Dictionary:
-	var result := _round.apply(pid, action, amount)
+	var result := _hand.act(pid, action, amount)
 	if not result["ok"]:
 		return result
 	var p: Dictionary = _players[pid]
 	p["timeouts"] = p["timeouts"] + 1 if timed_out else 0   # 自己的任何一次行动都清零连续超时
-	var event: Dictionary = result["event"]
-	event["timeout"] = timed_out
-	var events := [event]
-	_anchor = pid
-	_current = null
-	_advance(events)
+	var events: Array = result["events"]
+	events[0]["timeout"] = timed_out
+	_settle_if_over(events)
 	return _ok(events)
 
 
-func _advance(events: Array) -> void:
-	# 每次状态变化后推进:只剩一人 → 不亮牌赢下底池;没人还能下注 → 亮牌发完;一轮结束 → 下一条街;否则轮到下一位
-	while true:
-		if _round.live().size() == 1:
-			_win_uncontested(events)
-			return
-		if _round.should_run_out():
-			_run_out(events)
-			return
-		if not _round.is_complete():
-			break
-		_collect(events)
-		if _street == PokerRules.RIVER:
-			_showdown(events)
-			return
-		_deal_street(events)
-	_pass_turn(events)
-
-
-func _pass_turn(events: Array) -> void:
-	# 旁人的变化(离开)不打断当前行动者;否则从起点往后找下一位还要行动的人
-	if _current != null and _round.needs_action(_current):
-		return
-	_current = _round.next_actor(_anchor)
-	events.append({"type": "turn", "pid": _current})
-
-
-func _collect(events: Array) -> void:
-	# 一轮结束:先退未跟注部分,再把下注收进底池;本轮没人下注(都过牌)就没有收注演出
-	var result := _round.collect()
-	var committed := {}
-	var folded := {}
-	for pid in _dealt:
-		committed[pid] = _players[pid]["committed"]
-		if _players[pid]["status"] == PokerRules.STATUS_FOLDED:
-			folded[pid] = true
-	_pots = PotBuilder.build(committed, folded, _hand_seats)
-	if result["had_bets"]:
-		events.append({"type": "bets_collected", "pots": _pots.duplicate(true), "refund": result["refund"]})
-
-
-func _deal_street(events: Array) -> void:
-	_street = NEXT_STREET[_street]
-	var cards := _pending_board.slice(_board.size(), _board.size() + STREET_CARDS[_street])
-	_board.append_array(cards)
-	_round = BettingRound.new(_players, _dealt, 0)
-	_anchor = _button
-	_current = null
-	events.append({"type": "street", "street": _street, "cards": cards, "board": _board.duplicate()})
-
-
-func _run_out(events: Array) -> void:
-	# 没人还能下注:先亮出所有没弃牌者的手牌,再把剩下的公共牌依次发完,然后摊牌
-	_collect(events)
-	_reveal(events, PokerRules.ALLIN if _board.size() < PokerRules.BOARD_CARDS else PokerRules.SHOWDOWN)
-	while _board.size() < PokerRules.BOARD_CARDS:
-		_deal_street(events)
-	_showdown(events)
-
-
-func _showdown(events: Array) -> void:
-	# 没弃牌的人自动亮牌(全下时已亮过的不重复);从最后一个边池到主池依次分配
-	_street = PokerRules.SHOWDOWN
-	_reveal(events, PokerRules.SHOWDOWN)
-	for i in range(_pots.size() - 1, -1, -1):
-		events.append(_award_showdown(i))
-	_end_hand(events)
-
-
-func _award_showdown(index: int) -> Dictionary:
-	# 有资格者中牌最大的赢(只有一个有资格者也照常比牌,不算没摊牌就赢)
-	var pot: Dictionary = _pots[index]
-	var hands := {}
-	var winners := []
-	for pid in pot["eligible"]:
-		hands[pid] = HandEvaluator.evaluate(_players[pid]["hole"] + _board, _short_deck)
-		var cmp := 1 if winners.is_empty() else HandEvaluator.compare(hands[pid], hands[winners[0]])
-		if cmp > 0:
-			winners = [pid]
-		elif cmp == 0:
-			winners.append(pid)
-	winners = _after_button(winners)
-	var best := {}
-	for pid in winners:
-		best[pid] = hands[pid]["cards"].duplicate()
-	return _pot_won(index, winners, hands[winners[0]]["name"], best, false)
-
-
-func _win_uncontested(events: Array) -> void:
-	# 只剩一人没弃牌:退回未跟注部分、收注后他直接赢下全部底池,不亮牌(事件里没有他的牌与牌型名)
-	_collect(events)
-	var winner: int = _round.live()[0]
-	for i in range(_pots.size() - 1, -1, -1):
-		events.append(_pot_won(i, [winner], "", {}, true))
-	_end_hand(events)
-
-
-func _pot_won(index: int, winners: Array, hand_name: String, best: Dictionary, uncontested: bool) -> Dictionary:
-	# 平分按 10 为单位,零头从按钮之后顺时针第一位赢家开始依次多给(winners 已按这个顺序排好)
-	var amount: int = _pots[index]["amount"]
-	var shares := PotBuilder.split(amount, winners, PokerRules.CHIP_UNIT)
-	for pid in shares:
-		_players[pid]["stack"] += shares[pid]
-	return {
-		"type": "pot_won", "index": index, "amount": amount, "winners": winners, "shares": shares,
-		"hand_name": hand_name, "best": best, "uncontested": uncontested,
-	}
-
-
-func _reveal(events: Array, reason: String) -> void:
-	var hands := []
-	for pid in _after_button(_round.live()):
-		var p: Dictionary = _players[pid]
-		if p["shown"].is_empty():
-			p["shown"] = p["hole"].duplicate()
-			hands.append({"pid": pid, "cards": p["hole"].duplicate()})
-	if not hands.is_empty():
-		events.append({"type": "reveal", "hands": hands, "reason": reason})
+func _settle_if_over(events: Array) -> void:
+	if _hand.is_over():
+		_end_hand(events)
 
 
 func _end_hand(events: Array) -> void:
 	# 一手结束:投入清零;发到牌而筹码为 0 的人输光;连续超时的人离座;离开者筹码定格并移出座位;散局中就结算
 	_phase = Phase.IDLE
-	_current = null
-	_pots = []
 	var stacks := {}
 	var busted := []
 	for pid in _seat_order:
@@ -538,7 +390,7 @@ func _end_hand(events: Array) -> void:
 		p["bet"] = 0
 		p["committed"] = 0
 		stacks[pid] = p["stack"]
-		if _dealt.has(pid) and p["stack"] == 0:
+		if _hand.dealt.has(pid) and p["stack"] == 0:
 			p["status"] = PokerRules.STATUS_BUSTED
 			if not p["left"]:
 				busted.append(pid)
@@ -554,7 +406,7 @@ func _end_hand(events: Array) -> void:
 
 func _send_away(events: Array) -> void:
 	# 挂机离座(规格 §2.8):连续超时够次数的人从下一手起离座,保留筹码、不发牌
-	for pid in _dealt:
+	for pid in _hand.dealt:
 		var p: Dictionary = _players[pid]
 		if p["timeouts"] >= PokerRules.AWAY_AFTER_TIMEOUTS and p["stack"] > 0 and not p["left"]:
 			p["status"] = PokerRules.STATUS_AWAY
@@ -562,18 +414,12 @@ func _send_away(events: Array) -> void:
 			events.append({"type": "away", "pid": pid})
 
 
-func _after_button(pids: Array) -> Array:
-	# 按座位从按钮之后顺时针排(按钮本人排在最后)
-	var start := _hand_seats.find(_button)
-	var out := []
-	for i in range(1, _hand_seats.size() + 1):
-		var pid: int = _hand_seats[(start + i) % _hand_seats.size()]
-		if pids.has(pid):
-			out.append(pid)
-	return out
-
-
 # —— 小工具 ——
+
+func _hand_seats() -> Array:
+	# 本手(两手之间为上一手)的座位表;第一手之前为开局入座的人
+	return _hand.seats if _hand != null else _opening_seats
+
 
 func _new_player() -> Dictionary:
 	return {
@@ -606,7 +452,7 @@ func _is_seated(pid: Variant) -> bool:
 
 
 func _seated_count() -> int:
-	return _seat_order.filter(func(pid): return not _players[pid]["left"]).size()
+	return _seat_order.filter(_is_seated).size()
 
 
 func _depart(pid: int) -> void:
