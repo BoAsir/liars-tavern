@@ -34,17 +34,17 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(0.0, 1.05, 0.55), Vector3(0, top, -0.2))
 		"opponent":
 			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
-		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73],面朝 +Z
+		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73]、z = 1.5,面朝 +Z
 		"lineup_front":
-			rig.snap(Vector3(0, 1.35, 4.6), Vector3(0, 0.85, 0))
+			rig.snap(Vector3(0, 1.35, 6.1), Vector3(0, 0.85, 1.5))
 		"lineup_back":
-			rig.snap(Vector3(0, 1.4, -4.2), Vector3(0, 0.8, 0))
+			rig.snap(Vector3(0, 1.4, -2.0), Vector3(0, 0.8, 1.5))
 		"lineup_heads":
-			rig.snap(Vector3(0, 1.45, 3.2), Vector3(0, 1.35, 0))
+			rig.snap(Vector3(0, 1.45, 4.7), Vector3(0, 1.35, 1.5))
 		"lineup_left":
-			rig.snap(Vector3(-1.56, 1.35, 1.6), Vector3(-1.56, 1.0, 0))
+			rig.snap(Vector3(-1.56, 1.35, 3.1), Vector3(-1.56, 1.0, 1.5))
 		"lineup_right":
-			rig.snap(Vector3(1.56, 1.35, 1.6), Vector3(1.56, 1.0, 0))
+			rig.snap(Vector3(1.56, 1.35, 3.1), Vector3(1.56, 1.0, 1.5))
 		_:
 			return false
 	return true
