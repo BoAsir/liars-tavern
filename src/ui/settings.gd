@@ -27,6 +27,16 @@ static func get_bool(key: String, fallback := false, path := PATH) -> bool:
 	return fallback
 
 
+static func last_mode(path := PATH) -> String:
+	# 上次开房选的玩法(主菜单的玩法切换据此预选)。不认识的值(手改的文件、更新版本留下的新玩法)
+	# 回退默认玩法:类型不对已由 get_string 告警,这里只补「是字符串但不是已知玩法」的告警
+	var mode := get_string(KEY_LAST_MODE, GameMode.DEFAULT, path)
+	if GameMode.is_valid(mode):
+		return mode
+	push_warning("设置 %s 的值「%s」不是已知玩法(来自 %s),改用默认玩法" % [KEY_LAST_MODE, mode, path])
+	return GameMode.DEFAULT
+
+
 static func set_value(key: String, value: Variant, path := PATH) -> Error:
 	# 先读回已有内容再写,保留其他键;文件坏了就以新文件覆盖(坏文件里的值本来也读不出来)
 	var config := ConfigFile.new()

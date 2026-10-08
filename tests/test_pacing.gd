@@ -58,9 +58,9 @@ func _round_started_worst(alive: int, spectator: bool) -> float:
 
 func test_round_started_budget_covers_director_worst_case():
 	# 最坏情况:强制验证为真话(无开枪段)后先回座,再收牌、翻目标牌、给满员发牌;
-	# 或者自己已出局(观战机位更慢),给剩下的人发牌
-	var worst := maxf(_round_started_worst(Protocol.MAX_PLAYERS, false),
-		_round_started_worst(Protocol.MAX_PLAYERS - 1, true))
+	# 或者自己已出局(观战机位更慢),给剩下的人发牌。满员按骗子酒馆的上限(Protocol.MAX_PLAYERS 是德州的 8)
+	var full := GameMode.max_players(GameMode.LIARS)
+	var worst := maxf(_round_started_worst(full, false), _round_started_worst(full - 1, true))
 	assert_lte(worst + FRAME_SLACK, Pacing.ROUND_STARTED)
 
 

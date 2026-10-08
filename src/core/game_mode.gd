@@ -1,5 +1,5 @@
 class_name GameMode
-# 玩法:开房时选择,等待厅里房主可以改。纯数据,网络层、界面与规则引擎共用。
+# 玩法:开房时选择,开房后不能改(想换玩法就重开房间)。纯数据,网络层、界面与规则引擎共用。
 # 玩法 id 会进局域网发现报文与等待厅 meta,来自不可信对端时先用 is_valid 校验。
 
 
@@ -36,6 +36,11 @@ static func label(mode: String) -> String:
 
 static func short_label(mode: String) -> String:
 	return _SHORT_LABELS.get(mode, UNKNOWN_LABEL)
+
+
+static func summary(mode: String) -> String:
+	# 玩法全名与人数范围,如「德州扑克·短牌 · 2–8 人」:等待厅标题下一行、主菜单玩法按钮的提示
+	return "%s · %d–%d 人" % [label(mode), min_players(mode), max_players(mode)]
 
 
 static func min_players(_mode: String) -> int:

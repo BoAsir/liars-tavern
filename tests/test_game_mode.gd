@@ -50,6 +50,13 @@ func test_labels():
 	assert_eq(GameMode.label("bogus"), GameMode.UNKNOWN_LABEL)
 
 
+func test_summary_names_the_mode_and_its_player_range():
+	# 等待厅标题下一行、主菜单玩法按钮的提示
+	assert_eq(GameMode.summary(GameMode.SHORT_DECK), "德州扑克·短牌 · 2–8 人")
+	assert_eq(GameMode.summary(GameMode.HOLDEM), "德州扑克·长牌 · 2–8 人")
+	assert_eq(GameMode.summary(GameMode.LIARS), "骗子酒馆 · 2–4 人")
+
+
 func test_poker_table_is_bigger_and_keeps_the_seat_gap():
 	assert_eq(SeatLayout.table_radius_for(GameMode.LIARS), SeatLayout.TABLE_RADIUS)
 	assert_gt(SeatLayout.table_radius_for(GameMode.HOLDEM), SeatLayout.TABLE_RADIUS)
