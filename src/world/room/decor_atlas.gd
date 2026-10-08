@@ -7,10 +7,14 @@ class_name DecorAtlas
 
 const SIZE := Vector2i(2048, 1024)
 const POSTER := Vector2i(192, 256)
-const PAPER := Color(0.80, 0.74, 0.60)       # 纸色上限(sRGB)
-const PAPER_DARK := Color(0.62, 0.52, 0.36)
-const INK := Color(0.16, 0.11, 0.08)
-const GOLD := Color(0.78, 0.60, 0.28)
+# 动森式明快配色(2026-10-08):奶油纸、暖棕墨(不是黑)、奶黄金;decor 着色器把纸面 albedo 夹在 0.8 以内
+const PAPER := Color(0.96, 0.90, 0.74)       # 纸色(sRGB)
+const PAPER_DARK := Color(0.86, 0.74, 0.54)
+const INK := Color(0.36, 0.22, 0.16)
+const GOLD := Color(0.92, 0.72, 0.34)
+# 通缉令标题色带与头像框底色:按物种轮换的粉彩(柔红、天蓝、薄荷、奶黄、淡紫、蜜桃、青绿、粉)
+const POSTER_BANDS := [Color(0.94, 0.52, 0.48), Color(0.52, 0.72, 0.92), Color(0.52, 0.82, 0.66), Color(0.98, 0.82, 0.42),
+	Color(0.74, 0.62, 0.90), Color(0.98, 0.68, 0.50), Color(0.40, 0.76, 0.74), Color(0.96, 0.62, 0.74)]
 const MIN_FONT := 8
 # 像素矩形
 const RECTS := {
@@ -148,7 +152,7 @@ class DecorPainter:
 	var _rng := RandomNumberGenerator.new()
 
 	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, Vector2(DecorAtlas.SIZE)), Color(0.3, 0.22, 0.15))
+		draw_rect(Rect2(Vector2.ZERO, Vector2(DecorAtlas.SIZE)), Color(0.62, 0.46, 0.32))
 		for i in Species.count():
 			_region(DecorAtlas.poster_rect_px(i))
 			_poster(i)
@@ -282,10 +286,10 @@ class DecorPainter:
 		draw_colored_polygon(pts, base)
 		for i in 7:
 			draw_rect(Rect2(Vector2(inset + i * 2, inset + i * 2), size - Vector2(inset + i * 2, inset + i * 2) * 2.0),
-				Color(0.45, 0.33, 0.18, 0.06), false, 3.0)
-		for i in 90:
+				Color(0.62, 0.45, 0.25, 0.04), false, 3.0)
+		for i in 40:   # 卡通:斑点少而淡
 			var p := Vector2(_rng.randf_range(6, size.x - 6), _rng.randf_range(6, size.y - 6))
-			draw_circle(p, _rng.randf_range(0.5, 2.0), Color(DecorAtlas.INK, _rng.randf_range(0.03, 0.08)))
+			draw_circle(p, _rng.randf_range(0.5, 1.6), Color(DecorAtlas.INK, _rng.randf_range(0.02, 0.05)))
 		if torn:
 			for c in [Vector2(inset, inset), Vector2(size.x - inset, size.y - inset)]:
 				var dir := Vector2(1, 1) if c.x < size.x / 2 else Vector2(-1, -1)
@@ -298,15 +302,17 @@ class DecorPainter:
 		var size := Vector2(DecorAtlas.POSTER)
 		var id: String = Species.IDS[index]
 		var ink := DecorAtlas.INK
+		var band: Color = DecorAtlas.POSTER_BANDS[index % DecorAtlas.POSTER_BANDS.size()]
 		_paper(size, DecorAtlas.PAPER, 100 + index)
 		draw_rect(Rect2(Vector2(10, 10), size - Vector2(20, 20)), ink, false, 2.0)
 		draw_rect(Rect2(Vector2(14, 14), size - Vector2(28, 28)), Color(ink, 0.7), false, 1.0)
+		CardFaces.draw_rounded(self, Rect2(Vector2(20, 17), Vector2(size.x - 40, 38)), band, 10)   # 粉彩标题色带
 		_text(_latin, "WANTED", Vector2(size.x / 2.0, 36), 40, ink, size.x - 32)
 		draw_line(Vector2(26, 58), Vector2(size.x - 26, 58), ink, 1.5, true)
 		_text(_latin, "FOR CHEATING AT CARDS", Vector2(size.x / 2.0, 67), 11, ink, size.x - 40)
 		# 头像框
 		var frame := Rect2(Vector2(30, 78), Vector2(size.x - 60, 104))
-		draw_rect(frame, Color(DecorAtlas.PAPER.darkened(0.06)))
+		draw_rect(frame, DecorAtlas.PAPER.lerp(band, 0.35))
 		draw_rect(frame, ink, false, 2.0)
 		# 头像缩到 0.8 倍、略往下放:礼帽、羊驼耳朵这类高个子也收在框里
 		draw_set_transform(Vector2(DecorAtlas.poster_rect_px(index).position) + frame.get_center() + Vector2(0, 12), 0.0, Vector2(0.8, 0.8))
@@ -510,9 +516,9 @@ class DecorPainter:
 	func _clock() -> void:
 		var s := 256.0
 		var c := Vector2(s, s) / 2.0
-		draw_rect(Rect2(Vector2.ZERO, Vector2(s, s)), Color(0.20, 0.11, 0.06))
+		draw_rect(Rect2(Vector2.ZERO, Vector2(s, s)), Color(0.58, 0.36, 0.22))
 		draw_circle(c, 118, DecorAtlas.GOLD)
-		draw_circle(c, 110, Color(0.78, 0.72, 0.58))
+		draw_circle(c, 110, Color(0.98, 0.94, 0.82))
 		draw_arc(c, 98, 0, TAU, 96, DecorAtlas.INK, 1.5, true)
 		draw_arc(c, 82, 0, TAU, 96, DecorAtlas.INK, 1.0, true)
 		var numerals := ["XII", "I", "II", "III", "IIII", "V", "VI", "VII", "VIII", "IX", "X", "XI"]
@@ -548,20 +554,20 @@ class DecorPainter:
 				x += _rng.randf_range(8, 14)
 
 	func _stencil(text: String) -> void:
-		draw_rect(Rect2(0, 0, 128, 64), Color(0.42, 0.30, 0.18))
-		draw_rect(Rect2(3, 3, 122, 58), Color(0.16, 0.10, 0.06), false, 2.0)
-		_text(_latin, text, Vector2(64, 33), 30, Color(0.12, 0.07, 0.04), 112)
+		draw_rect(Rect2(0, 0, 128, 64), Color(0.86, 0.68, 0.44))
+		draw_rect(Rect2(3, 3, 122, 58), Color(0.72, 0.30, 0.26), false, 2.5)
+		_text(_latin, text, Vector2(64, 33), 30, Color(0.72, 0.30, 0.26), 112)
 
 	func _keys() -> void:
-		draw_rect(Rect2(0, 0, 256, 32), Color(0.08, 0.06, 0.05))
+		draw_rect(Rect2(0, 0, 256, 32), Color(0.30, 0.22, 0.22))
 		var n := 26
 		var w := 256.0 / n
 		for k in n:
-			draw_rect(Rect2(k * w + 0.5, 0, w - 1.0, 32), Color(0.78, 0.74, 0.64))
+			draw_rect(Rect2(k * w + 0.5, 0, w - 1.0, 32), Color(0.97, 0.94, 0.86))
 		for k in n - 1:
 			if k % 7 in [2, 6]:
 				continue
-			draw_rect(Rect2((k + 1) * w - w * 0.3, 0, w * 0.6, 19), Color(0.05, 0.04, 0.04))
+			draw_rect(Rect2((k + 1) * w - w * 0.3, 0, w * 0.6, 19), Color(0.26, 0.2, 0.22))
 
 	# —— 窗外夜景(外景板 3.0 × 2.4 m 拉到 512²:横向每米 170.7 px、竖向 213.3 px)——
 
@@ -570,7 +576,7 @@ class DecorPainter:
 		var px := Vector2(s / (RoomLayout.BACKDROP_Z.y - RoomLayout.BACKDROP_Z.x), s / (RoomLayout.BACKDROP_Y.y - RoomLayout.BACKDROP_Y.x))
 		for k in 64:
 			var t := k / 63.0
-			var col := Color(0.05, 0.07, 0.16).lerp(Color(0.16, 0.22, 0.34), pow(t, 1.6))
+			var col := Color(0.06, 0.08, 0.22).lerp(Color(0.20, 0.27, 0.48), pow(t, 1.6))   # 深靛夜空(卡通:饱和一点)
 			draw_rect(Rect2(0, t * s, s, s / 63.0 + 1.0), col)
 		_rng.seed = 2024
 		for i in 160:
@@ -590,14 +596,14 @@ class DecorPainter:
 			var x := s * k / 32.0
 			far.append(Vector2(x, s * 0.70 - 18.0 * sin(k * 0.7) - 10.0 * sin(k * 1.9)))
 		far.append(Vector2(s, s))
-		draw_colored_polygon(far, Color(0.09, 0.10, 0.17))
+		draw_colored_polygon(far, Color(0.12, 0.13, 0.26))
 		var mesa := PackedVector2Array([Vector2(0, s), Vector2(0, s * 0.74), Vector2(60, s * 0.74), Vector2(84, s * 0.66),
 			Vector2(170, s * 0.65), Vector2(196, s * 0.74), Vector2(300, s * 0.76), Vector2(330, s * 0.69),
 			Vector2(372, s * 0.69), Vector2(392, s * 0.77), Vector2(s, s * 0.78), Vector2(s, s)])
-		draw_colored_polygon(mesa, Color(0.05, 0.05, 0.09))
-		draw_rect(Rect2(0, s * 0.80, s, s * 0.2), Color(0.04, 0.04, 0.06))
-		_cactus(Vector2(120, s * 0.86), 1.0, Color(0.02, 0.025, 0.035))
-		_cactus(Vector2(430, s * 0.83), 0.7, Color(0.03, 0.035, 0.05))
+		draw_colored_polygon(mesa, Color(0.08, 0.08, 0.17))
+		draw_rect(Rect2(0, s * 0.80, s, s * 0.2), Color(0.07, 0.07, 0.13))
+		_cactus(Vector2(120, s * 0.86), 1.0, Color(0.05, 0.09, 0.10))
+		_cactus(Vector2(430, s * 0.83), 0.7, Color(0.06, 0.10, 0.12))
 
 	func _filled_ellipse(c: Vector2, r: Vector2, col: Color) -> void:
 		draw_colored_polygon(_ellipse_points(c, r, 32), col)
@@ -617,29 +623,29 @@ class DecorPainter:
 		var s := 512.0
 		for k in 32:
 			var t := k / 31.0
-			draw_rect(Rect2(0, t * s * 0.4, s, s * 0.4 / 31.0 + 1.0), Color(0.04, 0.05, 0.12).lerp(Color(0.10, 0.12, 0.22), t))
+			draw_rect(Rect2(0, t * s * 0.4, s, s * 0.4 / 31.0 + 1.0), Color(0.06, 0.07, 0.18).lerp(Color(0.14, 0.17, 0.32), t))
 		_rng.seed = 909
 		for i in 60:
 			draw_circle(Vector2(_rng.randf() * s, _rng.randf() * s * 0.3), _rng.randf_range(0.5, 1.3), Color(0.9, 0.9, 1.0, _rng.randf_range(0.3, 0.8)))
 		# 街面
-		draw_rect(Rect2(0, s * 0.80, s, s * 0.2), Color(0.09, 0.08, 0.09))
-		# 对面的假立面:HOTEL / BANK / SHERIFF
-		var fronts := [[10.0, 160.0, 0.24, "HOTEL", Color(0.16, 0.12, 0.10)], [175.0, 160.0, 0.32, "BANK", Color(0.12, 0.12, 0.14)],
-			[340.0, 165.0, 0.28, "SHERIFF", Color(0.15, 0.11, 0.09)]]
+		draw_rect(Rect2(0, s * 0.80, s, s * 0.2), Color(0.14, 0.12, 0.16))
+		# 对面的假立面:HOTEL / BANK / SHERIFF(夜色里的柔红、灰蓝、青绿)
+		var fronts := [[10.0, 160.0, 0.24, "HOTEL", Color(0.34, 0.18, 0.20)], [175.0, 160.0, 0.32, "BANK", Color(0.20, 0.22, 0.34)],
+			[340.0, 165.0, 0.28, "SHERIFF", Color(0.16, 0.28, 0.28)]]
 		for f in fronts:
 			var x: float = f[0]
 			var w: float = f[1]
 			var top: float = s * f[2]
 			draw_rect(Rect2(x, top, w, s * 0.80 - top), f[4])
 			draw_rect(Rect2(x - 4, top - 6, w + 8, 8), Color(f[4]).darkened(0.3))
-			draw_rect(Rect2(x + 14, top + 12, w - 28, 26), Color(0.30, 0.22, 0.14))
-			_text(_latin, f[3], Vector2(x + w / 2.0, top + 26), 22, Color(0.85, 0.72, 0.45), w - 36)
+			draw_rect(Rect2(x + 14, top + 12, w - 28, 26), Color(0.48, 0.34, 0.22))
+			_text(_latin, f[3], Vector2(x + w / 2.0, top + 26), 22, Color(0.98, 0.86, 0.55), w - 36)
 			for row in 2:
 				for col in 3:
 					var wx := x + 18 + col * (w - 36) / 3.0
 					var wy := top + 56 + row * 70
 					var lit: bool = (int(x) + row * 3 + col) % 3 != 0
-					var c := Color(1.0, 0.72, 0.36) if lit else Color(0.08, 0.08, 0.12)
+					var c := Color(1.0, 0.76, 0.42) if lit else Color(0.12, 0.12, 0.2)
 					draw_rect(Rect2(wx, wy, (w - 36) / 3.0 - 10, 44), c)
 					if lit:
 						draw_line(Vector2(wx + ((w - 36) / 3.0 - 10) / 2.0, wy), Vector2(wx + ((w - 36) / 3.0 - 10) / 2.0, wy + 44), Color(0.25, 0.15, 0.08), 2.0)
@@ -660,21 +666,21 @@ class DecorPainter:
 	# —— 画 ——
 
 	func _frame_inner(size: Vector2) -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35), false, 6.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.4, 0.25, 0.12, 0.25), false, 6.0)
 
 	func _painting_mesa() -> void:
 		var size := Vector2(320, 224)
 		for k in 40:
 			var t := k / 39.0
 			draw_rect(Rect2(0, t * size.y * 0.7, size.x, size.y * 0.7 / 39.0 + 1.0),
-				Color(0.30, 0.20, 0.36).lerp(Color(0.85, 0.48, 0.22), pow(t, 1.3)))
-		draw_circle(Vector2(210, size.y * 0.62), 26, Color(0.95, 0.78, 0.42))
+				Color(0.62, 0.52, 0.80).lerp(Color(0.99, 0.70, 0.46), pow(t, 1.3)))
+		draw_circle(Vector2(210, size.y * 0.62), 26, Color(1.0, 0.88, 0.52))
 		draw_colored_polygon(PackedVector2Array([Vector2(0, size.y), Vector2(0, 140), Vector2(40, 140), Vector2(60, 104),
 			Vector2(140, 100), Vector2(158, 140), Vector2(230, 146), Vector2(250, 120), Vector2(300, 118), Vector2(320, 150),
-			Vector2(size.x, size.y)]), Color(0.42, 0.20, 0.12))
+			Vector2(size.x, size.y)]), Color(0.86, 0.48, 0.38))
 		draw_colored_polygon(PackedVector2Array([Vector2(0, size.y), Vector2(0, 176), Vector2(120, 168), Vector2(260, 178),
-			Vector2(size.x, 172), Vector2(size.x, size.y)]), Color(0.30, 0.18, 0.10))
-		_cactus(Vector2(56, 210), 0.45, Color(0.16, 0.12, 0.08))
+			Vector2(size.x, 172), Vector2(size.x, size.y)]), Color(0.92, 0.66, 0.44))
+		_cactus(Vector2(56, 210), 0.45, Color(0.36, 0.62, 0.38))
 		_frame_inner(size)
 
 	func _painting_coach() -> void:
@@ -682,17 +688,17 @@ class DecorPainter:
 		for k in 40:
 			var t := k / 39.0
 			draw_rect(Rect2(0, t * size.y * 0.75, size.x, size.y * 0.75 / 39.0 + 1.0),
-				Color(0.35, 0.45, 0.55).lerp(Color(0.86, 0.66, 0.40), t))
-		draw_rect(Rect2(0, size.y * 0.72, size.x, size.y * 0.28), Color(0.55, 0.42, 0.26))
-		draw_line(Vector2(0, 190), Vector2(size.x, 170), Color(0.66, 0.52, 0.34), 10.0)
-		var ink := Color(0.14, 0.09, 0.06)
+				Color(0.56, 0.76, 0.92).lerp(Color(0.99, 0.86, 0.62), t))
+		draw_rect(Rect2(0, size.y * 0.72, size.x, size.y * 0.28), Color(0.88, 0.72, 0.48))
+		draw_line(Vector2(0, 190), Vector2(size.x, 170), Color(0.95, 0.82, 0.60), 10.0)
+		var ink := Color(0.42, 0.28, 0.22)
 		# 驿站马车剪影 + 两匹马
 		draw_rect(Rect2(150, 122, 86, 44), ink)
 		draw_rect(Rect2(140, 116, 106, 8), ink)
 		draw_circle(Vector2(162, 172), 14, ink)
 		draw_circle(Vector2(226, 172), 16, ink)
-		draw_circle(Vector2(162, 172), 9, Color(0.55, 0.42, 0.26))
-		draw_circle(Vector2(226, 172), 11, Color(0.55, 0.42, 0.26))
+		draw_circle(Vector2(162, 172), 9, Color(0.88, 0.72, 0.48))
+		draw_circle(Vector2(226, 172), 11, Color(0.88, 0.72, 0.48))
 		for hx in [70.0, 102.0]:
 			draw_rect(Rect2(hx, 140, 40, 18), ink)
 			draw_colored_polygon(PackedVector2Array([Vector2(hx, 142), Vector2(hx - 14, 126), Vector2(hx - 20, 132), Vector2(hx - 8, 152)]), ink)
@@ -706,11 +712,11 @@ class DecorPainter:
 		for k in 40:
 			var t := k / 39.0
 			draw_rect(Rect2(0, t * size.y * 0.6, size.x, size.y * 0.6 / 39.0 + 1.0),
-				Color(0.32, 0.48, 0.62).lerp(Color(0.78, 0.76, 0.62), t))
+				Color(0.58, 0.78, 0.94).lerp(Color(0.97, 0.94, 0.78), t))
 		draw_colored_polygon(PackedVector2Array([Vector2(0, size.y), Vector2(0, 128), Vector2(90, 118), Vector2(200, 126),
-			Vector2(size.x, 114), Vector2(size.x, size.y)]), Color(0.46, 0.44, 0.24))
-		draw_rect(Rect2(0, 160, size.x, 64), Color(0.52, 0.46, 0.22))
-		var ink := Color(0.18, 0.11, 0.07)
+			Vector2(size.x, 114), Vector2(size.x, size.y)]), Color(0.60, 0.78, 0.46))
+		draw_rect(Rect2(0, 160, size.x, 64), Color(0.74, 0.84, 0.48))
+		var ink := Color(0.48, 0.32, 0.24)
 		for b in [[Vector2(90, 160), 1.0], [Vector2(200, 150), 0.75], [Vector2(262, 172), 0.9]]:
 			var c: Vector2 = b[0]
 			var k: float = b[1]
@@ -723,12 +729,12 @@ class DecorPainter:
 
 	func _porch() -> void:
 		var size := Vector2(512, 256)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.20, 0.22, 0.27))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.26, 0.26, 0.36))
 		_rng.seed = 55
 		for k in 12:
 			var y := k * size.y / 12.0
 			var shade := 0.85 + _rng.randf() * 0.3
-			draw_rect(Rect2(0, y + 1, size.x, size.y / 12.0 - 2), Color(0.24, 0.26, 0.31) * shade)
+			draw_rect(Rect2(0, y + 1, size.x, size.y / 12.0 - 2), Color(0.30, 0.30, 0.42) * shade)
 			draw_line(Vector2(0, y), Vector2(size.x, y), Color(0.08, 0.08, 0.10), 2.0)
 			var x := _rng.randf_range(40, 200)
 			while x < size.x:
@@ -739,12 +745,12 @@ class DecorPainter:
 
 	func _sign_tavern() -> void:
 		var size := Vector2(1024, 128)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.13, 0.07, 0.04))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.18, 0.42, 0.42))   # 青绿底招牌、奶黄字(和柔红灯罩互补)
 		for k in 5:
-			draw_line(Vector2(0, 10 + k * 26), Vector2(size.x, 14 + k * 26), Color(0.09, 0.05, 0.03), 2.0, true)
+			draw_line(Vector2(0, 10 + k * 26), Vector2(size.x, 14 + k * 26), Color(0.15, 0.36, 0.36), 2.0, true)
 		draw_rect(Rect2(Vector2(8, 8), size - Vector2(16, 16)), DecorAtlas.GOLD, false, 4.0)
 		draw_rect(Rect2(Vector2(16, 16), size - Vector2(32, 32)), Color(DecorAtlas.GOLD, 0.6), false, 1.5)
-		var gold := Color(0.86, 0.66, 0.30)
+		var gold := Color(0.99, 0.86, 0.50)
 		if _has_all(_glyph, "骗子酒馆"):
 			_text(_glyph, "骗子酒馆", Vector2(300, 66), 78, gold, 460)
 			_text(_latin, "LIAR'S TAVERN", Vector2(740, 68), 56, gold, 440)
@@ -756,7 +762,7 @@ class DecorPainter:
 	func _chalkboard() -> void:
 		# 吧台边的粉笔菜单:只写酒名,不写价钱
 		var size := Vector2(256, 192)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.10, 0.13, 0.11))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.20, 0.32, 0.30))
 		_rng.seed = 404
 		for i in 40:
 			var p := Vector2(_rng.randf_range(8, size.x - 50), _rng.randf_range(8, size.y - 8))
@@ -774,7 +780,7 @@ class DecorPainter:
 		var size := Vector2(512, 128)
 		_paper(size, DecorAtlas.PAPER, 31, false)
 		draw_rect(Rect2(Vector2(10, 10), size - Vector2(20, 20)), DecorAtlas.INK, false, 3.0)
-		var red := Color(0.46, 0.10, 0.07)
+		var red := Color(0.84, 0.30, 0.28)
 		if _has_all(_glyph, "不许出老千"):
 			_text(_glyph, "不许出老千", Vector2(size.x / 2.0, 52), 52, red, 460)
 			_text(_latin, "NO CHEATING", Vector2(size.x / 2.0, 98), 28, DecorAtlas.INK, 440)

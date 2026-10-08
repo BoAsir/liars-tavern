@@ -35,11 +35,11 @@ float luma(vec3 c) {
 }
 
 // —— 纳瓦霍地毯 ——
-// 甘纳多配色(sRGB,用前转线性)
-const vec3 RUG_RED = vec3(0.29, 0.08, 0.055);
-const vec3 RUG_CHAR = vec3(0.07, 0.06, 0.055);
-const vec3 RUG_CREAM = vec3(0.56, 0.49, 0.37);
-const vec3 RUG_TAUPE = vec3(0.30, 0.25, 0.20);
+// 粉彩甘纳多配色(sRGB,用前转线性;动森式:珊瑚红、深靛、奶油、青绿,最暗的也带色相)
+const vec3 RUG_RED = vec3(0.80, 0.40, 0.34);
+const vec3 RUG_CHAR = vec3(0.26, 0.26, 0.42);
+const vec3 RUG_CREAM = vec3(0.95, 0.88, 0.72);
+const vec3 RUG_TAUPE = vec3(0.40, 0.68, 0.64);
 
 vec3 rug_color(vec2 uv, vec2 size, float fringe) {
 	// uv:地毯局部米制坐标,原点在左下角(x 宽,y 长,不含流苏)
@@ -65,7 +65,7 @@ vec3 rug_color(vec2 uv, vec2 size, float fringe) {
 	} else {
 		// 红底上隔 0.36 m 一道暗色细纹,打散大块平涂
 		float band = abs(fract((q.y - 0.18) / 0.36) - 0.5) * 0.36;
-		col = band < 0.012 ? RUG_RED * 0.62 : RUG_RED;
+		col = band < 0.012 ? RUG_RED * 0.82 : RUG_RED;
 		// 中间沿长轴排 3 个阶梯菱形
 		vec2 c = size * 0.5;
 		float span = (size.y - 0.36) / 3.0;
@@ -146,13 +146,13 @@ void fragment() {
 		} else {
 			albedo = rug_color(uv, size, fringe);
 		}
-		albedo *= 0.88 + 0.24 * weave;
-		albedo = vp_srgb_to_linear(clamp(albedo, vec3(0.06), vec3(0.62)));
+		albedo *= 0.95 + 0.1 * weave;   // 卡通降噪:织纹只留一点
+		albedo = vp_srgb_to_linear(clamp(albedo, vec3(0.06), vec3(0.85)));
 		rough = 0.95;
 		spec = 0.3;
 	} else if (mode == 4) {
 		float weave = n_hi(vec2(world_pos.x + world_pos.z, world_pos.y) * 60.0);
-		albedo = tint * ao * (0.85 + 0.3 * weave);
+		albedo = tint * ao * (0.94 + 0.12 * weave);
 		rough = 0.9;
 		float sheen = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0) * 0.35;
 		albedo += tint * sheen;
