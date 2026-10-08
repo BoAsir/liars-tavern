@@ -1,11 +1,13 @@
 extends Node
 # 截图用展台:4 名酒客落座、发牌、出牌区与翻牌行,用于检查角色与道具外观(tools/shot.gd --showcase)。
 
+var world: TableWorld
+
 
 func build(tavern: Tavern) -> void:
 	await CardFaces.build(self)
 	Card3D.refresh_materials()
-	var world := TableWorld.new(tavern)
+	world = TableWorld.new(tavern)
 	tavern.table_root.add_child(world)
 	var players := []
 	for pid in [1, 2, 3, 4]:
@@ -32,3 +34,10 @@ func build(tavern: Tavern) -> void:
 	await world.patrons[4].pick_up(gun, 0.2)
 	await world.patrons[4].raise_gun_to_head(gun, 0.3)
 	await get_tree().create_timer(0.6).timeout
+
+
+func fire() -> void:
+	# 第 4 位手里的枪开一枪(参数同 table_director._bang):枪口焰与硝烟
+	var gun: Revolver3D = world.revolvers[4]
+	Fx.muzzle_flash(world, gun.muzzle_transform())
+	Fx.smoke_puff(world, gun.muzzle_transform().origin, 22)

@@ -218,3 +218,66 @@ func test_startup_prebuild_covers_every_mesh_patrons_and_revolvers_use():
 			assert_true(MeshForge.is_cached(PatronParts.part_key(spec, part)))
 	assert_true(MeshForge.is_cached("chair"))
 	assert_true(MeshForge.is_cached("revolver:body"))
+
+
+# —— 子项目③ 的扩展:glow 通道、raw、extrude ——
+
+func test_glow_goes_into_uv_only_for_surfaces_that_use_it():
+	var built := MeshForge.run(func(f: MeshForge):
+		f.box(Vector3(0.1, 0.1, 0.1))
+		f.surface(&"lamp")
+		f.box(Vector3(0.1, 0.1, 0.1))
+		f.glow = Vector2(1.0, 0.0)
+		f.sphere(0.05, 8)
+		var from := f.mark()
+		f.glow = Vector2.ZERO
+		f.cylinder(0.02, 0.02, 0.1, 8)
+		f.paint_glow(from, func(_p: Vector3) -> Vector2: return Vector2(0.0, 0.35)))
+	assert_eq(built.size(), 2, "两个 surface")
+	assert_null(built[&"main"][Mesh.ARRAY_TEX_UV], "没设过 glow 的 surface 不写 UV")
+	var uv: PackedVector2Array = built[&"lamp"][Mesh.ARRAY_TEX_UV]
+	assert_eq(uv.size(), built[&"lamp"][Mesh.ARRAY_VERTEX].size())
+	assert_eq(uv[0], Vector2.ZERO, "设 glow 之前的部件补 0")
+	assert_eq(uv[24], Vector2(1.0, 0.0), "灯泡自发光")
+	assert_eq(uv[uv.size() - 1], Vector2(0.0, 0.35), "paint_glow 改写 mark 之后的顶点")
+	var mesh := MeshForge.commit(built)
+	assert_eq(mesh.get_surface_count(), 2)
+	assert_true(mesh.surface_get_format(1) & Mesh.ARRAY_FORMAT_TEX_UV != 0)
+
+
+func test_palette_paint_sets_color_pbr_and_glow():
+	var arrays := _forge(func(f: MeshForge):
+		WorldMaterials.paint_prop(f, "wax")
+		f.box(Vector3(0.1, 0.1, 0.1)))
+	var wax: Array = WorldMaterials.PALETTE["wax"]
+	assert_eq(arrays[Mesh.ARRAY_COLOR][0], Color(wax[0].r, wax[0].g, wax[0].b, 1.0), "COLOR 按色板的 sRGB 写入")
+	assert_eq(arrays[Mesh.ARRAY_TEX_UV2][0], Vector2(wax[1], wax[2]))
+	assert_eq(arrays[Mesh.ARRAY_TEX_UV][0], wax[3])
+	for entry in WorldMaterials.PALETTE:
+		var c: Color = WorldMaterials.PALETTE[entry][0]
+		if entry != "bulb":
+			assert_lte(maxf(c.r, maxf(c.g, c.b)), 0.8001, entry + " 的 albedo 不超过 0.8")
+
+
+func test_raw_keeps_the_given_uvs():
+	var arrays := _forge(func(f: MeshForge):
+		f.raw(PackedVector3Array([Vector3.ZERO, Vector3(1, 0, 0), Vector3(0, 0, 1)]),
+			PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP]),
+			PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(0, 1)]), PackedInt32Array([0, 1, 2])))
+	assert_eq(arrays[Mesh.ARRAY_TEX_UV][2], Vector2(0, 1))
+	assert_eq(arrays[Mesh.ARRAY_INDEX], PackedInt32Array([0, 1, 2]))
+
+
+func test_extrude_with_bevel_has_unit_normals_box_bounds_and_godot_winding():
+	# 带凹角的 L 形轮廓(顺时针给出,自动转逆时针)
+	var outline := PackedVector2Array([Vector2(0, 0), Vector2(0, 0.06), Vector2(0.02, 0.06), Vector2(0.02, 0.02),
+		Vector2(0.05, 0.02), Vector2(0.05, 0)])
+	var arrays := _forge(func(f): f.extrude(outline, 0.03, 0.003))
+	for n: Vector3 in arrays[Mesh.ARRAY_NORMAL]:
+		assert_almost_eq(n.length(), 1.0, 1e-4)
+	var box := MeshForge.commit({&"main": arrays}).get_aabb()
+	assert_almost_eq(box.position, Vector3(0, 0, -0.015), Vector3.ONE * 1e-5)
+	assert_almost_eq(box.size, Vector3(0.05, 0.06, 0.03), Vector3.ONE * 1e-5, "AABB = 轮廓外框 × 深度")
+	assert_almost_eq(_winding_sign(arrays), _winding_sign(MeshKit.sphere(0.1, 12).get_mesh_arrays()), 0.01, "绕序与 Godot 基础体一致")
+	var open_front := _forge(func(f): f.extrude(outline, 0.03, 0.003, Transform3D.IDENTITY, Vector2i(1, 0)))
+	assert_lt(open_front[Mesh.ARRAY_VERTEX].size(), arrays[Mesh.ARRAY_VERTEX].size(), "caps 可以不封 +Z 端")

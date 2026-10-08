@@ -31,7 +31,20 @@ const SLAM_SPREAD := 0.08
 # 出牌手势:双手抬离桌面、朝桌心前推(座位坐标)
 const REACH_POINT := Vector3(0.06, SeatLayout.TABLE_TOP + 0.14, -0.75)
 const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
-const HAND_GUN_HEAD := Vector3(0.355, 0.85, -0.05)   # 举枪手位:枪口抵在太阳穴外(枪口到头心 ≈ 0.18,头半径 0.17)
+# —— 举枪几何(枪口相对头心的位置全在这一处)——
+# 手在以肩为心、一臂长的球面上,沿 GUN_APPROACH(头局部,从头心指向举枪的一侧)一族方向找手位,
+# 使枪管轴线穿过头心时枪口离头心 = 持枪净空 + GUN_CLEARANCE(枪口贴在太阳穴外 8 mm)。
+# 持枪净空 = 物种表的 gun_clearance(按实际头部网格量的,已含头的缩放);没给时用下面头缩放 1.0 时的实测值
+# 乘以 head_scale()(头绕头心等比放大,太阳穴表面跟着往外移)。HAND_GUN_HEAD 是头缩放 1.0、默认净空下的解
+# (= gun_hand_target(DEFAULT_GUN_CLEARANCE)),测试校验;运行时一律现算
+const GUN_CLEARANCE := 0.008
+const DEFAULT_GUN_CLEARANCE := 0.17
+const GUN_APPROACH := Vector3(0.9656, 0.2414, -0.0966)   # = Vector3(1, 0.25, -0.1).normalized()
+const HAND_GUN_HEAD := Vector3(0.4386, 0.8456, -0.0615)
+# 物种表(子项目②)还没给 gun_clearance 时的实测值(头缩放 1.0):按举枪流程搜出的最小净空(含抖耳 −0.3)
+# 再留 3–5 mm;没列出的物种用默认值
+const GUN_CLEARANCE_FALLBACK := {"fox": 0.175, "bear": 0.188, "pig": 0.175}
+const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心的时长
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
@@ -83,6 +96,7 @@ var _blink_in := 2.0
 var _breath_rate := 1.0
 var _lean := SEATED_LEAN
 var _sitting_up := false   # 举枪、庆祝时坐直
+var _steady := false       # 枪抵着太阳穴:头不再随噪声晃
 var _arms_locked := false
 var _resting := {}         # 手臂 → 是否搭在桌上:搭着的手每帧按身体姿态重新落点(单手动作时另一只手照样搭着)
 var _arm_serial := 0       # 每次手臂补间加一;歇手补间结束时据此判断期间有没有新动作
@@ -224,11 +238,13 @@ func _animate_idle(delta: float) -> void:
 		var local := body.to_local(_look_target) - head.position
 		yaw = clampf(atan2(-local.x, -local.z), -0.7, 0.7)
 		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), _look_data.get("anim", {}).get("look_pitch_min", -0.45), 0.35)
-	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08
-	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05
+	# 枪抵着太阳穴时屏住不动(头一晃,只隔 8 mm 的枪口就戳进头里)
+	var wobble := 0.0 if _steady else 1.0
+	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08 * wobble
+	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 * wobble
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
-	head.rotation.z = _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06
+	head.rotation.z = lerpf(head.rotation.z, _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 * wobble, minf(delta * 3.0, 1.0))
 	_update_look(delta)
 	_legs.position.y = maxf(body.position.y - HIP.y, 0.0)   # 腿跟着蹦跳,下沉时不入地
 	_blink_in -= delta
@@ -267,7 +283,7 @@ func _blink() -> void:
 	var tween := create_tween()
 	tween.tween_method(_set_lid, 0.0, 1.0, 0.06 / speed)
 	tween.tween_method(_set_lid, 1.0, 0.0, 0.08 / speed)
-	if randf() < 0.4 and not _ears.is_empty():
+	if randf() < 0.4 and not _ears.is_empty() and not _steady:
 		var ear: Node3D = _ears[randi() % _ears.size()]
 		var base := ear.rotation.x
 		var twitch := create_tween()
@@ -433,32 +449,96 @@ func _finish_slam() -> void:
 
 
 func pick_up(gun: Node3D, duration: float) -> void:
-	# 伸手到桌上的左轮,握住后挂到右手上
+	# 伸手到桌上的左轮,握住后挂到右手上(爪心 = 枪原点,枪管沿手的 −Z)。
+	# 先放下视线:导演层刚让开枪者看自己的头,俯仰被夹住;这时清掉,举枪前头就回正了
 	_arms_locked = true
+	_has_look = false
+	_steady = true
 	var gun_local := body.to_local(gun.global_position)
 	await pose_right(gun_local + Vector3(0, 0.03, 0), duration).finished
 	gun.reparent(right_hand, true)
 	_set_fist(true)
 	var tween := create_tween()
-	tween.tween_property(gun, "transform", Transform3D(Basis(), Vector3(0, -0.01, -0.02)), 0.12)
+	tween.tween_property(gun, "transform", Revolver3D.HOLD_OFFSET, 0.12)
 	await tween.finished
 
 
 func raise_gun_to_head(gun: Node3D, duration: float) -> void:
+	# 手举到按物种净空求出的手位,再「转手不转枪」:枪相对手始终是 HOLD_OFFSET,拳头一直包着握把
 	_sitting_up = true
-	var tween := pose_right(HAND_GUN_HEAD, duration, Tween.TRANS_BACK)
+	_has_look = false
+	var tween := pose_right(gun_hand_target(_gun_clearance()), duration, Tween.TRANS_BACK)
 	await tween.finished
-	# 枪口对准太阳穴
-	var aim := Transform3D(Basis.looking_at(head_position() - gun.global_position, Vector3.UP), gun.global_position)
+	var aim := gun_pose(right_hand.global_position, head_position())
+	# 身体呼吸是非均匀缩放:各个基先正交化
+	var arm_basis := _arm_r.global_basis.orthonormalized()
+	var hand_basis := arm_basis.inverse() * aim.basis * Revolver3D.HOLD_OFFSET.basis.inverse()
 	var settle := create_tween()
-	settle.tween_property(gun, "global_transform", aim, 0.18).set_trans(Tween.TRANS_SINE)
+	settle.tween_property(right_hand, "quaternion", hand_basis.orthonormalized().get_rotation_quaternion(), GUN_TWIST_TIME) \
+		.set_trans(Tween.TRANS_SINE)
 	set_expression("worried")
 	await settle.finished
 
 
+func _gun_clearance() -> float:
+	return gun_clearance_for(species_index)
+
+
+static func gun_clearance_for(index: int) -> float:
+	# 物种的持枪净空(头心沿举枪方向到头部最外表面的距离,含毛、耳朵、帽子)
+	var spec := PatronParts.species(index)
+	if spec.has("gun_clearance"):
+		return spec["gun_clearance"]
+	var look := SpeciesLooks.look(index)
+	if look.has("gun_clearance"):
+		return look["gun_clearance"]
+	return GUN_CLEARANCE_FALLBACK.get(spec.get("id", ""), DEFAULT_GUN_CLEARANCE) * head_scale()
+
+
+static func head_scale() -> float:
+	# 酒客头的等比缩放(子项目② 的大头版会加 PatronParts.HEAD_SCALE;没有时为 1.0)
+	return float((PatronParts as Script).get_script_constant_map().get("HEAD_SCALE", 1.0))
+
+
+static func gun_aim(origin: Vector3, center: Vector3) -> Basis:
+	# 枪的朝向:枪管轴线(比枪原点高 BARREL_Y)穿过 center;定点迭代 3 次
+	var aim := Basis.looking_at(center - origin, Vector3.UP)
+	for i in 3:
+		aim = Basis.looking_at(center - (origin + aim.y * Revolver3D.BARREL_Y), Vector3.UP)
+	return aim
+
+
+static func gun_pose(hand: Vector3, center: Vector3) -> Transform3D:
+	# 握在 hand 处的枪对准 center 时的变换(枪原点 = 手位 + 手基 × HOLD_OFFSET,枪相对手不转)
+	var aim := Basis.looking_at(center - hand, Vector3.UP)
+	for i in 3:
+		aim = gun_aim(hand + aim * Revolver3D.HOLD_OFFSET.origin, center)
+	return Transform3D(aim, hand + aim * Revolver3D.HOLD_OFFSET.origin)
+
+
+static func gun_hand_target(clearance: float) -> Vector3:
+	# 纯函数(身体局部):名义头心 C0 = HEAD_PIVOT + (0, 0.12, 0);手在肩球面上沿 GUN_APPROACH 一族方向二分,
+	# 使对准 C0 后 |枪口 − C0| = clearance + GUN_CLEARANCE
+	var center := HEAD_PIVOT + Vector3(0, 0.12, 0)
+	var want := clearance + GUN_CLEARANCE
+	var lo := 0.25
+	var hi := 1.2
+	for i in 32:
+		var mid := (lo + hi) * 0.5
+		var hand := SHOULDER + (center + GUN_APPROACH * mid - SHOULDER).normalized() * ARM_LENGTH
+		if (gun_pose(hand, center) * Revolver3D.MUZZLE_POS).distance_to(center) < want:
+			lo = mid
+		else:
+			hi = mid
+	return SHOULDER + (center + GUN_APPROACH * ((lo + hi) * 0.5) - SHOULDER).normalized() * ARM_LENGTH
+
+
 func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: float) -> void:
 	_sitting_up = false
+	_steady = false
 	set_expression("neutral")
+	var untwist := create_tween()
+	untwist.tween_property(right_hand, "quaternion", Quaternion.IDENTITY, duration)
 	await pose_right(body.to_local(rest.origin) + Vector3(0, 0.03, 0), duration).finished
 	gun.reparent(table_parent, true)
 	_set_fist(false)
@@ -486,9 +566,12 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	if gun != null and table_parent != null:
 		gun.reparent(table_parent, true)
 		var drop := create_tween()
+		# 侧放(REST_ROLL:转轮与底帽同时着地),最低点在毡面上
 		var landing := global_transform * Vector3(GUN_DROP.x, SeatLayout.FELT_TOP + Revolver3D.REST_HALF_WIDTH, GUN_DROP.z)
 		drop.tween_property(gun, "global_position", landing, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
-		drop.parallel().tween_property(gun, "rotation", Vector3(0, gun.rotation.y + 1.8, PI / 2.0), 0.45)
+		drop.parallel().tween_property(gun, "rotation", Vector3(0, gun.rotation.y + 1.8, PI / 2.0 + Revolver3D.REST_ROLL), 0.45)
+	right_hand.quaternion = Quaternion.IDENTITY
+	_steady = false
 	var fall := create_tween().set_parallel()
 	var body_rot: Vector3 = _look_data.get("anim", {}).get("die_body_rot", DIE_BODY_ROT)   # 乌龟侧倒,龟壳不穿椅背
 	fall.tween_property(body, "rotation", body_rot, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -553,6 +636,8 @@ func reset_pose() -> void:
 	_neck_target = Vector3.ZERO
 	set_expression("neutral")
 	_set_fist(false)
+	right_hand.quaternion = Quaternion.IDENTITY
+	_steady = false
 	body.position = HIP
 	rest_arms(false)
 
