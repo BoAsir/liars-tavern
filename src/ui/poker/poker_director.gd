@@ -364,14 +364,32 @@ func _ending(ev: Dictionary) -> void:
 func _session_over(ev: Dictionary) -> void:
 	screen.set_current(null)
 	_leave_rest(MODE_ORBIT)
-	Sfx.play("win")
 	hud.announce("散局", UiTheme.BRASS_BRIGHT, "牌局结束,结算中", 1.8)
 	hud.log_event("散局结算", UiTheme.BRASS_BRIGHT)
 	rig.set_fill(0.0, 1.0)
 	var orbit := world.table_orbit()
 	rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4)
+	# 结算庆祝(规格 2026-10-09):盈亏第一的人跳舞(并列第一都跳)、其他人鼓掌、礼炮彩纸;开场小号与掌声由庆祝发出
+	var results: Array = ev["results"] if ev.get("results") is Array else []
+	var winners := top_ranked(results)
+	world.celebrate(winners, hash(["poker", winners, results.size()]))
 	await _wait(SESSION_OVER_HOLD)
-	screen.show_settlement(ev["results"] if ev.get("results") is Array else [])
+	screen.show_settlement(results)
+
+
+static func top_ranked(results: Array) -> Array:
+	# 散局的胜者:盈亏最高的人(并列时都算),按结算行的顺序;坏行跳过
+	var best = null
+	var out := []
+	for row in results:
+		if not row is Dictionary or not row.get("pid") is int or not row.get("net") is int:
+			continue
+		if best == null or row["net"] > best:
+			best = row["net"]
+			out = [row["pid"]]
+		elif row["net"] == best:
+			out.append(row["pid"])
+	return out
 
 
 # —— 机位 ——

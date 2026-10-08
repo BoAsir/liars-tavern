@@ -101,6 +101,7 @@ func _exit_tree() -> void:
 	for pid in state.names:
 		app.labels.untrack(PLATE_KEY % pid)
 	world.set_patron_visible(my_pid, true)
+	world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
 	world.clear_poker()
 
 

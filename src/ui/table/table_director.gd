@@ -249,16 +249,15 @@ func _match_over(ev: Dictionary) -> void:
 	var winner = ev["winner"]
 	fx.set_tension(0.0, 0.6)
 	_leave_seat()
-	Sfx.play("win")
 	var title := "你赢了!" if winner == screen.my_pid else "%s 赢了" % screen.name_of(winner)
 	hud.announce(title, UiTheme.BRASS_BRIGHT, "活到了最后", 1.8, TableHud.ANNOUNCE_Y_LOW)
+	# 结算庆祝(规格 2026-10-09):胜者跳舞、其他人鼓掌、礼炮彩纸,开场小号与掌声由庆祝发出(代替原来的 win 铃声)
+	world.celebrate([winner], hash(["liars", winner, screen.get("_round_now")]))
 	if world.patrons.has(winner):
-		world.patrons[winner].celebrate()
 		# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),并给一点补光看清表情
-		var toward_table := -SeatLayout.direction(world.seat_angles.get(winner, 0.0))
+		var focus := world.winner_orbit(winner)
 		rig.set_fill(TableWorld.SEAT_FILL_LIGHT * 0.6, 1.0)
-		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4,
-			atan2(toward_table.x, toward_table.z))
+		rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus["start"])
 	else:
 		var orbit := world.table_orbit()
 		rig.orbit(orbit.center, orbit.radius, orbit.height, orbit.speed, 1.4)

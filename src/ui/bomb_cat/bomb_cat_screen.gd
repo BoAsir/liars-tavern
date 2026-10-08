@@ -102,6 +102,7 @@ func _exit_tree() -> void:
 		app.labels.untrack(BombCatDirector.BUBBLE_KEY % pid)
 	if cards != null:
 		cards.clear_peek()
+	world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
 	world.clear_poker()
 
 
