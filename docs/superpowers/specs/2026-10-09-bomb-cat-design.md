@@ -181,3 +181,196 @@
 - 不改 `project.godot`;协议号 5;不在 `src/` 运行时读网格数组;不 duplicate ShaderMaterial;新静态缓存在 `main.gd` `_exit_tree` 释放。
 - 卡名、卡面、文案原创;不出现任何商业游戏名称或商标。
 - 骗子酒馆和德州的行为零变化(全量测试与冒烟照过)。
+
+## 7. 实施记录(阶段一:规则引擎 + 房主会话 + 网络 + 玩法登记,2026-10-09)
+
+阶段一不含任何表现(牌桌屏幕、HUD、3D、导演、说明书、机器人、冒烟);阶段二在下面这些接口上搭。
+本节是阶段二的接口契约:事件、视图、意图的字段**只增不改**。
+
+### 7.1 文件
+
+- 规则引擎(纯逻辑,不依赖网络与场景):
+  - `src/core/bomb_cat/bomb_cat_card.gd`(class `BombCatCard`):牌 id 常量(字符串)、`ALL`(画卡面与说明书的顺序)、`SNACKS`、`ACTIONS`;
+    `display_name(id)`、`description(id)`(一行原创说明)、`is_snack`、`is_playable`(自己回合可单张打出)、`needs_target`、`can_be_named`。
+  - `src/core/bomb_cat/bomb_cat_deck.gd`(class `BombCatDeck`):§1.4 的配牌表写成常量 `ACTION_COUNTS` / `SNACK_COUNT`;
+    `action_counts(n)`、`defuse_total(n)`、`bomb_count(n)`、`total_cards(n)`、`deal(pids, rng)`(7 张 + 1 张拆弹,剩余拆弹与炸弹混回再洗)、
+    `shuffle(cards, rng)`(就地 Fisher-Yates,同种子可复现)。`MIN_PLAYERS` 2、`MAX_PLAYERS` 6。
+  - `src/core/bomb_cat/bomb_cat_state.gd`(class `BombCatState`):完整状态机。**文件头的注释就是事件字典的权威说明**。
+- 会话与网络:
+  - `src/net/bomb_cat_session.gd`(class `BombCatSession` extends `GameSession`):意图校验与分派、计时语义、视图。`state()` 给测试与机器人只读访问引擎。
+  - `src/net/bomb_cat_views.gd`(class `BombCatViews`):公共 / 私有视图。
+  - `src/net/bomb_cat_pacing.gd`(class `BombCatPacing`):演出预算。
+  - `src/net/network_manager.gd`:`_new_session(mode)` 按玩法建会话;新 RPC `rpc_session_intent(intent)` 与 `submit_session_intent(intent)`。
+- 测试(全部无头):`test_bomb_cat_deck` / `test_bomb_cat_state` / `test_bomb_cat_session` / `test_net_bomb_cat` / `test_bomb_cat_fuzz`,
+  共用 `tests/bomb_cat_helpers.gd`(摆局面 `rig`、公共事件 / 视图的漏信息检查器 `event_leak` / `view_leak`)。
+  自对弈:300 局固定种子(2–6 人随机),随机合法意图 + 随机超时 + 偶尔断线 + 夹杂的垃圾意图,约 2.2 万步;
+  每步查牌数守恒、公共事件与视图不漏信息、私有视图与引擎一致、偷看属实、场上炸弹 ≥ 存活 − 1、计时时长为正,
+  每局必须结束且恰好一个胜者;并断言每种事件与每种 effect 都走到过。
+
+### 7.2 规则落地时定下的细节
+
+- 状态机步骤 `step`:`turn`(当前玩家自由行动)· `window`(反应窗口)· `reinsert`(拆弹后塞回)· `give`(被讨要的人挑牌)· `over`。
+- 先手由房主 RNG 随机挑。`turns_left` 含正在进行的这一回合(平时 1)。摸牌、溜了、塞回完成各消耗 1 个;
+  用完轮到下一位存活者(1 回合,不算被甩)。
+- **甩锅**:当前玩家剩余回合作废;下家行动 2 回合。若当前玩家本身在「被甩」的回合里(`under_attack`,被甩来的回合用完之前一直为真),
+  下家行动 `turns_left + 2`。例:被甩 2 回合时第一回合就甩 → 下家 4;先摸一张(剩 1)再甩 → 下家 3。溜了在被甩时只抵 1 回合。
+- **不行!**:只在反应窗口里打;任何存活玩家都能打,包括出牌者自己(可以不行掉别人对自己的不行);每张都让窗口重新计时。
+  窗口结算时张数为偶数则原牌生效。牌(含被取消的)都留在弃牌堆。不行! 不能在自由行动时单独打出。
+- 只有零食能组合:2 张同种零食 = 对子(`pair`,随机抽 1 张),3 张同种零食 = 三条(`triple`,点名一种牌;对方有就给他手里第一张)。
+  点名可以是除炸弹外的任何牌 id。讨要 / 对子 / 三条的目标必须是在场、不是自己、**出牌时手里有牌**的人;
+  窗口期间目标出局或把牌打光则落空(`got: false`)。
+- 讨要生效进入 `give` 步骤,目标自己挑一张(`give` 意图);讨要者和其他人都在等。
+- 摸到炸弹:有拆弹自动打出(进弃牌堆顶),炸弹拿在手上(`held_bomb`)进入 `reinsert`;塞回位置 `0..牌堆张数`(0 = 顶,牌堆张数 = 底)。
+  塞回完成才算这一回合结束(被甩时继续自己的下一回合)。没有拆弹:炸飞,炸弹移出游戏(`removed`),手牌全部弃掉。
+- 出局者的手牌垫到弃牌堆**最底下**,`discard_top` 只记公开打出的牌(出牌、不行!、拆弹),所以弃牌堆顶永远不会露出出局者的手牌。
+- 断线 = 出局(`player_left`,没有爆炸)。他卡着的步骤先收尾:自己的窗口作废(`window_resolved.aborted`)、
+  塞回中的炸弹随机塞回(`reinserted`)、讨要落空(`effect beg got:false`,不论他是给牌的还是讨要的)。断线不移除炸弹,
+  所以「场上炸弹 ≥ 存活人数 − 1」始终成立,自由行动时牌堆不会空(引擎仍有兜底:空牌堆摸牌 = 直接结束回合)。
+- 牌数守恒:`deck + discard + 各手牌 + removed + held_bomb = total_cards`(`card_count()`)。
+- 名次:第 1 名是胜者,其后按出局顺序倒排(最后出局的第 2)。
+
+### 7.3 公共事件(广播全员,不含任何隐藏信息)
+
+所有事件有 `type`。带牌 id 的只有 `played.cards`、各 `kind` 字段与 `effect.named`(都是本来就公开的)。
+
+| type | 字段 | 说明 |
+|---|---|---|
+| `round_started` | `seats: [pid]`, `hands: [{pid, count}]`, `deck_count`, `bombs`, `current`, `turns` | 开局(唯一一次)。`bombs` = 炸弹总数 n − 1 |
+| `played` | `pid`, `cards: [牌 id]`, `kind`, `target: pid 或 null`, `named: 牌 id 或 ""`, `window: 秒` | 打出并打开窗口。`kind` ∈ `skip` `pass_turns` `peek` `shuffle` `beg` `pair` `triple` |
+| `noped` | `pid`, `depth`, `window: 秒` | 本窗口第 `depth` 张不行!,窗口重新计时 |
+| `window_resolved` | `pid`, `kind`, `effective`, `nopes`, `aborted` | `pid` / `kind` 是原出牌;`aborted` = 出牌者断线 |
+| `effect` | `kind`, `pid`(出牌者)+ 按 kind 见下 | 原牌生效的公开结果 |
+| `give_requested` | `pid`(要给牌的人), `to`(讨要者), `timeout: 秒` | 进入 `give` 步骤 |
+| `drew` | `pid`, `deck_count`, `bomb: bool` | 不含是哪张;`bomb` 为真时紧跟 `bomb_drawn` |
+| `bomb_drawn` | `pid` | |
+| `defused` | `pid`, `deck_count`, `timeout: 秒` | 进入 `reinsert` 步骤,可选位置 `0..deck_count` |
+| `reinserted` | `pid`, `deck_count` | 不含位置 |
+| `exploded` | `pid`, `discarded` | 炸飞出局,弃掉 `discarded` 张手牌 |
+| `player_left` | `pid`, `discarded` | 断线出局 |
+| `turn_passed` | `pid`, `turns` | 轮到 `pid`,要行动 `turns` 回合;同一人连走下一回合也发 |
+| `match_over` | `winner`, `ranking: [pid]` | |
+
+`effect` 按 `kind`:`skip {pid}` · `pass_turns {pid, to, turns}` · `peek {pid, count}` · `shuffle {pid}` ·
+`beg {pid, from, to, got}`(给牌结束或落空)· `steal {pid, from, to, got}`(对子)· `request {pid, from, to, named, got}`(三条)。
+
+典型批次(一个意图 / 一次超时 / 一次断线 = 一批):
+出牌 `[played]` → 窗口到点 `[window_resolved, effect…, turn_passed?]` 或 `[window_resolved, give_requested]` →
+给牌 `[effect beg]`;摸牌 `[drew, turn_passed]` / `[drew, bomb_drawn, defused]` → `[reinserted, turn_passed]` /
+`[drew, bomb_drawn, exploded, turn_passed 或 match_over]`。
+
+### 7.4 公共视图(`rpc_state_public`,每批之后)
+
+```
+{
+  "mode": "bomb_cat", "step": "turn" | "window" | "reinsert" | "give" | "over",
+  "current_pid": pid 或 null, "turns": int,
+  "deck_count": int, "discard_count": int, "discard_top": 牌 id 或 "",
+  "bombs_left": int, "bombs_total": int,          # 场上剩余炸弹 = 总数 − 已炸飞(公开信息)
+  "window": {} 或 {"pid", "cards", "kind", "target", "named", "nopes"},
+  "give": {} 或 {"from", "to"},
+  "reinsert": {} 或 {"pid"},
+  "players": [{"pid", "name", "alive", "hand_count"}],   # 座位顺序
+  "out_order": [pid], "winner": pid 或 null,
+  "ranking": [] 或 [{"pid", "name", "place"}],            # 只在 over 时有
+  "turn_time_left": float,      # 房主计时器剩余(当前步骤的:回合 / 窗口 / 塞回 / 给牌),含要先播完的演出;over 时 0
+  "paused_turn_left": float     # window / give 期间暂停保存的回合剩余,其他时候 0
+}
+```
+
+### 7.5 私有视图(`rpc_state_private`,每批之后发给每个座位,含出局者)
+
+```
+{
+  "hand": [牌 id],                               # 自己的手牌(顺序 = 意图里的下标;新牌追加在末尾)
+  "alive": bool,
+  "last_drawn": 牌 id 或 "", "draw_seq": int,     # 自己最近摸到的那张(炸弹也算);seq 变了 = 新摸的
+  "peek": [牌 id], "peek_seq": int,              # 偷看结果(顶 → 下),只给打出者;牌堆一变(摸牌 / 洗牌 / 塞回)就清空
+  "reinsert": {} 或 {"deck_count": int},         # 轮到自己塞回时
+  "give": {} 或 {"to": pid},                     # 自己被讨要、要挑一张时
+  "transfer": {} 或 {"card", "from", "to", "seq"}  # 最近一次涉及自己的转手(讨要 / 对子 / 三条),双方都看得到是哪张
+}
+```
+
+各种 `seq` 共用一个递增计数,界面据此判断「这是新的一次」(同一份私有视图每批都会重发)。
+
+### 7.6 意图与错误码
+
+客户端:`Net.submit_session_intent(intent)`(房主本机直接处理;客人发 `rpc_session_intent`)。
+房主校验顺序:发送者在名单里(否则 `not_seated`)→ 本房是炸弹猫(否则 `invalid_intent`)→
+`BombCatSession.check_intent`(字典、≤ 4 个键、kind 认识、字段类型)→ 引擎规则。被拒走现有的 `intent_rejected(code)`。
+
+| 意图 | 字段 | 谁、何时 |
+|---|---|---|
+| `{"kind": "play", "cards": [下标…], "target"?: pid, "named"?: 牌 id}` | 1–3 个互不相同的手牌下标 | 当前玩家,`turn` 步骤 |
+| `{"kind": "nope"}` | 打出手里第一张不行! | 任何存活玩家,`window` 步骤 |
+| `{"kind": "draw"}` | | 当前玩家,`turn` 步骤 |
+| `{"kind": "reinsert", "pos": int}` | `0..deck_count` | 当前玩家,`reinsert` 步骤 |
+| `{"kind": "give", "index": int}` | 手牌下标 | 被讨要的人,`give` 步骤 |
+
+错误码(`BombCatState.ERR_*`,中文提示在 `BombCatState.ERROR_MESSAGES`,阶段二的牌桌屏幕 toast 用它):
+`match_over` 对局已结束 · `not_seated` 不在这一局 · `out` 已出局 · `not_your_turn` · `busy`(当前玩家在窗口 / 塞回 / 给牌期间想出牌或摸牌)·
+`invalid_play`(下标或组合不对)· `invalid_target` · `target_empty` · `invalid_named` · `no_window`(窗口外打不行)· `no_nope` ·
+`not_waiting`(不是在等你塞回 / 给牌)· `invalid_pos` · `invalid_index` · `invalid_intent`(结构不对或不是炸弹猫房间)。
+
+`turn_action`(行动者那端的演出欠账清零):出牌、摸牌、塞回、给牌、超时代打为真;**不行! 为假**——谁都能打,
+窗口要从排队演出播完算起。
+
+### 7.7 计时语义(沿用 NetworkManager 唯一的回合计时器,不新增计时器)
+
+`has_turn()` 在没结束时恒为真(总有人在计时)。`turn_timer_after(events, pending, time_left)` 按本批之后的步骤给时长
+(`pending` = 含本批在内客户端还要演多久,所以都从演出播完算起):
+
+| 本批之后 | 时长 |
+|---|---|
+| `turn`,本批有 `turn_passed` / `round_started` | `pending + TURN_TIMEOUT`(30 秒) |
+| `window`,本批有 `played` | `pending + REACT_WINDOW`(3 秒);同时把出牌那一刻的回合剩余存进 `paused_turn_left` |
+| `window`,本批有 `noped` | `pending + REACT_WINDOW`(重新计) |
+| `reinsert` 刚进入 | `pending + REINSERT_TIMEOUT`(15 秒) |
+| `give` 刚进入 | `pending + GIVE_TIMEOUT`(15 秒) |
+| 从 `window` / `give` 回到 `turn`(没换人) | `pending + max(暂停的剩余, RESUME_MIN = 3 秒)` |
+| 其他(旁人断线等,步骤没变) | `time_left + 本批演出`(计时器没在走时给满) |
+
+到点 `on_turn_timeout()`:`window` → 结算窗口;`reinsert` → 随机位置;`give` → 随机给一张;`turn` → 直接摸牌。
+
+`BombCatPacing` 的预算是按 §3.1 的演出先估的(出牌 0.8、不行 0.7、偷看 1.2、洗牌 1.0、转手 0.9、摸牌 0.6、
+炸弹翻开 2.0、拆弹 1.6、塞回 0.8、爆炸 3.5、结算 3.0 …),导演实测后可以收紧;导演每段演出不得超过预算。
+
+### 7.8 GameMode 与其他按玩法分支的地方
+
+- `GameMode.BOMB_CAT = "bomb_cat"`,label / short_label「炸弹猫」,2–6 人(`BOMB_CAT_MAX_PLAYERS`,测试核对等于 `BombCatDeck.MAX_PLAYERS`),
+  `allows_late_join` 为假,`is_bomb_cat(mode)`。
+- `ALL = [LIARS, BOMB_CAT, HOLDEM, SHORT_DECK]`:主菜单按钮顺序骗子酒馆、炸弹猫、德州·长牌、德州·短牌。
+- `BOMB_CAT_ENABLED := true` 与 `menu_modes()`:**只管主菜单开房能不能选**;id 照样合法(认得别人开的房间、网络与测试照常)。
+  阶段二按时完成就一直是 true;万一发版时牌桌没就绪,改成 false 即可从开房菜单藏起来(上次选的是炸弹猫时菜单回退默认玩法)。
+- 主菜单玩法切换:四个按钮挤在「开一桌」标题行,按钮间距 10 → 6、左右内边距 10 → 9,面板最小宽度不超过 480
+  (`test_main_menu_species` 新增检查;改之前是 488)。阶段二可以再打磨。
+- `SeatLayout.table_radius_for(mode, players := 0)`:炸弹猫 ≤ 4 人用骗子酒馆的桌(`TABLE_RADIUS`),≥ 5 人(`BOMB_CAT_BIG_TABLE_FROM`)
+  用德州的大桌;人数未知(主菜单 / 等待厅,传 0)用小桌。**阶段二进牌桌时要按本局人数再摆一次桌**。
+- `main.apply_table_mode`:炸弹猫照常摆烛台,不摆目标牌立牌(立牌只在骗子酒馆)。
+- 默认房名「X 的猫窝」;等待厅人数上限、局域网发现报文的 cap、房间列表都走 `GameMode.max_players`,自动是 6(房间行写成「3/6」)。
+- 说明书 `RulebookContent.book_for_mode` 对炸弹猫暂时回退骗子酒馆那本(阶段二加「炸弹猫」一本)。
+
+### 7.9 网络
+
+- 开局:`start_game` → `_new_session(game_mode)` → `BombCatSession`;骗子酒馆与德州不变。
+- 新 RPC `rpc_session_intent(intent)`(any_peer、reliable、参数不加类型)。没有叫 `rpc_bomb_cat_intent`:Godot 按方法名排序给 RPC 编号,
+  `rpc_b…` 会排到最前、挤动握手消息的编号,旧版本就收不到「版本不匹配」。`rpc_session_intent` 排在 `rpc_join_request` 之后,
+  `test_rpc_order` / `test_net_rpc_order` 照过(后者的 v5 列表加了它)。这个入口在骗子酒馆与德州房间里一律拒绝(`invalid_intent`),那两个玩法仍走各自的 RPC。
+- 协议号仍为 5;`project.godot` 没动。
+- 每批之后 `_sync_all` 照旧:公共视图全员、私有视图发给 `viewers()`(全座位),偷看结果、塞回、给牌请求、转手都在私有视图里随批下发。
+
+### 7.10 临时路由(阶段二要替换)
+
+`main._show_table`:炸弹猫房间暂时进 `_bomb_cat_placeholder()`——居中一块「炸弹猫的牌桌还在布置中」+「离开房间」按钮,不会崩。
+规则与网络照常跑,每步到点由房主代打,一局会自己打完,但没有结算界面。阶段二把这一分支换成 `BombCatScreen.new(self)` 并删掉占位函数
+(代码里有 `TODO(炸弹猫阶段二)`)。
+
+### 7.11 阶段二要做的
+
+1. 牌桌屏幕 `BombCatScreen`:接 `Net.game_events` / `state_public_updated` / `state_private_updated` / `intent_rejected`,
+   出手一律 `Net.submit_session_intent(...)`;替换 `main._show_table` 的占位分支;进牌桌时按本局人数 `SeatLayout.table_radius_for(mode, 人数)` 摆桌。
+2. 导演:按 7.3 的事件演出,每段时长不超过 `BombCatPacing` 的预算(参照 `test_poker_director_pacing` 加检查)。
+3. HUD:`step` / `turn_time_left` / `paused_turn_left` / `window.nopes` / `bombs_left` / `turns` 都在公共视图里;
+   不行! 按钮亮起条件 = `step == "window"`、自己活着且手里有 `nope`;塞回滑块范围 = 私有视图 `reinsert.deck_count`;给牌提示看私有视图 `give`。
+4. 说明书「炸弹猫」一本(牌名与一行说明取 `BombCatCard.display_name` / `description`,数量取 `BombCatDeck.action_counts`)。
+5. 机器人(`debug_flags.gd`)与 `tools/lan_smoke.sh` 的炸弹猫一局;`tools/shot.gd` 展台。可以直接复用 `tests/test_bomb_cat_fuzz.gd` 里挑合法意图的写法。
