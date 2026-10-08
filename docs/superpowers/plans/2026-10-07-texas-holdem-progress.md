@@ -24,7 +24,7 @@
 | 4 视线抽取 | ✅ th/gaze 完成 | SeatGaze;已合并到 feature/texas-holdem(cc18285),之后又有一个修复提交(探头不往后探)待合并 |
 | 5 说明书 | ✅ th/rulebook 完成、审查通过、修完 | 两本书页签、hands 牌型表、按书记页、README 写明开房后不能改玩法 |
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
-| 6 网络会话 | ⬜ 已建分支、尚无代码 | 分支 th/net(从 102f73a 分出);按计划任务 6 做 |
+| 6 网络会话 | ✅ th/net 完成、待审查与合并 | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;Net 多了 `request_sit_in()`;767 测试全过,lan_smoke 通过 |
 | 7a HUD 控件 | ⬜ 已建分支、尚无代码 | 分支 th/hud(从 102f73a 分出);按计划任务 7 的控件部分做 |
 | 7b 控制器与演出 | ⬜ 等 7a 合并后开始 | 分支 th/screen |
 | 8 bot 与冒烟 | ⬜ 未开始 | |
