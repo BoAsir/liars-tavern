@@ -8,26 +8,33 @@ extends Node3D
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
 const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
-# 越肩机位(规格 §5.5):座位外 BEHIND 米、右移 SIDE、高 HEIGHT;骗子酒馆桌(座位半径 1.25)正好是上游拉远后的 2.45 米
+# 越肩机位(规格 §5.5):座位外 BEHIND 米、右移 SIDE、高 HEIGHT;骗子酒馆桌(座位半径 1.25)正好是上游拉远后的 2.45 米。
+# 动森式 2 头身(2026-10-08):自己的大头在画面左下占得多,机位再右移、抬高一点(原 0.6 / 2.05),越过大头看到桌面和左手边的人。
+# 4 人桌的铭牌挂在 Patron.NAMEPLATE_HEIGHT(座位上方 1.92 m),镜头比它高,不会挤在一起
 const THIRD_PERSON_BEHIND := 1.2
-# 德州桌(半径 1.45)沿用拉远之前的那组越肩参数:上游拉远、抬高是为了骗子酒馆的牌扇不被探头挡住,
-# 德州的牌扇位置由 PokerLayout 另定;再远、再高 8 个铭牌就会在越肩机位下重叠(test_poker_view_layout)
-const POKER_THIRD_PERSON := Vector3(0.55, 1.92, 0.85)   # (右移, 高, 座位外)
-const THIRD_PERSON_HEIGHT := 2.05
-const THIRD_PERSON_SIDE := 0.6
+# 德州桌(半径 1.45):铭牌挂在最高的头顶之上(NAMEPLATE_HEIGHT、错开 NAMEPLATE_STAGGER),镜头要比铭牌高出一点,8 个铭牌
+# 投到画面上才散得开(镜头和铭牌一样高时全挤在一条地平线上);再高,镜头到对面帽顶的连线就擦到吊灯罩
+# (两条都见 test_poker_view_layout)。Q 版是 (0.55, 1.92, 0.85)、铭牌 1.62
+const POKER_THIRD_PERSON := Vector3(0.6, 2.05, 0.8)   # (右移, 高, 座位外)
+const THIRD_PERSON_HEIGHT := 2.2
+const THIRD_PERSON_SIDE := 0.72
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
 # 观战与等待厅机位 [位置, 看向]:骗子酒馆的数值不变;德州桌放大后另用一组(规格 §5.5),
-# 都让最远的头与 1.60 米高的帽子避开吊灯罩(见 test_poker_view_layout)
+# 都让最远的头与 1.70 米高的头顶(动森式大头;Q 版按 1.60)避开吊灯罩(见 test_poker_view_layout)
 const OVERVIEW_LIARS := [Vector3(0, 2.3, 2.7), Vector3(0, SeatLayout.TABLE_TOP, -0.25)]
-const OVERVIEW_POKER := [Vector3(0, 2.0, 2.6), Vector3(0, SeatLayout.TABLE_TOP, 0.0)]
+const OVERVIEW_POKER := [Vector3(0, 2.1, 2.7), Vector3(0, SeatLayout.TABLE_TOP, 0.0)]   # Q 版 (0, 2.0, 2.6):铭牌抬高后跟着抬一点
 const LOBBY_LIARS := [Vector3(LOBBY_SHIFT, 2.6, 2.5), Vector3(LOBBY_SHIFT, 0.75, -0.1)]
 const LOBBY_POKER := [Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1)]
 # 结算环绕(CameraRig.orbit 的参数):德州的椅背在 2.11 米,环绕要更远更高,镜头高约 2 米
 const ORBIT_LIARS := {"center": Vector3(0, 0.95, 0), "radius": 2.4, "height": 0.9, "speed": 0.18}
 const ORBIT_POKER := {"center": Vector3(0, 0.95, 0), "radius": 3.1, "height": 1.05, "speed": 0.15}
 const SEAT_MOVE := 0.6           # 换座位、桌子放大时酒客沿圆弧滑到新座位的时长(秒)
-const NAMEPLATE_HEIGHT := 1.62   # 德州铭牌挂点高出座位原点:高过最高的帽子(规格 §6.3)
+# 德州铭牌挂点(规格 §6.3):高过最高的头顶(动森式大头:羊驼耳尖 ≈1.70 m、礼帽 ≈1.69 m;Q 版统一挂 1.62,礼帽尖
+# 会被铭牌下沿盖住几厘米)。挂高之后相邻座位的铭牌在越肩、观战机位下容易叠在一起(离镜头近的那个投得低),
+# 所以按座位绕桌的序号错开高度:偶数号(含本机 0 号)再高 NAMEPLATE_STAGGER,奇数号在 NAMEPLATE_HEIGHT
+const NAMEPLATE_HEIGHT := 1.74
+const NAMEPLATE_STAGGER := 0.12
 # 翻牌机位朝出牌者偏转的权重(0 = 只看翻牌行,1 = 只看出牌者头部)
 const REVEAL_LIAR_WEIGHT_FRONT := 0.35
 const REVEAL_LIAR_WEIGHT_SIDE := 0.2
@@ -349,10 +356,18 @@ func seat_angle_now(pid: int) -> float:
 
 
 func nameplate_anchor(pid: int) -> Vector3:
-	# 德州铭牌挂点(全局坐标):座位原点上方 NAMEPLATE_HEIGHT;跟着滑动中的酒客走,
+	# 德州铭牌挂点(全局坐标):座位原点上方 nameplate_height(pid);跟着滑动中的酒客走,
 	# 不随登场 / 离场的缩放动画升降;离场或没建酒客时按座位算
 	var base: Vector3 = patrons[pid].position if patrons.has(pid) else seat_transform(seat_angles.get(pid, 0.0)).origin
-	return to_global(base + Vector3.UP * NAMEPLATE_HEIGHT)
+	return to_global(base + Vector3.UP * nameplate_height(pid))
+
+
+func nameplate_height(pid: int) -> float:
+	# 按座位绕桌的序号(本机 0 号,往左手边数)错开:偶数号高一档。用座位角度(不是滑动中的位置)定序号,
+	# 换座位滑动时铭牌高低不跟着跳
+	var count := maxi(seat_angles.size(), 1)
+	var ring := int(round(seat_angles.get(pid, 0.0) / (TAU / count))) % count
+	return NAMEPLATE_HEIGHT + (NAMEPLATE_STAGGER if ring % 2 == 0 else 0.0)
 
 
 func seat_transform(angle: float) -> Transform3D:
