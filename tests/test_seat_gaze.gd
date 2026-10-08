@@ -1,13 +1,21 @@
 extends GutTest
 # SeatGaze:骗子酒馆与德州牌桌共用的视线与探头。
-# 光标落点按当前桌面半径判断是不是看桌面;按住方向键探头有上限,松开停在原处,拍特写时缩回、回座位再探回;
+# 光标落点按当前桌面半径判断是不是看桌面(不论离镜头多远);按住方向键探头,范围以真酒客的头为准,
+# 松开停在原处,拍特写时缩回、回座位再探回;
 # 他人的视线只套在桌上有酒客、没被排除(出局/观战)的人身上,停发后看回牌桌给的落点;不在树内时 forget 也安全。
 
 
-# 越肩机位(规格 §5.5):骗子酒馆桌与德州桌
+# 越肩机位(规格 §5.5):骗子酒馆桌与德州桌。写成字面值,不引用 TableWorld 的机位常量:
+# 几个分支正在改这些常量的名字与数值,引用失效时整个测试脚本解析失败,GUT 会悄悄跳过它;
+# 机位以后拉远也不影响这里的结论(见 PULL_BACK)
 const LIARS_CAMERA := Vector3(0.55, 1.92, 2.1)
 const POKER_CAMERA := Vector3(0.55, 1.92, 2.60)
 const BIG_TABLE_SPOT := Vector3(1.2, SeatLayout.TABLE_TOP, 0.3)   # 德州桌面上、骗子酒馆桌外的一点
+const FAR_SIDE_SPOT := Vector3(0, SeatLayout.TABLE_TOP, -1.35)    # 德州桌对面靠桌沿:对手的筹码与亮牌一带
+const PULL_BACK := Vector3(0, 0.5, 1.0)   # 越肩机位再往后上方拉远一些(以后调机位时)
+const FELT_SAMPLES := 12                  # 每圈取几个点检查桌面
+const NECK_SETTLE := 1.5    # 秒:真酒客的登场缩放与弹簧脖子都停稳(同 test_patron_neck)
+const HEAD_NEAR := 0.005    # 米
 const FRAME := 0.1
 const ME := 1
 const NEAR := 0.001
@@ -97,6 +105,38 @@ func test_spot_on_the_small_table_is_tabletop_with_either_radius():
 		assert_lt(target.distance_to(spot), NEAR, "半径 %.2f" % radius)
 
 
+func test_far_side_of_the_big_table_is_tabletop_too():
+	# 德州桌对面的桌沿离越肩机位 4 米多,比 CURSOR_LOOK_FAR 还远:照样看桌面上那一点,不看它上方的半空
+	assert_gt(FAR_SIDE_SPOT.distance_to(POKER_CAMERA), SeatGaze.CURSOR_LOOK_FAR, "前提:这一点比远处的视线目标还远")
+	var dir := FAR_SIDE_SPOT - POKER_CAMERA
+	var target: Vector3 = SeatGaze.cursor_look_target(POKER_CAMERA, dir, SeatLayout.POKER_TABLE_RADIUS)
+	assert_lt(target.distance_to(FAR_SIDE_SPOT), NEAR)
+
+
+func test_every_spot_on_the_felt_is_tabletop_however_far_the_camera():
+	# 光标落在桌面上就看那一点,与离镜头多远无关;越肩机位以后再往后拉远也一样
+	var cameras := {SeatLayout.TABLE_RADIUS: LIARS_CAMERA, SeatLayout.POKER_TABLE_RADIUS: POKER_CAMERA}
+	var missed := []
+	for radius in cameras:
+		for camera in [cameras[radius], cameras[radius] + PULL_BACK]:
+			for spot in _felt_spots(radius):
+				var target: Vector3 = SeatGaze.cursor_look_target(camera, spot - camera, radius)
+				if target.distance_to(spot) > NEAR:
+					missed.append("半径 %.2f 镜头 %s 落点 %s" % [radius, camera, spot])
+	assert_eq(missed, [], "桌面上每一点都看那一点")
+
+
+func _felt_spots(radius: float) -> Array:
+	# 桌心,加上半径一半处与紧贴桌沿处各一圈
+	var top := Vector3(0, SeatLayout.TABLE_TOP, 0)
+	var spots := [top]
+	for ring in [0.5, 0.97]:
+		for i in FELT_SAMPLES:
+			var angle := TAU * i / FELT_SAMPLES
+			spots.append(top + Vector3(cos(angle), 0, sin(angle)) * radius * ring)
+	return spots
+
+
 func test_floor_beyond_either_table_looks_far_along_the_ray():
 	var floor_spot := Vector3(1.9, SeatLayout.TABLE_TOP, 0.6)
 	for radius in [SeatLayout.TABLE_RADIUS, SeatLayout.POKER_TABLE_RADIUS]:
@@ -150,6 +190,33 @@ func test_neck_is_kept_but_not_used_away_from_the_seat_camera():
 	_frames(3)
 	assert_eq(gaze.neck_input(), reached, "离开越肩机位时按着键也不再探")
 	assert_eq(_patron(ME).asked_neck, Vector3.ZERO)
+
+
+func test_neck_input_is_where_the_real_head_settles():
+	# 按键攒下的偏移(也是发给别人的)就是头最终停住的位置,探头范围以 Patron 为准:
+	# 头去不了的方向(超出上限、往后)若也攒进输入,松手后头不动,反方向键得先把这段暗量抵消掉,头才开始动
+	var real := TableWorld.new(null)
+	add_child_autofree(real)
+	real.arrange([{"pid": 1}, {"pid": 2}, {"pid": 3}], 1, true, false)
+	var presses := {
+		1: [[Vector3(0, 0, 1), 0.5]],                            # 在原位按 S
+		2: [[Vector3(1, 0, -1), 0.4], [Vector3(0, 0, 1), 1.5]],  # 斜着探出去,再按住 S 收回
+		3: [[Vector3(-1, 0, -1), 1.5]],                          # 斜着探到上限以外
+	}
+	var gazes := {}
+	for pid in presses:
+		var own: ScriptedGaze = autofree(ScriptedGaze.new(null, real, pid))
+		for press in presses[pid]:
+			own.held = press[0]
+			for i in roundi(press[1] / FRAME):
+				own._process(FRAME)
+		gazes[pid] = own
+	await wait_seconds(NECK_SETTLE)
+	for pid in gazes:
+		var input: Vector3 = gazes[pid].neck_input()
+		var head: Vector3 = real.patrons[pid].neck_offset()
+		assert_lt(Vector2(head.x - input.x, head.z - input.z).length(), HEAD_NEAR,
+			"按键 %s:输入停在 %s,头停在 %s" % [presses[pid], input, head])
 
 
 func test_excluded_self_drops_the_neck():

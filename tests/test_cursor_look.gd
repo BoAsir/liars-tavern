@@ -51,6 +51,21 @@ func test_neck_input_stays_when_released():
 	assert_eq(SeatGaze.next_neck_input(input, Vector3.ZERO, 0.016), input, "松开就停在原处,不弹回")
 
 
+func test_neck_input_does_not_go_backward():
+	# 头只能往前、往两侧探:往后(朝越肩镜头)会挡在镜头和自己的手牌之间(同 feature/liars-tavern-mvp 的 eadc745)
+	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, 1), 0.5)
+	assert_eq(input, Vector3.ZERO, "在原位按 S 不往后探")
+	input = SeatGaze.next_neck_input(input, Vector3(0, 0, -1), 0.1)
+	assert_almost_eq(input.z, -SeatGaze.NECK_SPEED * 0.1, 0.0001, "随后按 W 立刻往前,不用先抵消攒下的后退量")
+
+
+func test_neck_input_back_key_stops_at_rest():
+	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(1, 0, -1), 0.4)
+	input = SeatGaze.next_neck_input(input, Vector3(0, 0, 1), 2.0)
+	assert_almost_eq(input.z, 0.0, 0.0001, "按 S 收回到原位就停")
+	assert_gt(input.x, 0.0, "横向位置保留")
+
+
 func test_opposite_key_brings_the_head_back():
 	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, -1), 0.5)
 	input = SeatGaze.next_neck_input(input, Vector3(0, 0, 1), 0.5)
