@@ -1,7 +1,8 @@
 class_name PatronAntics
 extends Node
 # 酒客的 Q 版搞笑表演(2026-10-08 用户追加「Q 一点、搞笑一点」),挂在 Patron 下,由 Patron 每帧调用 tick:
-# - 枪口抵着自己的头:冒冷汗(太阳穴边几滴汗往下滑)、眼睛瞪圆瞳孔缩成小点、浑身发抖、耳朵乱颤、尾巴甩得更急;
+# - 枪口抵着自己的头:冒冷汗(太阳穴边几滴汗往下滑)、眼睛瞪圆瞳孔缩成小点、浑身发抖(整个身体连头带举枪的手一起抖,
+#   头和枪之间不相对漂移)、左耳乱颤、尾巴甩得更急;
 # - 空枪松一口气:眯眼笑(^ ^)、吐舌头、头和耳朵耷拉一下;
 # - 中弹出局:先转蚊香眼再定格成 ×、头顶一圈小星星一直转、舌头吐在嘴角(卡通、不见血);
 # - 赢了:先眯眼笑,再挑眉毛、得意地左右晃脑袋;
@@ -133,9 +134,8 @@ func _tremble() -> void:
 	var body := _patron.body
 	body.position.x = Patron.HIP.x + (sin(t * 47.0) + 0.6 * sin(t * 29.0)) * TREMBLE
 	body.position.z = Patron.HIP.z + sin(t * 37.0) * TREMBLE * 0.5
-	for i in _patron._ears.size():
-		var ear: Node3D = _patron._ears[i]
-		ear.rotation.z = _ear_rest[i] + sin(t * 41.0 + i * 1.7) * EAR_JITTER
+	if not _patron._ears.is_empty():   # 只颤不拿枪那一侧(左)的耳朵:右耳紧挨着枪管
+		_patron._ears[0].rotation.z = _ear_rest[0] + sin(t * 41.0) * EAR_JITTER
 	# 冷汗:几滴错开相位往下滑,滑到底变小消失再从额角冒出来
 	var mm := _sweat.multimesh
 	for i in SWEAT_DROPS:

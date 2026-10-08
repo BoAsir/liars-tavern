@@ -32,6 +32,7 @@ const PLASTER_RECTS := {
 var opts := {}
 var _poker_world: TableWorld = null
 var _poker: Node = null
+var _showcase: Node = null
 var _ui: Control = null
 
 
@@ -74,6 +75,7 @@ func _run() -> void:
 		var showcase: Node = script.new()
 		root.add_child(showcase)
 		await showcase.build(tavern)
+		_showcase = showcase
 	if opts.has("poker-showcase"):
 		var poker: Node = load("res://tools/poker_showcase.gd").new()
 		root.add_child(poker)
@@ -100,13 +102,28 @@ func _run() -> void:
 			await process_frame
 		for i in SETTLE_DRAWS:
 			RenderingServer.force_draw(false)
-		var path := "%s/%s.png" % [out_dir, view if hud_state == "" else view + "_" + hud_state]
-		var image := root.get_texture().get_image()
-		image.save_png(path)
-		print("saved ", path)
+		if view.begins_with("flash") and _showcase != null:
+			# 开一枪:2 帧后拍枪口焰,再过 0.6 秒拍硝烟(flashclose 是同一枪的特写机位)
+			_showcase.fire()
+			for i in 2:
+				await process_frame
+			_save(out_dir, view)
+			await create_timer(0.6).timeout
+			_save(out_dir, view.replace("flash", "smoke"))
+			continue
+		var image := _save(out_dir, view if hud_state == "" else view + "_" + hud_state)
 		if opts.has("stats"):
 			_print_stats(view, image)
 	quit()
+
+
+func _save(out_dir: String, file: String) -> Image:
+	RenderingServer.force_draw(false)
+	var path := "%s/%s.png" % [out_dir, file]
+	var image := root.get_texture().get_image()
+	image.save_png(path)
+	print("saved ", path)
+	return image
 
 
 func _place_camera(rig: CameraRig, view: String) -> void:

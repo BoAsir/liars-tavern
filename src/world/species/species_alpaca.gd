@@ -6,6 +6,7 @@ extends RefCounted
 
 const LOOK := {
 	"id": "alpaca",
+	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.78, 0.66, 0.5), "muzzle": Color(0.80, 0.74, 0.62), "dark": Color(0.35, 0.26, 0.18),
 		"fleece": Color(0.80, 0.70, 0.55), "coat": Color(0.76, 0.64, 0.48), "accent": Color(0.25, 0.6, 0.58),

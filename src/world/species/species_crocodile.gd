@@ -7,6 +7,7 @@ extends RefCounted
 
 const LOOK := {
 	"id": "crocodile",
+	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.24, 0.46, 0.22), "muzzle": Color(0.28, 0.48, 0.24), "dark": Color(0.1, 0.16, 0.08),
 		"fur_back": Color(0.17, 0.34, 0.16), "jaw": Color(0.34, 0.50, 0.28), "coat": Color(0.22, 0.22, 0.24),

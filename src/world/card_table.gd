@@ -17,9 +17,9 @@ const SWEEP_FLIGHT := 0.4
 const LIFT_HOVER := 0.012
 const LIFT_SELECTED := 0.032
 const REVEAL_Z := 0.44
-# 平放在桌上的牌:背面也要高出毡面(FELT_TOP)一点,否则和毡面抢深度,时隐时现
+# 平放在桌上的牌:牌底也要高出毡面(FELT_TOP)一点,否则和毡面抢深度,时隐时现;每层比牌厚多 0.3 mm,相邻两层不相交
 const PILE_STEP := 0.0011
-const REVEAL_Y := SeatLayout.FELT_TOP + Card3D.GAP + 0.0004
+const REVEAL_Y := SeatLayout.FELT_TOP + Card3D.THICKNESS / 2.0 + 0.0003
 const STAND_HEIGHT := 0.1
 const STAND_SPIN := 0.45
 # 卡牌本地系(+Y 法线, -Z 牌顶)→ 竖立面向持牌者:X→右,Y→朝向持牌者,Z→向下
@@ -36,7 +36,8 @@ var selected := {}
 var hovered := -1
 var target_kind := CardFaces.BACK
 
-var _stand: Node3D
+var _stand: Node3D           # 固定不转的底座(桌面高度)
+var _spinner: Node3D         # 只有立轴、叉形夹和目标牌在转
 var _target_card: Card3D
 var _pile_seed := 0
 
@@ -50,21 +51,34 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	_stand.rotation.y += STAND_SPIN * delta
+	_spinner.rotation.y += STAND_SPIN * delta
 
 
 # —— 目标牌立牌 ——
 
 func _build_stand() -> void:
+	# 车削底座固定在桌面上(网格内部抬到毡面),只有立轴、叉形夹与目标牌转
 	_stand = MeshKit.pivot(self, Vector3(0, SeatLayout.TABLE_TOP, 0), "TargetStand")
-	MeshKit.add(_stand, MeshKit.cylinder(0.045, 0.055, 0.014, 32), WorldMaterials.brass(), Vector3(0, 0.007, 0))
-	MeshKit.add(_stand, MeshKit.cylinder(0.004, 0.005, STAND_HEIGHT, 8), WorldMaterials.brass(),
-		Vector3(0, STAND_HEIGHT / 2.0, 0))
-	MeshKit.add(_stand, MeshKit.box(Vector3(0.03, 0.012, 0.008)), WorldMaterials.brass(), Vector3(0, STAND_HEIGHT, 0))
+	MeshKit.add(_stand, MeshForge.cached("prop:stand_base", StandModel.base,
+		{&"wood": WorldMaterials.wood("turned", true), &"metal": WorldMaterials.prop()}), null).name = "StandBase"
+	_spinner = MeshKit.pivot(_stand, Vector3.ZERO, "Spinner")
+	MeshKit.add(_spinner, MeshForge.cached("prop:stand_clip", func(f): StandModel.clip(f, STAND_HEIGHT),
+		{&"metal": WorldMaterials.prop()}), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_OFF).name = "Clip"
 	_target_card = Card3D.new()
-	_target_card.transform = Transform3D(FAN_BASIS, Vector3(0, STAND_HEIGHT + Card3D.HEIGHT / 2.0 - 0.006, 0))
-	_stand.add_child(_target_card)
+	_target_card.transform = Transform3D(FAN_BASIS, Vector3(0, _card_center_y(1.0), 0))
+	_spinner.add_child(_target_card)
 	_target_card.set_both_faces(CardFaces.BACK)
+
+
+static func _card_center_y(height_scale: float) -> float:
+	# 牌底钉在夹口(STAND_HEIGHT − 6 mm):翻面回弹把牌放大时同步上移,牌不会插进立轴
+	return STAND_HEIGHT - 0.006 + Card3D.HEIGHT * height_scale / 2.0
+
+
+func _set_target_scale(s: Vector2) -> void:
+	# s.x 横向(翻面时压扁),s.y 纵向(回弹时放大)
+	_target_card.scale = Vector3(s.x, 1.0, s.y)
+	_target_card.position.y = _card_center_y(s.y)
 
 
 func set_target(kind: int, animate := true) -> void:
@@ -74,10 +88,10 @@ func set_target(kind: int, animate := true) -> void:
 		return
 	sfx.emit("flip")
 	var tween := create_tween()
-	tween.tween_property(_target_card, "scale", Vector3(0.05, 1.0, 1.0), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
+	tween.tween_method(_set_target_scale, Vector2.ONE, Vector2(0.05, 1.0), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
 	tween.tween_callback(_target_card.set_both_faces.bind(kind))
-	tween.tween_property(_target_card, "scale", Vector3(1.25, 1.0, 1.25), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
-	tween.tween_property(_target_card, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tween.tween_method(_set_target_scale, Vector2(0.05, 1.0), Vector2(1.25, 1.25), TARGET_FLIP_HALF).set_trans(Tween.TRANS_SINE)
+	tween.tween_method(_set_target_scale, Vector2(1.25, 1.25), Vector2.ONE, 0.25).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_method(_target_card.set_glow.bind(Color(1.0, 0.8, 0.35)), 1.6, 0.0, TARGET_GLOW)
 	await tween.finished
 
@@ -144,6 +158,19 @@ static func pile_y(index: int) -> float:
 	return REVEAL_Y + index * PILE_STEP
 
 
+static func pile_transform(index: int, seed: int) -> Transform3D:
+	# 出牌区第 index 张牌:确定性散落(所有客户端一致),背面朝上
+	var off := SeatLayout.pile_offset(index, seed)
+	var pos := Vector3(off["pos"].x, pile_y(index), off["pos"].y)
+	return Transform3D(Basis(Vector3.UP, off["rot"]) * Basis(Vector3.BACK, PI), pos)
+
+
+static func reveal_transform(index: int, count: int) -> Transform3D:
+	# 翻牌行第 index 张(共 count 张):本机座位前一排,背面朝上
+	var xs := SeatLayout.reveal_slots(count)
+	return Transform3D(Basis(Vector3.BACK, PI), Vector3(xs[index], REVEAL_Y, REVEAL_Z))
+
+
 static func fan_slot(i: int, count: int, lift: float) -> Transform3D:
 	var slot: Dictionary = SeatLayout.fan_slots(count)[i]
 	var basis := Basis(Vector3.UP, slot["rot"])
@@ -204,12 +231,10 @@ func play(pid: int, count: int, my_indices: Array) -> void:
 	var flights := []
 	for card in nodes:
 		card.reparent(self, true)
-		var off := SeatLayout.pile_offset(pile.size(), _pile_seed)
-		var pos := Vector3(off["pos"].x, pile_y(pile.size()), off["pos"].y)
-		var basis := Basis(Vector3.UP, off["rot"]) * Basis(Vector3.BACK, PI)
+		var target := pile_transform(pile.size(), _pile_seed)
 		pile.append(card)
 		card.set_glow(0.0)
-		flights.append(card.fly_to(Transform3D(basis, pos), PLAY_FLIGHT, 0.14, 0.6))
+		flights.append(card.fly_to(target, PLAY_FLIGHT, 0.14, 0.6))
 	sfx.emit("slide")
 	if pid == world.my_pid:
 		selected = {}
@@ -259,13 +284,11 @@ func gather_for_reveal(count: int) -> void:
 		card.global_transform = Transform3D(Basis(Vector3.BACK, PI), Vector3(0, SeatLayout.TABLE_TOP + 0.01, 0))
 		nodes.append(card)
 	revealed = nodes.slice(0, count)
-	var xs := SeatLayout.reveal_slots(revealed.size())
 	var tween: Tween = null
 	for i in revealed.size():
 		var card: Card3D = revealed[i]
 		pile.erase(card)
-		var pos := Vector3(xs[i], REVEAL_Y, REVEAL_Z)
-		tween = card.fly_to(Transform3D(Basis(Vector3.BACK, PI), pos), 0.38, 0.1)
+		tween = card.fly_to(reveal_transform(i, revealed.size()), 0.38, 0.1)
 	sfx.emit("slide")
 	if tween != null:
 		await tween.finished

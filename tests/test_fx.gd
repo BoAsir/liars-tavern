@@ -65,3 +65,63 @@ func test_effect_quads_and_particle_materials_are_shared():
 	assert_not_same(Fx._lit_quad(0.12, Color.WHITE), Fx._lit_quad(0.12, Color.RED))
 	assert_same(WorldMaterials.particle(true, 5.0, 1.6), WorldMaterials.particle(true, 5.0, 1.6))
 	assert_not_same(WorldMaterials.particle(true, 5.0, 1.6), WorldMaterials.particle(false, 5.0, 1.6))
+
+
+# —— 子项目③ §8:星形火核、沿枪管的十字面片、往后喷的火花、絮状硝烟 ——
+
+func _meshes_of(root: Node) -> Array:
+	return root.find_children("*", "MeshInstance3D", true, false)
+
+
+func test_flash_and_smoke_materials_are_cached():
+	Fx.muzzle_flash(parent, Transform3D.IDENTITY)
+	Fx.muzzle_flash(parent, Transform3D.IDENTITY)
+	var flashes := parent.get_children().filter(func(n): return n.get_child_count() > 0 and n.get_child(0) is OmniLight3D)
+	assert_eq(flashes.size(), 2)
+	var a := _meshes_of(flashes[0])
+	var b := _meshes_of(flashes[1])
+	assert_eq(a.size(), 2, "火核 + 十字面片")
+	for i in a.size():
+		assert_same(a[i].mesh, b[i].mesh, "同一份网格(连同材质)")
+	Fx.smoke_puff(parent, Vector3.ZERO)
+	Fx.smoke_puff(parent, Vector3.ONE)
+	var smokes := _particles(parent).filter(func(p): return p.draw_pass_1 == Fx.smoke_quad())
+	assert_eq(smokes.size(), 2, "两次硝烟共用一份面片与材质")
+
+
+func test_node_order_light_core_crown_sparks():
+	Fx.muzzle_flash(parent, Transform3D.IDENTITY)
+	var root: Node = parent.get_child(0)
+	assert_true(root.get_child(0) is OmniLight3D)
+	assert_same((root.get_child(1) as MeshInstance3D).mesh, Fx.core_mesh())
+	assert_same((root.get_child(2) as MeshInstance3D).mesh, Fx.crown_mesh())
+	assert_true(root.get_child(3) is GPUParticles3D, "火花在最后")
+
+
+func test_smoke_rotates_and_fades_softly():
+	var mat := Fx.smoke_material()
+	assert_true(mat is StandardMaterial3D, "受光的标准材质,不新增着色器")
+	assert_eq(mat.billboard_mode, BaseMaterial3D.BILLBOARD_PARTICLES)
+	assert_true(mat.proximity_fade_enabled)
+	assert_almost_eq(mat.proximity_fade_distance, 0.08, 0.0001)
+	assert_not_null(mat.albedo_texture, "絮团贴图")
+	Fx.smoke_puff(parent, Vector3.ZERO)
+	var pm: ParticleProcessMaterial = _particles(parent)[0].process_material
+	assert_gte(pm.angle_max - pm.angle_min, 180.0, "随机初始角")
+	assert_lte(_particles(parent)[0].lifetime, 3.2, "硝烟寿命")
+
+
+func test_flash_stays_outside_the_head():
+	# 十字面片所有顶点在枪口局部 z ≥ −GUN_CLEARANCE(朝头那一侧最多伸出 8 mm);火花沿枪身往后喷
+	var verts: PackedVector3Array = Fx.crown_mesh().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for v in verts:
+		assert_gte(v.z, -Patron.GUN_CLEARANCE - 1e-6)
+	Fx.muzzle_flash(parent, Transform3D.IDENTITY)
+	var sparks: GPUParticles3D = _particles(parent)[0]
+	assert_eq((sparks.process_material as ParticleProcessMaterial).direction, Vector3(0, 0, 1))
+
+
+func test_shared_particle_include_has_no_depth_texture():
+	# 火星一直可见,共享 include 引用深度纹理会让每帧多一次深度拷贝
+	var text := FileAccess.get_file_as_string("res://src/world/shaders/soft_particle.gdshaderinc")
+	assert_false(text.contains("hint_depth_texture"))

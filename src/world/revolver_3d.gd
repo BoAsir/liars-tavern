@@ -1,16 +1,23 @@
 class_name Revolver3D
 extends Node3D
 # 左轮手枪模型:原点在握把(手持点),枪管沿本地 -Z。转轮可旋转、击锤可扳动、开火有后坐。
+# 网格配方在 RevolverModel(单动左轮:胡桃木犁柄握把、五槽转轮、半月准星、黄铜护圈)。
 
 
-const BARREL_LENGTH := 0.15
-const DRUM_POS := Vector3(0, 0.045, -0.035)
-const MUZZLE_POS := Vector3(0, 0.058, -0.235)
-const REST_HALF_WIDTH := 0.026   # 侧放时离桌面的高度:转轮半径 0.025 + 1 mm(槽线外缘也在 0.026)
-# 合批:机身 / 转轮 / 击锤各一份共享网格(所有左轮共用);钢、铁、黄铜走顶点 PBR(prop 材质),木握把单独一个 surface
-const STEEL := [Color(0.30, 0.31, 0.34), 0.38, 0.70]  # [sRGB 颜色, 粗糙度, 金属度],枪钢:原来太黑,背景又暗,枪读成一团黑
-const BRASS := [Color(0.78, 0.56, 0.24), 0.32, 1.0]   # 同 WorldMaterials.brass()
-const IRON := [Color(0.09, 0.09, 0.1), 0.55, 0.8]     # 同 WorldMaterials.iron()
+const BARREL_Y := RevolverModel.BARREL_Y
+const DRUM_POS := RevolverModel.DRUM_POS
+const HAMMER_PIVOT := RevolverModel.HAMMER_PIVOT
+const MUZZLE_POS := RevolverModel.MUZZLE_POS
+const CHAMBER_STEP := TAU / Revolver.CHAMBERS
+# 握持:爪心 = 枪原点,枪管沿手的 −Z;往前挪 4 mm,机匣与转轮露在拳头外面,握把大半包在拳里
+const HOLD_OFFSET := Transform3D(Basis(), Vector3(0, 0, -0.004))
+# 侧放(左侧着地,绕枪管轴转 PI/2 + ROLL)。四个常量都由测试按网格顶点校验:
+# 地上:转轮与底帽同时着地,最低点离原点 REST_HALF_WIDTH;
+# 桌上:转轮压在毡面(FELT_TOP)、底帽落在木桌面(低 4 mm),转轮最低点离原点 TABLE_REST_LIFT
+const REST_ROLL := -0.1030
+const REST_HALF_WIDTH := 0.0253
+const TABLE_REST_ROLL := -0.1335
+const TABLE_REST_LIFT := 0.0236
 
 var drum: Node3D
 var hammer: Node3D
@@ -20,95 +27,45 @@ var muzzle: Marker3D
 static func forge_jobs() -> Array:
 	# 启动时后台预建(材质在主线程先建好)
 	return [
-		["revolver:body", body_recipe, {&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}],
-		["revolver:drum", drum_recipe, {&"metal": WorldMaterials.prop()}],
-		["revolver:hammer", hammer_recipe, {&"metal": WorldMaterials.prop()}],
+		["revolver:body", RevolverModel.body, _materials(true)],
+		["revolver:drum", RevolverModel.drum, _materials(false)],
+		["revolver:hammer", RevolverModel.hammer, _materials(false)],
 	]
+
+
+static func _materials(with_grip: bool) -> Dictionary:
+	if with_grip:
+		return {&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}
+	return {&"metal": WorldMaterials.prop()}
+
+
+static func aligned_angle(a: float) -> float:
+	# 弹膛角从 12 点起排:转角是整格时恰好一个弹膛在 12 点,与枪管同轴
+	return roundf(a / CHAMBER_STEP) * CHAMBER_STEP
 
 
 func _init() -> void:
 	var body := MeshKit.pivot(self, Vector3.ZERO, "Body")
-	MeshKit.add(body, MeshForge.cached("revolver:body", body_recipe,
-		{&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}), null).name = "BodyMesh"
-	# 转轮:弹膛(与规则的膛数一致)+ 槽线,绕枪管轴旋转
+	MeshKit.add(body, MeshForge.cached("revolver:body", RevolverModel.body, _materials(true)), null).name = "BodyMesh"
+	# 转轮:5 个一模一样的弹膛(标记只表示位置,外观不区分),绕枪管轴旋转
 	drum = MeshKit.pivot(body, DRUM_POS, "Drum")
-	MeshKit.add(drum, MeshForge.cached("revolver:drum", drum_recipe, {&"metal": WorldMaterials.prop()}), null).name = "DrumMesh"
+	MeshKit.add(drum, MeshForge.cached("revolver:drum", RevolverModel.drum, _materials(false)), null).name = "DrumMesh"
 	for i in Revolver.CHAMBERS:
 		var marker := Marker3D.new()
 		marker.name = "Chamber%d" % (i + 1)
-		marker.position = _chamber_offset(i) + Vector3(0, 0, -0.022)
+		marker.position = RevolverModel.chamber_offset(i) + Vector3(0, 0, -RevolverModel.DRUM_LENGTH / 2.0)
 		drum.add_child(marker)
-	# 击锤:绕后端铰点扳动
-	hammer = MeshKit.pivot(body, Vector3(0, 0.06, 0.022), "Hammer")
-	MeshKit.add(hammer, MeshForge.cached("revolver:hammer", hammer_recipe, {&"metal": WorldMaterials.prop()}), null).name = "HammerMesh"
+	# 击锤:绕铰点扳动
+	hammer = MeshKit.pivot(body, HAMMER_PIVOT, "Hammer")
+	MeshKit.add(hammer, MeshForge.cached("revolver:hammer", RevolverModel.hammer, _materials(false)), null).name = "HammerMesh"
 	muzzle = Marker3D.new()
 	muzzle.position = MUZZLE_POS
 	add_child(muzzle)
 
 
-static func _paint(f: MeshForge, m: Array) -> void:
-	f.paint(m[0], m[1], m[2])
-
-
-static func _chamber_offset(i: int) -> Vector3:
-	# 第一个弹膛在转轮 12 点位,与枪管同轴
-	var a := PI / 2.0 + TAU * i / Revolver.CHAMBERS
-	return Vector3(cos(a), sin(a), 0) * 0.0145
-
-
-static func body_recipe(f: MeshForge) -> void:
-	var xf := MeshForge.xf
-	# 握把:略后倾的圆角木柄
-	f.surface(&"grip")
-	f.part_space = true
-	f.capsule(0.016, 0.1, 20, xf.call(Vector3(0, -0.02, 0.012), Vector3(-18, 0, 0), Vector3(1, 1, 1.35)))
-	f.part_space = false
-	f.surface(&"metal")
-	_paint(f, STEEL)
-	# 底部金属护帽、机匣与顶梁
-	f.sphere(0.018, 12, xf.call(Vector3(0, -0.068, 0.028), Vector3.ZERO, Vector3(0.9, 0.5, 1.3)))
-	f.box(Vector3(0.026, 0.05, 0.075), xf.call(Vector3(0, 0.04, -0.01)))
-	f.box(Vector3(0.02, 0.012, 0.07), xf.call(Vector3(0, 0.074, -0.04)))
-	# 枪管 + 下护套
-	f.cylinder(0.0085, 0.0085, BARREL_LENGTH, 16, MeshForge.CAPS_BOTH, xf.call(Vector3(0, 0.058, -0.16), Vector3(90, 0, 0)))
-	f.box(Vector3(0.012, 0.012, 0.09), xf.call(Vector3(0, 0.046, -0.12)))
-	# 扳机护圈
-	f.torus(0.016, 0.02, 24, xf.call(Vector3(0, 0.0, -0.022), Vector3(0, 0, 90), Vector3(1, 1.0, 1.25)))
-	# 准星、枪口环、扳机
-	_paint(f, BRASS)
-	f.box(Vector3(0.004, 0.009, 0.008), xf.call(Vector3(0, 0.069, -0.228)))
-	f.torus(0.0045, 0.0085, 16, xf.call(MUZZLE_POS + Vector3(0, 0, 0.004), Vector3(90, 0, 0)))
-	f.box(Vector3(0.004, 0.022, 0.006), xf.call(Vector3(0, 0.005, -0.02), Vector3(-12, 0, 0)))
-
-
-static func drum_recipe(f: MeshForge) -> void:
-	var xf := MeshForge.xf
-	f.surface(&"metal")
-	_paint(f, STEEL)
-	f.cylinder(0.025, 0.025, 0.046, 24, MeshForge.CAPS_BOTH, xf.call(Vector3.ZERO, Vector3(90, 0, 0)))
-	for i in Revolver.CHAMBERS:
-		var off := _chamber_offset(i)
-		_paint(f, IRON)
-		f.cylinder(0.0055, 0.0055, 0.004, 10, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, -0.022), Vector3(90, 0, 0)))
-		_paint(f, BRASS)
-		f.cylinder(0.003, 0.003, 0.004, 8, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, 0.022), Vector3(90, 0, 0)))
-		var a := PI / 2.0 + TAU * i / Revolver.CHAMBERS + PI / Revolver.CHAMBERS
-		_paint(f, IRON)
-		f.box(Vector3(0.004, 0.004, 0.032), xf.call(Vector3(cos(a), sin(a), 0) * 0.024))
-
-
-static func hammer_recipe(f: MeshForge) -> void:
-	var xf := MeshForge.xf
-	f.surface(&"metal")
-	_paint(f, STEEL)
-	f.box(Vector3(0.008, 0.026, 0.01), xf.call(Vector3(0, 0.01, 0.002), Vector3(-25, 0, 0)))
-	f.box(Vector3(0.012, 0.005, 0.012), xf.call(Vector3(0, 0.024, 0.01)))
-
-
 func spin_drum(duration: float, turns := 2.5) -> Tween:
 	# 转整数格停下,总有一个弹膛对准枪管(转几格与子弹位置无关,所有弹膛外观一样)
-	var step := TAU / Revolver.CHAMBERS
-	var target := snappedf(drum.rotation.z, step) + step * roundi(turns * Revolver.CHAMBERS)
+	var target := aligned_angle(drum.rotation.z + TAU * turns)
 	var tween := create_tween()
 	tween.tween_property(drum, "rotation:z", target, duration).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	return tween
@@ -117,7 +74,7 @@ func spin_drum(duration: float, turns := 2.5) -> Tween:
 func cock_hammer(duration := 0.18) -> Tween:
 	var tween := create_tween()
 	tween.tween_property(hammer, "rotation:x", deg_to_rad(38.0), duration).set_trans(Tween.TRANS_BACK)
-	tween.parallel().tween_property(drum, "rotation:z", drum.rotation.z + TAU / Revolver.CHAMBERS, duration)
+	tween.parallel().tween_property(drum, "rotation:z", aligned_angle(drum.rotation.z + CHAMBER_STEP), duration)
 	return tween
 
 

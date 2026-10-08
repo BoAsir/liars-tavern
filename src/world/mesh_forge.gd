@@ -3,6 +3,7 @@ extends RefCounted
 # 合批构建器:把多个部件写进同一组顶点数组(纯数组运算,可在工作线程跑),主线程 commit 成共享 ArrayMesh。
 # 顶点布局:COLOR.rgb = sRGB albedo、COLOR.a = 烘焙 AO;UV2 = (roughness, metallic);
 # CUSTOM0 = (部件原始局部坐标 xyz, 种子 w),只在该 surface 有部件开了 part_space 时才写(木纹等物体空间着色器用)。
+# UV = glow(自发光强度, 透光强度):只在该 surface 有部件设过 glow 或用 raw 自带 UV 时才写(prop 着色器读它)。
 # 旧基础体逐顶点复刻 Godot 的 PrimitiveMesh(运行时读 PrimitiveMesh 的数组在 Metal 上要从 GPU 回读,每次约 1.2 ms)。
 # 配方(recipe: func(f: MeshForge))只用 MeshForge 的方法加数学运算:不建 Node/Resource、不用全局 randf()、不碰 autoload。
 
@@ -25,6 +26,7 @@ var part_basis := Basis.IDENTITY   # part_space 时先把部件局部坐标转�
 var seed := 0.0
 var write_custom := false     # true:CUSTOM0 写 custom(酒客网格:材质类, 摆动权重, 种子, 透光)
 var custom := Vector4.ZERO
+var glow := Vector2.ZERO      # 写进 UV:x 自发光强度(0..1),y 透光(0..1);prop 着色器用,木纹 surface 不读
 
 var _surfaces := {}           # StringName -> _Surface(按首次使用顺序)
 var _order: Array[StringName] = []
@@ -38,8 +40,10 @@ class _Surface:
 	var colors := PackedColorArray()
 	var uv2 := PackedVector2Array()
 	var custom0 := PackedFloat32Array()
+	var uv := PackedVector2Array()
 	var indices := PackedInt32Array()
 	var has_custom := false
+	var has_uv := false
 
 
 class _Job:
@@ -694,10 +698,127 @@ static func _lathe_normal(a: Vector2, b: Vector2) -> Vector2:
 	return Vector2(d.y, -d.x).normalized()
 
 
+
+func paint_glow(from: int, fn: Callable) -> MeshForge:
+	# 把当前 surface 第 from 个之后的顶点的 glow 改成 fn(位置) -> Vector2(蜡烛顶端渐亮)
+	var s := _current
+	if not s.has_uv:
+		s.has_uv = true
+		s.uv.resize(s.vertices.size())
+	for i in range(from, s.vertices.size()):
+		s.uv[i] = fn.call(s.vertices[i])
+	return self
+
+
+func raw(points: PackedVector3Array, normals: PackedVector3Array, uvs: PackedVector2Array, indices: PackedInt32Array,
+		t := Transform3D.IDENTITY) -> MeshForge:
+	# 直接写一组顶点(卡牌牌体自己算 UV);uvs 为空时用当前 glow
+	return _append(points, normals, indices, t, PackedColorArray(), PackedFloat32Array(), uvs)
+
+
+func extrude(outline: PackedVector2Array, depth: float, bevel := 0.0, t := Transform3D.IDENTITY,
+		caps := Vector2i(1, 1), crease_deg := 40.0) -> MeshForge:
+	# 把 XY 平面上的轮廓沿 Z 挤出,z ∈ [−depth/2, depth/2];两端各一圈倒角(斜接内缩,凹角限幅 0.35)。
+	# 轮廓自动转成逆时针;转角大于 crease_deg 的地方侧墙硬边。不支持带洞轮廓(端面用 Geometry2D 三角化)。
+	# caps.x / caps.y:是否封 −Z / +Z 端面(转轮前端面另外拼,见 Revolver 网格)
+	var pts := outline.duplicate()
+	if _signed_area(pts) < 0.0:
+		pts.reverse()
+	var n := pts.size()
+	if n < 3:
+		return self
+	var half := depth * 0.5
+	bevel = clampf(bevel, 0.0, half * 0.95)
+	var edge_n: Array[Vector2] = []   # 第 i 条边(i → i+1)的外法线
+	for i in n:
+		var d := pts[(i + 1) % n] - pts[i]
+		edge_n.append(Vector2(d.y, -d.x).normalized())
+	var inset := extrude_inset(pts, bevel)
+	# 侧墙一圈:硬边处复制顶点。ring 里每项 [点下标, 2D 法线]
+	var ring: Array = []
+	var cos_crease := cos(deg_to_rad(crease_deg))
+	for i in n:
+		var a: Vector2 = edge_n[(i - 1 + n) % n]
+		var b: Vector2 = edge_n[i]
+		if a.dot(b) < cos_crease:
+			ring.append([i, a])
+			ring.append([i, b])
+		else:
+			ring.append([i, (a + b).normalized()])
+	# 首尾相接:第一项若是硬边的后半(属于边 0),要放到最前面已是;把末尾那条边接回开头
+	var rows: Array = []   # 每行 [z, 是否内缩, 法线 z 分量权重]
+	if bevel > 0.0:
+		rows = [[-half, true, -1.0], [-half + bevel, false, 0.0], [half - bevel, false, 0.0], [half, true, 1.0]]
+	else:
+		rows = [[-half, false, 0.0], [half, false, 0.0]]
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var stride := ring.size() + 1
+	for row in rows:
+		for k in stride:
+			var item: Array = ring[k % ring.size()]
+			var p2: Vector2 = inset[item[0]] if row[1] else pts[item[0]]
+			var n2: Vector2 = item[1]
+			points.append(Vector3(p2.x, p2.y, row[0]))
+			normals.append(Vector3(n2.x, n2.y, row[2] * 1.2).normalized())
+	for r in range(1, rows.size()):
+		for k in ring.size():
+			var item: Array = ring[k]
+			var next: Array = ring[(k + 1) % ring.size()]
+			if item[0] == next[0]:
+				continue   # 硬边的两份顶点之间不连面
+			var a0 := (r - 1) * stride + k
+			var b0 := r * stride + k
+			indices.append_array([a0, b0, a0 + 1, a0 + 1, b0, b0 + 1])
+	var cap_poly := inset if bevel > 0.0 else pts
+	var tris := Geometry2D.triangulate_polygon(cap_poly)
+	for end in 2:
+		if (end == 0 and caps.x == 0) or (end == 1 and caps.y == 0):
+			continue
+		var z := -half if end == 0 else half
+		var base := points.size()
+		for p in cap_poly:
+			points.append(Vector3(p.x, p.y, z))
+			normals.append(Vector3(0, 0, -1.0 if end == 0 else 1.0))
+		for k in range(0, tris.size(), 3):
+			# triangulate_polygon 出的是(从 +Z 看)逆时针;Godot 正面是顺时针
+			if end == 1:
+				indices.append_array([base + tris[k], base + tris[k + 2], base + tris[k + 1]])
+			else:
+				indices.append_array([base + tris[k], base + tris[k + 1], base + tris[k + 2]])
+	return _append(points, normals, indices, t)
+
+
+static func extrude_inset(pts: PackedVector2Array, amount: float) -> PackedVector2Array:
+	# 逆时针轮廓按斜接内缩 amount(凹角处限幅 0.35,免得尖角处戳出去太远)
+	var n := pts.size()
+	var out := PackedVector2Array()
+	for i in n:
+		var d0 := pts[i] - pts[(i - 1 + n) % n]
+		var d1 := pts[(i + 1) % n] - pts[i]
+		var n0 := Vector2(d0.y, -d0.x).normalized()
+		var n1 := Vector2(d1.y, -d1.x).normalized()
+		var m := (n0 + n1)
+		m = m.normalized() if m.length_squared() > 1e-12 else n0
+		var k := maxf(m.dot(n0), 0.35)
+		out.append(pts[i] - m * (amount / k))
+	return out
+
+
+static func _signed_area(pts: PackedVector2Array) -> float:
+	var area := 0.0
+	for i in pts.size():
+		var a := pts[i]
+		var b := pts[(i + 1) % pts.size()]
+		area += a.x * b.y - b.x * a.y
+	return area * 0.5
+
+
 # —— 写入 ——
 
 func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array, t: Transform3D,
-		colors := PackedColorArray(), customs := PackedFloat32Array()) -> MeshForge:
+		colors := PackedColorArray(), customs := PackedFloat32Array(), uvs := PackedVector2Array()) -> MeshForge:
 	# colors / customs 可选:逐顶点颜色(sRGB,a = AO)与逐顶点 CUSTOM0(每顶点 4 个数);不给就用当前绘制状态
 	var xform: Transform3D = _stack.back() * t
 	var det := xform.basis.determinant()
@@ -712,11 +833,16 @@ func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: P
 	if wants_custom and not s.has_custom:
 		s.has_custom = true
 		s.custom0.resize(base * 4)   # 之前的部件补 0
+	if (glow != Vector2.ZERO or not uvs.is_empty()) and not s.has_uv:
+		s.has_uv = true
+		s.uv.resize(base)            # 之前的部件补 0
 	for k in points.size():
 		s.vertices.append(xform * points[k])
 		s.normals.append((normal_basis * normals[k]).normalized())
 		s.colors.append(colors[k] if not colors.is_empty() else c)
 		s.uv2.append(pbr)
+		if s.has_uv:
+			s.uv.append(uvs[k] if not uvs.is_empty() else glow)
 		if s.has_custom:
 			if not customs.is_empty():
 				s.custom0.append_array([customs[k * 4], customs[k * 4 + 1], customs[k * 4 + 2], customs[k * 4 + 3]])
@@ -752,6 +878,8 @@ func build() -> Dictionary:
 		arrays[Mesh.ARRAY_NORMAL] = s.normals
 		arrays[Mesh.ARRAY_COLOR] = s.colors
 		arrays[Mesh.ARRAY_TEX_UV2] = s.uv2
+		if s.has_uv:
+			arrays[Mesh.ARRAY_TEX_UV] = s.uv
 		arrays[Mesh.ARRAY_INDEX] = s.indices
 		if s.has_custom:
 			arrays[Mesh.ARRAY_CUSTOM0] = s.custom0
