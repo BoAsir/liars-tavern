@@ -159,13 +159,13 @@ func _window_wall(room: Node3D) -> void:
 	var front_len := ROOM_HALF - z1
 	var back_len := z0 + ROOM_HALF
 	_wall(room, Vector3(x, 0, z1 + front_len / 2.0), Vector3(WALL_THICKNESS, 0, front_len), "wall_side",
-		0.0, ROOM_HEIGHT, "WindowWall0", true)
+		0.0, ROOM_HEIGHT, "WindowWall0", true, MeshKit.LAYER_MOON)
 	_wall(room, Vector3(x, 0, z0 - back_len / 2.0), Vector3(WALL_THICKNESS, 0, back_len), "wall_side",
-		0.0, ROOM_HEIGHT, "WindowWall1", true)
+		0.0, ROOM_HEIGHT, "WindowWall1", true, MeshKit.LAYER_MOON)
 	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side",
-		0.0, WINDOW_BOTTOM, "WindowWall2", true)
+		0.0, WINDOW_BOTTOM, "WindowWall2", true, MeshKit.LAYER_MOON)
 	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side",
-		top, ROOM_HEIGHT, "WindowWall3", true)
+		top, ROOM_HEIGHT, "WindowWall3", true, MeshKit.LAYER_MOON)
 
 
 # —— 牌桌 ——
@@ -213,6 +213,7 @@ func _build_lamp() -> void:
 	spot.spot_angle = 52.0
 	spot.spot_angle_attenuation = 0.7
 	spot.shadow_enabled = true
+	spot.shadow_caster_mask = MeshKit.LAYER_WORLD   # 窗户层只给月光投影
 	spot.shadow_blur = 1.5
 	spot.light_volumetric_fog_energy = 2.2
 	_lamp_pivot.add_child(spot)
@@ -293,6 +294,7 @@ func _build_fireplace() -> void:
 	light.light_energy = 2.7
 	light.omni_range = 7.0
 	light.shadow_enabled = true
+	light.shadow_caster_mask = MeshKit.LAYER_WORLD
 	light.light_volumetric_fog_energy = 0.6
 	fp.add_child(light)
 	_flickers.append({"light": light, "base": light.light_energy, "speed": 3.5, "depth": 0.3, "seed": 50.0})
@@ -362,13 +364,18 @@ func _build_window() -> void:
 	var pane := WorldMaterials.glass(Color(0.35, 0.45, 0.7))
 	var pane_inst := MeshKit.add(frame, MeshKit.box(Vector3(0.01, h, w)), pane, Vector3(0.02, 0, 0))
 	pane_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 月光从窗外斜射进屋:体积雾里形成一道冷色光柱,窗棂投下影子
+	for part in frame.get_children():
+		part.layers = MeshKit.LAYER_MOON
+	# 月光从窗外斜射进屋:体积雾里形成一道冷色光柱,窗棂投下影子。只有窗框和窗墙给月光投影:
+	# 酒客、牌桌的月光影子几乎看不见,却占去一整轮阴影 pass
 	var moon := SpotLight3D.new()
+	moon.name = "Moon"
 	moon.light_color = Color(0.5, 0.62, 1.0)
 	moon.light_energy = 3.0
 	moon.spot_range = 9.0
 	moon.spot_angle = 24.0
 	moon.shadow_enabled = true
+	moon.shadow_caster_mask = MeshKit.LAYER_MOON
 	moon.light_volumetric_fog_energy = 2.5
 	add_child(moon)
 	moon.look_at_from_position(center + Vector3(2.2, 1.5, 0.6), Vector3(0.5, 0.2, -0.6))

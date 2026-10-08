@@ -68,18 +68,52 @@ static func _xf(pos := Vector3.ZERO, rot_deg := Vector3.ZERO, scale := Vector3.O
 
 # —— 共享网格 ——
 
-static func part_mesh(spec: Dictionary, part: String, recipe: Callable) -> ArrayMesh:
+const SHARED_PARTS := ["eye", "pupil", "marks"]   # 与物种无关的部件
+
+
+static func recipes(spec: Dictionary) -> Dictionary:
+	# 部件名 → 配方;Patron 构建与启动预建共用这张表,缓存 key 只在 part_key 里拼
+	var pal := palette(spec)
+	return {
+		"body": func(f): body_recipe(f, pal),
+		"neck": func(f): neck_recipe(f, pal),
+		"head": func(f): head_recipe(f, pal, spec),
+		"brow": func(f): brow_recipe(f, pal),
+		"ear": func(f): ear_recipe(f, pal, spec["ears"]),
+		"hat": func(f): hat_recipe(f, pal, spec["hat"]),
+		"arm": func(f): arm_recipe(f, pal),
+		"paw": func(f): paw_recipe(f, pal, Patron.PAW_RADIUS, Patron.PAW_SCALE),
+		"eye": eye_white_recipe,
+		"pupil": pupil_recipe,
+		"marks": marks_recipe,
+	}
+
+
+static func part_key(spec: Dictionary, part: String) -> String:
+	return "patron:%s:%s" % ["any" if SHARED_PARTS.has(part) else spec["id"], part]
+
+
+static func part_mesh(spec: Dictionary, part: String) -> ArrayMesh:
 	# 酒客部件网格:按「物种:部件」缓存,所有酒客共用 WorldMaterials.patron()
-	return MeshForge.cached("patron:%s:%s" % [spec["id"], part], recipe, {&"main": WorldMaterials.patron()})
-
-
-static func shared_mesh(part: String, recipe: Callable) -> ArrayMesh:
-	# 与物种无关的部件(眼白、瞳孔、× 标记)
-	return MeshForge.cached("patron:any:" + part, recipe, {&"main": WorldMaterials.patron()})
+	return MeshForge.cached(part_key(spec, part), recipes(spec)[part], {&"main": WorldMaterials.patron()})
 
 
 static func chair_mesh() -> ArrayMesh:
 	return MeshForge.cached("chair", chair_recipe, {&"main": WorldMaterials.wood("dark", true)})
+
+
+static func forge_jobs() -> Array:
+	# 启动时后台预建:所有物种的部件 + 椅子(材质在主线程先建好)
+	var jobs := [["chair", chair_recipe, {&"main": WorldMaterials.wood("dark", true)}]]
+	var materials := {&"main": WorldMaterials.patron()}
+	for i in SPECIES.size():
+		var spec: Dictionary = SPECIES[i]
+		var table := recipes(spec)
+		for part in table:
+			if i > 0 and SHARED_PARTS.has(part):
+				continue
+			jobs.append([part_key(spec, part), table[part], materials])
+	return jobs
 
 
 static func chair_recipe(f: MeshForge) -> void:

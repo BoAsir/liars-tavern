@@ -203,3 +203,18 @@ func _scripts(dir: String) -> Array:
 	for sub in DirAccess.get_directories_at(dir):
 		out.append_array(_scripts(dir.path_join(sub)))
 	return out
+
+
+func test_startup_prebuild_covers_every_mesh_patrons_and_revolvers_use():
+	MeshForge.prebuild(PatronParts.forge_jobs() + Revolver3D.forge_jobs())
+	await MeshForge.wait_prebuilt(get_tree())
+	var keys := {}
+	for job in PatronParts.forge_jobs() + Revolver3D.forge_jobs():
+		keys[job[0]] = true
+	for i in PatronParts.SPECIES.size():
+		var spec := PatronParts.species(i)
+		for part in PatronParts.recipes(spec):
+			assert_true(keys.has(PatronParts.part_key(spec, part)), PatronParts.part_key(spec, part))
+			assert_true(MeshForge.is_cached(PatronParts.part_key(spec, part)))
+	assert_true(MeshForge.is_cached("chair"))
+	assert_true(MeshForge.is_cached("revolver:body"))

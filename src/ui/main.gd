@@ -28,6 +28,8 @@ func _ready() -> void:
 	get_window().min_size = Vector2i(1024, 600)
 	RenderBudget.follow(get_window())
 	get_tree().auto_accept_quit = false
+	# 酒客、椅子、左轮的合批网格先投到工作线程里建(纯数组运算),和下面的场景搭建、牌面生成并行
+	MeshForge.prebuild(PatronParts.forge_jobs() + Revolver3D.forge_jobs())
 	tavern = Tavern.new()
 	add_child(tavern)
 	# 记下镜头的初始焦距:切换屏幕时恢复(被打断的演出可能把焦距留在半路)
@@ -49,6 +51,7 @@ func _ready() -> void:
 	Net.left_lobby.connect(_back_to_menu)
 	Net.game_started.connect(_show_table)
 	await CardFaces.build(self)
+	await MeshForge.wait_prebuilt(get_tree())
 	Card3D.refresh_materials()
 	# 先应用上次保存的静音设置再开环境音:静音启动时环境音等取消静音后才开始
 	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED))
@@ -85,6 +88,7 @@ func _exit_tree() -> void:
 	CardFaces.clear()
 	WorldMaterials.clear_cache()
 	MeshKit.clear_cache()
+	MeshForge.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 

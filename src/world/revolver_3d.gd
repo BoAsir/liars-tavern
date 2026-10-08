@@ -16,6 +16,15 @@ var hammer: Node3D
 var muzzle: Marker3D
 
 
+static func forge_jobs() -> Array:
+	# 启动时后台预建(材质在主线程先建好)
+	return [
+		["revolver:body", body_recipe, {&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}],
+		["revolver:drum", drum_recipe, {&"metal": WorldMaterials.prop()}],
+		["revolver:hammer", hammer_recipe, {&"metal": WorldMaterials.prop()}],
+	]
+
+
 func _init() -> void:
 	var body := MeshKit.pivot(self, Vector3.ZERO, "Body")
 	MeshKit.add(body, MeshForge.cached("revolver:body", body_recipe,

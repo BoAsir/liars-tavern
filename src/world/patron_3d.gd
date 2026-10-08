@@ -104,17 +104,16 @@ func _build() -> void:
 	# 每个动画枢轴下的静态零件合成一份共享网格(按「物种:部件」缓存,所有酒客共用一份酒客材质);
 	# 枢轴的名字、层级、变换都和合并前一样,动画代码不变
 	var spec := PatronParts.species(species_index)
-	var pal := PatronParts.palette(spec)
 	MeshKit.add(self, PatronParts.chair_mesh(), null).name = "Chair"
 	body = MeshKit.pivot(self, HIP, "Body")
 	body.rotation.x = -SEATED_LEAN
-	_add_part(body, PatronParts.part_mesh(spec, "body", func(f): PatronParts.body_recipe(f, pal)), "BodyMesh")
+	_add_part(body, PatronParts.part_mesh(spec, "body"), "BodyMesh")
 	_neck = MeshKit.pivot(body, NECK_BASE, "Neck")
-	_add_part(_neck, PatronParts.part_mesh(spec, "neck", func(f): PatronParts.neck_recipe(f, pal)), "NeckMesh")
-	_build_head(spec, pal)
+	_add_part(_neck, PatronParts.part_mesh(spec, "neck"), "NeckMesh")
+	_build_head(spec)
 	_fit_neck()
-	_arm_l = _build_arm(-1.0, spec, pal)
-	_arm_r = _build_arm(1.0, spec, pal)
+	_arm_l = _build_arm(-1.0, spec)
+	_arm_r = _build_arm(1.0, spec)
 	right_hand = _arm_r.get_node("Hand")
 	fan = MeshKit.pivot(body, Vector3.ZERO, "Fan")
 	fan.transform = _in_seat(Transform3D(CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG)),
@@ -123,13 +122,13 @@ func _build() -> void:
 	_plant_paws()
 
 
-func _build_head(spec: Dictionary, pal: Dictionary) -> void:
+func _build_head(spec: Dictionary) -> void:
 	head = MeshKit.pivot(body, HEAD_PIVOT, "Head")
-	_add_part(head, PatronParts.part_mesh(spec, "head", func(f): PatronParts.head_recipe(f, pal, spec)), "HeadMesh")
-	var white := PatronParts.shared_mesh("eye", PatronParts.eye_white_recipe)
-	var pupil_mesh := PatronParts.shared_mesh("pupil", PatronParts.pupil_recipe)
-	var marks_mesh := PatronParts.shared_mesh("marks", PatronParts.marks_recipe)
-	var brow_mesh := PatronParts.part_mesh(spec, "brow", func(f): PatronParts.brow_recipe(f, pal))
+	_add_part(head, PatronParts.part_mesh(spec, "head"), "HeadMesh")
+	var white := PatronParts.part_mesh(spec, "eye")
+	var pupil_mesh := PatronParts.part_mesh(spec, "pupil")
+	var marks_mesh := PatronParts.part_mesh(spec, "marks")
+	var brow_mesh := PatronParts.part_mesh(spec, "brow")
 	for side in [-1.0, 1.0]:
 		var pivot := MeshKit.pivot(head, Vector3(0.062 * side, 0.165, -0.13))
 		_add_part(pivot, white, "EyeMesh")
@@ -143,7 +142,7 @@ func _build_head(spec: Dictionary, pal: Dictionary) -> void:
 		var brow := MeshKit.pivot(head, Vector3(0.064 * side, 0.222, -0.142))
 		_add_part(brow, brow_mesh, "BrowMesh")
 		_brows.append(brow)
-	var ear_mesh := PatronParts.part_mesh(spec, "ear", func(f): PatronParts.ear_recipe(f, pal, spec["ears"]))
+	var ear_mesh := PatronParts.part_mesh(spec, "ear")
 	for side in [-1.0, 1.0]:
 		var ear := MeshKit.pivot(head)
 		ear.transform = PatronParts.ear_pivot(spec["ears"], side)
@@ -151,14 +150,14 @@ func _build_head(spec: Dictionary, pal: Dictionary) -> void:
 		_ears.append(ear)
 	_hat = MeshKit.pivot(head, Vector3.ZERO, "Hat")
 	_hat.transform = PatronParts.hat_pivot(spec["hat"])
-	_add_part(_hat, PatronParts.part_mesh(spec, "hat", func(f): PatronParts.hat_recipe(f, pal, spec["hat"])), "HatMesh")
+	_add_part(_hat, PatronParts.part_mesh(spec, "hat"), "HatMesh")
 
 
-func _build_arm(side: float, spec: Dictionary, pal: Dictionary) -> Node3D:
+func _build_arm(side: float, spec: Dictionary) -> Node3D:
 	var pivot := MeshKit.pivot(body, _mirror(SHOULDER, side), "ArmR" if side > 0 else "ArmL")
-	_add_part(pivot, PatronParts.part_mesh(spec, "arm", func(f): PatronParts.arm_recipe(f, pal)), "ArmMesh")
+	_add_part(pivot, PatronParts.part_mesh(spec, "arm"), "ArmMesh")
 	var hand := MeshKit.pivot(pivot, Vector3(0, 0, -ARM_LENGTH), "Hand")
-	_add_part(hand, PatronParts.part_mesh(spec, "paw", func(f): PatronParts.paw_recipe(f, pal, PAW_RADIUS, PAW_SCALE)), "PawMesh")
+	_add_part(hand, PatronParts.part_mesh(spec, "paw"), "PawMesh")
 	return pivot
 
 

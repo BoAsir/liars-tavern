@@ -141,3 +141,20 @@ func test_bottles_are_opaque_multimeshes_per_shape():
 	var glass_left := bar.find_children("*", "MeshInstance3D", true, false).filter(func(m):
 		return m.material_override is BaseMaterial3D and m.material_override.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED)
 	assert_eq(glass_left.size(), 0, "吧台不再有半透明的瓶子")
+
+
+func test_moonlight_only_casts_shadows_from_the_window():
+	# 月光只让窗框与窗墙投影(光柱保持窗形),酒客和牌桌不再投月光影子;室内灯不管窗户层
+	var moon: SpotLight3D = _tavern.get_node("Moon")
+	assert_eq(moon.shadow_caster_mask, MeshKit.LAYER_MOON)
+	var window_parts := _tavern.get_node("Window").get_children().filter(func(n): return n is GeometryInstance3D)
+	window_parts.append_array(_tavern.get_node("Room").get_children().filter(func(n): return String(n.name).begins_with("WindowWall")))
+	assert_gt(window_parts.size(), 6)
+	for part: GeometryInstance3D in window_parts:
+		assert_eq(part.layers, MeshKit.LAYER_MOON, part.name)
+	var lamp: Light3D = _tavern.get_node("LampPivot").find_children("*", "SpotLight3D", false, false)[0]
+	var fire: Light3D = _tavern.get_node("Fireplace").find_children("*", "OmniLight3D", false, false)[0]
+	assert_eq(lamp.shadow_caster_mask, MeshKit.LAYER_WORLD)
+	assert_eq(fire.shadow_caster_mask, MeshKit.LAYER_WORLD)
+	for patron in _tavern.find_children("*", "Patron", true, false):
+		assert_eq(patron.get_node("Body/BodyMesh").layers, MeshKit.LAYER_WORLD)
