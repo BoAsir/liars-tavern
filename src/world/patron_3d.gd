@@ -43,7 +43,7 @@ const GUN_APPROACH := Vector3(0.9656, 0.2414, -0.0966)   # = Vector3(1, 0.25, -0
 const HAND_GUN_HEAD := Vector3(0.4386, 0.8456, -0.0615)
 # 物种表(子项目②)还没给 gun_clearance 时的实测值(头缩放 1.0):按举枪流程搜出的最小净空(含抖耳 −0.3)
 # 再留 3–5 mm;没列出的物种用默认值
-const GUN_CLEARANCE_FALLBACK := {"fox": 0.175, "bear": 0.188, "pig": 0.175}
+const GUN_CLEARANCE_FALLBACK := {"fox": 0.175, "bear": 0.188, "pig": 0.175, "monkey": 0.19}
 const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心的时长
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
