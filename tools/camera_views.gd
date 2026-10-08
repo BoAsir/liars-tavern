@@ -10,6 +10,7 @@ static func place(rig: CameraRig, view: String) -> bool:
 	# 摆好机位返回 true;不认识的机位返回 false
 	var top := SeatLayout.TABLE_TOP
 	rig.fill_light.light_energy = 0.0
+	rig.camera.fov = 66.0
 	match view:
 		"seat":
 			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT,
@@ -34,13 +35,15 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(0.0, 1.05, 0.55), Vector3(0, top, -0.2))
 		"opponent":
 			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
-		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73]、z = 1.5,面朝 +Z
+		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73]、z = 1.5,面朝 +Z;
+		# 正面机位要留在前墙(z = 4.5)里面,66° 竖直视角在 16:9 下 2.8 m 外横向能看到 6.4 m
 		"lineup_front":
-			rig.snap(Vector3(0, 1.35, 6.1), Vector3(0, 0.85, 1.5))
+			rig.snap(Vector3(0, 1.3, 4.3), Vector3(0, 0.85, 1.5))
 		"lineup_back":
 			rig.snap(Vector3(0, 1.4, -2.0), Vector3(0, 0.8, 1.5))
 		"lineup_heads":
-			rig.snap(Vector3(0, 1.45, 4.7), Vector3(0, 1.35, 1.5))
+			rig.camera.fov = 62.0
+			rig.snap(Vector3(0, 1.42, 4.3), Vector3(0, 1.38, 1.5))
 		"lineup_left":
 			rig.snap(Vector3(-1.56, 1.35, 3.1), Vector3(-1.56, 1.0, 1.5))
 		"lineup_right":
