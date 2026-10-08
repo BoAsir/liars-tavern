@@ -94,7 +94,10 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	# 只收走自己挂的铭牌(等待厅已挂好它自己的);本机藏起来的观战者酒客要还原,德州节点全部拆掉(规格 §5.1)
+	# 只收走自己挂的铭牌(等待厅已挂好它自己的);本机藏起来的观战者酒客要还原,德州节点全部拆掉(规格 §5.1)。
+	# 退出游戏时酒馆可能先于本屏幕释放(测试里也是),那时没有东西要收
+	if not is_instance_valid(app) or not is_instance_valid(world):
+		return
 	for pid in state.names:
 		app.labels.untrack(PLATE_KEY % pid)
 	world.set_patron_visible(my_pid, true)
