@@ -6,7 +6,8 @@ extends RefCounted
 # 旧基础体逐顶点复刻 Godot 的 PrimitiveMesh(运行时读 PrimitiveMesh 的数组在 Metal 上要从 GPU 回读,每次约 1.2 ms)。
 # 配方(recipe: func(f: MeshForge))只用 MeshForge 的方法加数学运算:不建 Node/Resource、不用全局 randf()、不碰 autoload。
 
-const CAPS_TOP := 1      # 与 MeshKit.CAPS_* 取值一致
+const CAPS_NONE := 0     # 与 MeshKit.CAPS_* 取值一致
+const CAPS_TOP := 1
 const CAPS_BOTTOM := 2
 const CAPS_BOTH := 3
 const CUSTOM0_FORMAT := Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
@@ -20,6 +21,7 @@ var ao := 1.0
 var rough := 0.7
 var metal := 0.0
 var part_space := false
+var part_basis := Basis.IDENTITY   # part_space 时先把部件局部坐标转一下再写(竖直的车削件让木纹顺着长度走)
 var seed := 0.0
 var write_custom := false     # true:CUSTOM0 写 custom(酒客网格:材质类, 摆动权重, 种子, 透光)
 var custom := Vector4.ZERO
@@ -719,7 +721,8 @@ func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: P
 			if not customs.is_empty():
 				s.custom0.append_array([customs[k * 4], customs[k * 4 + 1], customs[k * 4 + 2], customs[k * 4 + 3]])
 			elif part_space:
-				s.custom0.append_array([points[k].x, points[k].y, points[k].z, seed])
+				var q := part_basis * points[k]
+				s.custom0.append_array([q.x, q.y, q.z, seed])
 			elif write_custom:
 				s.custom0.append_array([custom.x, custom.y, custom.z, custom.w])
 			else:

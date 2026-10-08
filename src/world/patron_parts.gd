@@ -122,12 +122,12 @@ static func part_mesh(spec: Dictionary, part: String) -> ArrayMesh:
 
 
 static func chair_mesh() -> ArrayMesh:
-	return MeshForge.cached("chair", chair_recipe, {&"main": WorldMaterials.wood("dark", true)})
+	return ChairBuilder.mesh()
 
 
 static func forge_jobs(first := -1) -> Array:
 	# 启动时后台预建:所有物种的部件 + 椅子(材质在主线程先建好);first 指定的物种排最前面
-	var jobs := [["chair", chair_recipe, {&"main": WorldMaterials.wood("dark", true)}]]
+	var jobs := [["chair", ChairBuilder.recipe, {&"main": WorldMaterials.wood("dark", true)}]]
 	var order := range(SPECIES.size())
 	if first >= 0 and first < SPECIES.size():
 		order.erase(first)
@@ -138,16 +138,3 @@ static func forge_jobs(first := -1) -> Array:
 		for part in PARTS:
 			jobs.append([part_key(spec, part), table[part], {&"main": part_material(part)}])
 	return jobs
-
-
-static func chair_recipe(f: MeshForge) -> void:
-	f.part_space = true   # 木纹按每根木件自己的局部坐标算,和合并前一样
-	f.box(Vector3(0.48, 0.05, 0.44), MeshForge.xf(Vector3(0, 0.45, 0.14)))
-	for x in [-0.2, 0.2]:
-		for z in [-0.04, 0.32]:
-			f.cylinder(0.02, 0.018, 0.45, 8, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(x, 0.225, z)))
-		f.cylinder(0.022, 0.022, 0.62, 8, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(x, 0.76, 0.34)))
-		f.sphere(0.03, 10, MeshForge.xf(Vector3(x, 1.08, 0.34)))
-	f.box(Vector3(0.44, 0.09, 0.035), MeshForge.xf(Vector3(0, 1.0, 0.34)))
-	for x in [-0.1, 0.0, 0.1]:
-		f.box(Vector3(0.035, 0.42, 0.02), MeshForge.xf(Vector3(x, 0.74, 0.34)))
