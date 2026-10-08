@@ -1,6 +1,7 @@
 # 德州扑克玩法设计文档
 
-- 日期:2026-10-07(同日两次修订:按设计审查的 57 条意见与总评审的补充改定规则细节、计时、兼容、清晰度、布局、拆台与迟到者)
+- 日期:2026-10-07(同日两次修订:按设计审查的 57 条意见与总评审的补充改定规则细节、计时、兼容、清晰度、布局、拆台与迟到者;2026-10-08 合并上游后改定:协议 v5、发布版本 0.7.0、德州越肩机位)
+- 进度:见 [2026-10-07-texas-holdem-progress.md](../plans/2026-10-07-texas-holdem-progress.md)
 - 状态:已确认(用户确认:德州 2–8 人且牌桌与桌上的牌放大、清晰;房主随时散局;开打后新玩家下一手入座;盲注等细节由本设计决定)
 - 依附于:[《骗子酒馆》设计文档](2026-08-14-liars-tavern-design.md)(网络、3D 酒馆、HUD 等沿用其约定)
 - 协作:3D 模型重做在 `feature/model-detail` 分支进行(见 §9);本分支的 3D 新内容只放在新文件里
@@ -124,7 +125,7 @@
 - **发现报文兼容旧版本**(已发布的 v3 客户端会丢弃 max > 4 的报文,那样旧玩家就看不到德州房间、也就没法从房主更新):
   - `max = mini(玩法上限, 4)`、`players = mini(实际人数, max)`,保持在旧解析器能接受的范围;
   - 新字段 `cap`(玩法上限 2–8)、`seated`(实际人数 0–cap)、`mode`(String)、`playing`(bool)。
-  - v4 解析:有 cap 时以 cap/seated 为准,校验 `MIN_PLAYERS ≤ cap ≤ GameMode.max_players(mode)` 与 `0 ≤ seated ≤ cap`,否则丢包;没有 cap 时用 max/players,校验 `max ≤ GameMode.max_players(mode)`(所以骗子酒馆报 max 5 仍丢弃)。
+  - 新版解析(v5):有 cap 时以 cap/seated 为准,校验 `MIN_PLAYERS ≤ cap ≤ GameMode.max_players(mode)` 与 `0 ≤ seated ≤ cap`,否则丢包;没有 cap 时用 max/players,校验 `max ≤ GameMode.max_players(mode)`(所以骗子酒馆报 max 5 仍丢弃)。
     mode 缺省按 LIARS;mode 不是 String 丢包;mode 截断到 `RoomList.MAX_TEXT`;未知玩法 compatible 为假。playing 缺省 false,不是 bool 丢包。
   - `open = seated < cap 且 (没开局 或 正在接受中途加入)`;`playing = 已开局`。
 - 等待厅 meta 带 `"mode"`;客户端 `_apply_lobby` 校验后写入 `Net.game_mode`。
@@ -450,7 +451,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
   - `PokerTable`:正常与单挑的盲注与行动顺序、3→2 人的按钮规则、大盲只剩 10 的三种情形(单挑直接发完 / 三人时按钮已弃牌则小盲不用行动 / 按钮还没行动要跟 20)、大盲选择权、翻牌前与翻牌后的最小加注、不完整加注不重开与累计重开、对手都全下时不能加注、一轮结束条件、只剩一人(且不泄露牌型)、全下亮牌后发完公共牌、平分与零头、按钮移动(新人坐在按钮与小盲之间、按钮离开、按钮输光)、再领与观战的状态约束、中途加入下一手发牌、离开的三种情形(含唯一最高下注者离开且跟注者都全下)、超时、散局(空闲/手牌中)、两手之间的视图字段、结算盈亏。
   - 随机模拟:固定 8 个种子 × 150 手,2–8 人,长短牌各半;每一步随机合法动作,穿插随机再领、加入、离开。每一步断言筹码守恒、金额非负且是 10 的倍数、BETTING 时一定有行动者、每手有限步内结束。失败信息带种子、手号与最近若干步动作。总耗时 < 10 秒;更长的浸泡测试只在命令行开关下跑。
   - `PokerViews`:**按字段路径**检查不泄露(牌值 8–59 会和筹码数、手数撞值,不能按数值搜):board 只含公共牌;没亮过的人 `shown` 为空;视图里带牌的键只有白名单(board、players[].shown);事件里手牌只能出现在 `reveal.hands` 与已亮过的人的 `pot_won.best`。没摊牌就赢的那手(公共牌 ≥ 3)任何事件与视图都不含赢家的手牌与牌型名。
-  - `PokerPacing` 与导演节奏;`GameMode` / `RoomList`(含 v3 校验规则能接受 v4 德州报文、v4 读到 cap/seated)/ `LobbyModel` / `Protocol` / RPC 编号冻结。
+  - `PokerPacing` 与导演节奏;`GameMode` / `RoomList`(含 v3 校验规则能接受新版德州报文、新版读到 cap/seated)/ `LobbyModel` / `Protocol` / RPC 编号冻结。
   - 离线 NetworkManager(经 `_handle_join_request`、`_handle_poker_rpc`、`_handle_intent` 等内部函数):德州开局计时;一手间隔排期;回合中旁人再领只补 REBUY 预算、一手间隔中再领不缩短 `_hand_timer`;间隔里散局、断线到 1 人、`leave()` 后 `_hand_timer` 都已停;中途加入的完整顺序且下一手发牌,之后视线转发对象里有他;断线弃牌后行动继续;散局与回等待厅。
   - 输光选择时间:三人局一人输光后 3 秒再领 → 他在下一手的 dealt 里;都不选 → 下一手在演出后约 6 秒开始,不卡住;最后一个没选的人选了观战 → 间隔恢复 HAND_GAP。
   - 挂机离座:连续 2 次超时 → 下一手 `away`、不发牌、按钮与盲注跳过;sit_in 后下一手发牌;中间自己行动一次 → 清零。
@@ -494,6 +495,6 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 ## 11. 发布
 
-- 本功能**不改 `project.godot`**:不加自动加载(`PokerFaces` 等用静态类),快捷键用 `InputEventKey` 的 keycode(同 TableScreen),不改渲染与输入设置。这样旧安装包能经网上或局域网更新拿到德州;协议 v4 本身不需要改 `base_build`(旧客户端收到「版本不匹配」后走更新)。
+- 本功能**不改 `project.godot`**:不加自动加载(`PokerFaces` 等用静态类),快捷键用 `InputEventKey` 的 keycode(同 TableScreen),不改渲染与输入设置。这样旧安装包能经网上或局域网更新拿到德州;协议 v5 本身不需要改 `base_build`(旧客户端收到「版本不匹配」后走更新)。
 - 发布时整体合入 main(连同 `feature/liars-tavern-mvp` 与 `feature/model-detail` 的进度),按 release-update 流程;`build.json` 的 build = 那时 main 的 build + 1,version 0.7.0(0.6.0 已被左轮 5 膛那一版用掉;新玩法改第二位),base_build 不变。万一必须改 `project.godot`,base_build 设为新 build,README 与 Release 说明写明需要重装。
 - README:两种玩法的介绍(骗子酒馆 2–4 人 / 德州 2–8 人)、德州规则摘要、德州操作键、新调试开关、德州冒烟与截图命令、每台机器 4 个发现端口的限制。

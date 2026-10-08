@@ -15,7 +15,7 @@
 
 **Tech Stack:** Godot 4.7.1 / GDScript,GUT 9.7 单元测试,ENet 局域网;全部美术与音效程序化生成。
 
-**规格:** [docs/superpowers/specs/2026-10-07-texas-holdem-design.md](../specs/2026-10-07-texas-holdem-design.md)。规格是唯一的事实来源,下面「实现规格 §x」指要完整实现那一节。计划与规格冲突时以规格为准,并在交付说明里写出冲突。
+**规格:** [docs/superpowers/specs/2026-10-07-texas-holdem-design.md](../specs/2026-10-07-texas-holdem-design.md)。**进度:** [2026-10-07-texas-holdem-progress.md](2026-10-07-texas-holdem-progress.md)(各任务状态、分支、接手须知)。规格是唯一的事实来源,下面「实现规格 §x」指要完整实现那一节。计划与规格冲突时以规格为准,并在交付说明里写出冲突。
 
 ---
 
@@ -262,7 +262,7 @@ func move_to(target: Vector3, duration: float) -> Tween
 测试:
 - [ ] `test_rpc_order.gd`:规格 §3.3 的编号冻结(排序前 8 个方法名;两个握手方法的参数个数与类型)。
 - [ ] `test_room_list.gd`:
-  - v4 德州报文能通过一份 v3 校验规则(上限 4)的副本;v4 解析读到 cap 8 / seated n。
+  - 新版(v5)德州报文能通过一份 v3 校验规则(上限 4)的副本;新版解析读到 cap 8 / seated n。
   - 没有 cap 时按 max 与 mode 校验(骗子酒馆 max 5 丢包)。
   - mode 缺省 / 非 String / 未知;playing 缺省 / 非 bool。
   - 坏样例改为 `[2, Protocol.MAX_PLAYERS + 1]`;`[8, 8]` 合法。
