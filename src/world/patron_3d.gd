@@ -6,13 +6,16 @@ extends Node3D
 
 
 const ARM_LENGTH := 0.4
-const SHOULDER := Vector3(0.21, 0.52, -0.02)
+const SHOULDER := Vector3(0.205, 0.485, -0.02)   # Q 版:躯干压扁后肩略低略窄(原 0.21, 0.52)
 const PAW_RADIUS := 0.058
 const PAW_SCALE := Vector3(1, 0.8, 1.1)
-const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
+const HEAD_PIVOT := Vector3(0, 0.615, -0.02)   # Q 版:脖子更短,头跟着躯干降一点(原 0.65)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
-const NECK_BASE := Vector3(0, 0.55, -0.02)
+const NECK_BASE := Vector3(0, 0.55, -0.02)   # 物种 LOOK 按压扁前写,构建时乘 PatronParts.BODY_SQUASH
 const NECK_REACH := 0.85      # 头最远水平伸出(米):4 人同时探向桌心头不相撞;头平着伸出去,高度不变
+# 头部伸出 + 头部子树往前伸的长度(吻、鼻、帽檐)不超过这么远:4 人同时探向桌心吻尖不互穿。
+# Q 版大头的吻也跟着变长,按实际网格包围盒量(front_extent()),长吻物种自动少伸一点
+const FRONT_REACH_MAX := 1.15
 # 头只能往前、往两侧探,不往后(+Z,朝越肩镜头):往后会挡在镜头和自己的手牌之间
 const NECK_MAX_BACK := 0.0
 const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:临界阻尼(2√刚度),头跟手又停得稳,不过冲不回晃
@@ -34,16 +37,13 @@ const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
 # —— 举枪几何(枪口相对头心的位置全在这一处)——
 # 手在以肩为心、一臂长的球面上,沿 GUN_APPROACH(头局部,从头心指向举枪的一侧)一族方向找手位,
 # 使枪管轴线穿过头心时枪口离头心 = 持枪净空 + GUN_CLEARANCE(枪口贴在太阳穴外 8 mm)。
-# 持枪净空 = 物种表的 gun_clearance(按实际头部网格量的,已含头的缩放);没给时用下面头缩放 1.0 时的实测值
+# 持枪净空 = 物种 LOOK 的 gun_clearance(按实际头部网格量的,已含 Q 版头的缩放);没给时用头缩放 1.0 的默认值
 # 乘以 head_scale()(头绕头心等比放大,太阳穴表面跟着往外移)。HAND_GUN_HEAD 是头缩放 1.0、默认净空下的解
 # (= gun_hand_target(DEFAULT_GUN_CLEARANCE)),测试校验;运行时一律现算
 const GUN_CLEARANCE := 0.008
 const DEFAULT_GUN_CLEARANCE := 0.17
 const GUN_APPROACH := Vector3(0.9656, 0.2414, -0.0966)   # = Vector3(1, 0.25, -0.1).normalized()
-const HAND_GUN_HEAD := Vector3(0.4386, 0.8456, -0.0615)
-# 物种表(子项目②)还没给 gun_clearance 时的实测值(头缩放 1.0):按举枪流程搜出的最小净空(含抖耳 −0.3)
-# 再留 3–5 mm;没列出的物种用默认值
-const GUN_CLEARANCE_FALLBACK := {"fox": 0.175, "bear": 0.188, "pig": 0.175, "monkey": 0.19}
+const HAND_GUN_HEAD := Vector3(0.4393, 0.8066, -0.0613)   # Q 版肩、头枢轴降低后重算(原 0.4386, 0.8456, -0.0615)
 const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心的时长
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
@@ -65,6 +65,7 @@ const DEBRIS_GROUP := &"patron_debris"
 const GREY := Color(0.42, 0.42, 0.42)   # 褪色的灰(patron.gdshader 里同值)
 const FADE_TIME := 1.4
 const DIE_BODY_ROT := Vector3(0.55, 0.15, -0.5)
+const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
 var alive := true
@@ -106,6 +107,7 @@ var _neck: Node3D
 var _neck_target := Vector3.ZERO     # 座位坐标的头部偏移目标
 var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
 var _neck_velocity := Vector3.ZERO
+var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
 
 
 func _init(p_species_index := 0) -> void:
@@ -120,6 +122,7 @@ func _process(delta: float) -> void:
 	if alive:
 		_animate_idle(delta)
 	_update_neck(delta)
+	_antics.tick(delta)
 
 
 # —— 构建 ——
@@ -129,7 +132,7 @@ func _build() -> void:
 	# 枢轴的名字、层级、变换都和合并前一样,动画代码不变。脖子根、眉、耳、帽的位置按物种外观
 	var spec := PatronParts.species(species_index)
 	_look_data = SpeciesLooks.look(species_index)
-	_neck_base = _look_data["neck"].get("base", NECK_BASE)
+	_neck_base = _look_data["neck"].get("base", NECK_BASE) * Vector3(1.0, PatronParts.BODY_SQUASH, 1.0)
 	_neck_reach = minf(NECK_REACH, _look_data.get("anim", {}).get("neck_reach", NECK_REACH))
 	MeshKit.add(self, PatronParts.chair_mesh(), null).name = "Chair"
 	_legs = _add_part(self, PatronParts.part_mesh(spec, "legs"), "Legs")
@@ -144,6 +147,7 @@ func _build() -> void:
 	_neck = MeshKit.pivot(body, _neck_base, "Neck")
 	_add_part(_neck, PatronParts.part_mesh(spec, "neck"), "NeckMesh")
 	_build_head(spec)
+	_neck_reach = minf(_neck_reach, FRONT_REACH_MAX - front_extent())
 	_fit_neck()
 	_arm_l = _build_arm(-1.0, spec)
 	_arm_r = _build_arm(1.0, spec)
@@ -153,6 +157,9 @@ func _build() -> void:
 		HIP + FAN_POS))
 	_resting = {_arm_l: true, _arm_r: true}
 	_plant_paws()
+	_antics = PatronAntics.new()
+	add_child(_antics)
+	_antics.setup(self)
 
 
 func _build_head(spec: Dictionary) -> void:
@@ -172,8 +179,7 @@ func _build_head(spec: Dictionary) -> void:
 	_eye.set_instance_shader_parameter("lid_tilt", 0.0)
 	_eye.set_instance_shader_parameter("dead", 0.0)
 	_eye.set_instance_shader_parameter("look", Vector4.ZERO)
-	var brows: Dictionary = _look_data["brows"]
-	var brow_pos: Vector3 = brows["pos"]
+	var brow_pos := PatronParts.brow_point(_look_data)   # Q 版:LOOK 坐标按头心放大(PatronParts.head_point)
 	_brow_y = brow_pos.y
 	var brow_mesh := PatronParts.part_mesh(spec, "brow")
 	for side in [-1.0, 1.0]:
@@ -183,7 +189,7 @@ func _build_head(spec: Dictionary) -> void:
 	var ears: Dictionary = _look_data.get("ears", {})
 	if ears.get("kind", "none") != "none":
 		var ear_mesh := PatronParts.part_mesh(spec, "ear")
-		var pivot: Vector3 = ears["pivot"]
+		var pivot := PatronParts.head_point(_look_data, ears["pivot"])
 		var rot: Vector3 = ears.get("rot", Vector3.ZERO)
 		for side in [-1.0, 1.0]:
 			var ear := MeshKit.pivot(head)
@@ -192,7 +198,8 @@ func _build_head(spec: Dictionary) -> void:
 			_ears.append(ear)
 	var hat: Dictionary = _look_data.get("hat", {})
 	_hat = MeshKit.pivot(head, Vector3.ZERO, "Hat")
-	_hat.transform = MeshForge.xf(hat.get("pivot", Vector3(0, 0.255, 0.01)), hat.get("rot", Vector3(-6, 0, 9)))
+	_hat.transform = MeshForge.xf(PatronParts.head_point(_look_data, hat.get("pivot", Vector3(0, 0.255, 0.01))),
+		hat.get("rot", Vector3(-6, 0, 9)))
 	_add_part(_hat, PatronParts.part_mesh(spec, "hat"), "HatMesh")
 
 
@@ -238,13 +245,14 @@ func _animate_idle(delta: float) -> void:
 		var local := body.to_local(_look_target) - head.position
 		yaw = clampf(atan2(-local.x, -local.z), -0.7, 0.7)
 		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), _look_data.get("anim", {}).get("look_pitch_min", -0.45), 0.35)
-	# 枪抵着太阳穴时屏住不动(头一晃,只隔 8 mm 的枪口就戳进头里)
+	# 枪抵着太阳穴时屏住不动(头一晃,只隔 8 mm 的枪口就戳进头里);搞笑表演的头部偏移同样屏住
 	var wobble := 0.0 if _steady else 1.0
-	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08 * wobble
-	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 * wobble
+	yaw += (_noise.get_noise_1d(_time * 0.4) * 0.08 + _antics.head_add.y) * wobble
+	pitch += (_noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x) * wobble
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
-	head.rotation.z = lerpf(head.rotation.z, _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 * wobble, minf(delta * 3.0, 1.0))
+	head.rotation.z = lerpf(head.rotation.z, (_noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 + _antics.head_add.z) * wobble,
+		minf(delta * 12.0, 1.0))
 	_update_look(delta)
 	_legs.position.y = maxf(body.position.y - HIP.y, 0.0)   # 腿跟着蹦跳,下沉时不入地
 	_blink_in -= delta
@@ -257,7 +265,7 @@ func _update_look(delta: float) -> void:
 	# 瞳孔看向目标:按两只眼各自的位置算方向,换成眼面坐标的偏移;变化很小时不写实例参数
 	var target := Vector4.ZERO
 	if _has_look:
-		var eye_pos: Vector3 = _look_data["eyes"]["pos"]
+		var eye_pos := PatronParts.head_point(_look_data, _look_data["eyes"]["pos"])
 		var local := head.to_local(_look_target)
 		for side in [-1.0, 1.0]:
 			var dir := (local - Vector3(eye_pos.x * side, eye_pos.y, eye_pos.z)).normalized()
@@ -302,6 +310,19 @@ func neck_reach() -> float:
 	return _neck_reach
 
 
+func front_extent() -> float:
+	# 静止时头部子树(头、帽)从头枢轴往前(-Z)伸出多远,按网格包围盒量(不读顶点)
+	var front := 0.0
+	for inst: MeshInstance3D in [head.get_node("HeadMesh"), head.get_node("Hat/HatMesh")]:
+		var xform := Transform3D.IDENTITY   # 构建时还不在场景树里:沿父节点链乘到头枢轴
+		var node: Node3D = inst
+		while node != head:
+			xform = node.transform * xform
+			node = node.get_parent()
+		front = maxf(front, -(xform * inst.get_aabb()).position.z)
+	return front
+
+
 static func clamp_neck(seat_offset: Vector3) -> Vector3:
 	# 座位坐标的水平偏移(-Z 朝桌心):只取水平分量(头平着伸出去,高度不变),不往后,最远 NECK_REACH
 	return Vector3(seat_offset.x, 0.0, minf(seat_offset.z, NECK_MAX_BACK)).limit_length(NECK_REACH)
@@ -342,7 +363,7 @@ func head_position() -> Vector3:
 
 
 func nameplate_anchor() -> Vector3:
-	return global_transform * Vector3(0, 1.82, 0.1)
+	return global_transform * Vector3(0, NAMEPLATE_HEIGHT, 0.1)
 
 
 func set_active(active: bool) -> void:
@@ -492,7 +513,7 @@ static func gun_clearance_for(index: int) -> float:
 	var look := SpeciesLooks.look(index)
 	if look.has("gun_clearance"):
 		return look["gun_clearance"]
-	return GUN_CLEARANCE_FALLBACK.get(spec.get("id", ""), DEFAULT_GUN_CLEARANCE) * head_scale()
+	return DEFAULT_GUN_CLEARANCE * head_scale()
 
 
 static func head_scale() -> float:
@@ -551,6 +572,7 @@ func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: f
 
 func relief() -> void:
 	set_expression("happy")
+	_antics.relief()
 	var tween := create_tween()
 	tween.tween_property(body, "position:y", HIP.y - 0.03, 0.25).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(body, "position:y", HIP.y, 0.4).set_trans(Tween.TRANS_SINE)
@@ -583,6 +605,7 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	if not _look_data.get("tail", {}).is_empty():
 		fall.tween_method(func(v: float): _legs.set_instance_shader_parameter("tail",
 			Vector4(_phase, _look_data["tail"].get("sway", 0.12), v, 0.0)), 0.0, 1.0, FADE_TIME)
+	_antics.die()
 
 
 func _set_fade(value: float) -> void:
@@ -621,6 +644,7 @@ func celebrate() -> void:
 	bounce.tween_property(body, "position:y", HIP.y, CHEER_BOUNCE_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_cheer_tweens = [bounce, pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3)]
+	_antics.celebrate()
 	await bounce.finished
 	_arms_locked = false
 
@@ -640,6 +664,12 @@ func reset_pose() -> void:
 	_steady = false
 	body.position = HIP
 	rest_arms(false)
+	_antics.reset()
+
+
+func startle() -> void:
+	# 被吓一跳(有人喊「骗子!」拍桌、旁边有人中枪):原地一蹦、眼睛瞪圆、帽子弹起、耳朵炸开
+	_antics.startle()
 
 
 func appear() -> void:

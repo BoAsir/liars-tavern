@@ -1,7 +1,8 @@
 extends GutTest
 # 越肩镜头下自己的手牌不被自己的头(含帽子、耳朵)挡住:坐着、轮到自己前倾时都一样,
-# 头往前、往两侧探到最远也一样。从镜头向每张牌上的采样点打射线,和头部每个网格的包围盒求交
-# (包围盒比实际形状大,所以只要求被挡的采样点极少,且每张牌的中心都看得见)。
+# 头往前、往两侧探到最远也一样。从镜头向每张牌上的采样点打射线,先和头部每个网格的包围盒求交,
+# 碰到包围盒再逐个三角形精确判定(Q 版大头之后包围盒太保守:礼帽、宽檐帽斜着放,包围盒的角伸到牌扇跟前,
+# 实际形状并不挡;规格 §8 已批准改成三角形判定、阈值不变)。只要求被挡的采样点极少,且每张牌的中心都看得见。
 
 
 const SETTLE := 1.2          # 秒:登场缩放与前倾插值走完
@@ -9,15 +10,20 @@ const NECK_SETTLE := 0.8     # 秒:脖子弹簧追到目标
 const MAX_BLOCKED := 0.05    # 允许被包围盒挡住的采样点比例(包围盒的角比实际形状大)
 const NECK_OFFSETS := [Vector3.ZERO, Vector3(0.4, 0, 0), Vector3(0.85, 0, 0), Vector3(0.6, 0, -0.6),
 	Vector3(0, 0, -0.85), Vector3(-0.85, 0, 0), Vector3(0.6, 0, 0.6)]
+const RISKY_OFFSETS := [Vector3.ZERO, Vector3(0.4, 0, 0), Vector3(0.85, 0, 0), Vector3(0.6, 0, 0.6)]
 
 var world: TableWorld
 var me: Patron
 
 
 func before_each():
+	_setup([{"pid": 1}, {"pid": 2}])
+
+
+func _setup(players: Array) -> void:
 	world = TableWorld.new(null)
 	add_child_autofree(world)
-	world.arrange([{"pid": 1}, {"pid": 2}], 1, true, false)
+	world.arrange(players, 1, true, false)
 	me = world.patrons[1]
 	me.present_hand_to(_eye())
 	world.cards.attach_hand(me.fan)
@@ -35,8 +41,18 @@ func test_head_never_hides_the_hand_on_own_turn():
 	await _assert_hand_visible_for_all_offsets("轮到自己前倾")
 
 
-func _assert_hand_visible_for_all_offsets(posture: String) -> void:
-	for offset in NECK_OFFSETS:
+func test_every_species_head_spares_the_hand_on_own_turn():
+	# Q 版大头之后每个物种都过一遍(帽型、耳朵、吻各不相同),取前倾 + 头往右、右前探这几个最容易挡的姿势
+	for species in range(1, Species.count()):
+		world.queue_free()
+		_setup([{"pid": 1, "species": species}, {"pid": 2, "species": 0}])
+		me.set_active(true)
+		await wait_seconds(SETTLE)
+		await _assert_hand_visible_for_all_offsets(Species.IDS[species], RISKY_OFFSETS)
+
+
+func _assert_hand_visible_for_all_offsets(posture: String, offsets: Array = NECK_OFFSETS) -> void:
+	for offset in offsets:
 		me.set_neck_target(offset)
 		await wait_seconds(NECK_SETTLE)
 		var label := "%s,头探到 %s" % [posture, offset]
@@ -65,8 +81,18 @@ func _card_points(card: Card3D) -> Array:
 
 
 func _blocked(point: Vector3) -> bool:
+	var eye := _eye()
 	for node in me.head.find_children("*", "VisualInstance3D", true, false):
 		var mesh := node as VisualInstance3D
-		if mesh.is_visible_in_tree() and (mesh.global_transform * mesh.get_aabb()).intersects_segment(_eye(), point) != null:
-			return true
+		if not mesh.is_visible_in_tree() or (mesh.global_transform * mesh.get_aabb()).intersects_segment(eye, point) == null:
+			continue
+		if not mesh is MeshInstance3D:
+			return true   # 别的可见物(特效)按包围盒算
+		var local := mesh.global_transform.affine_inverse()
+		var a := local * eye
+		var b := local * point
+		var faces := (mesh as MeshInstance3D).mesh.get_faces()
+		for i in range(0, faces.size(), 3):
+			if Geometry3D.segment_intersects_triangle(a, b, faces[i], faces[i + 1], faces[i + 2]) != null:
+				return true
 	return false

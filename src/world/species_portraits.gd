@@ -10,9 +10,10 @@ const RIM := 3.0                 # 圆片描边宽度
 const RIM_DARKEN := 0.45
 const UNASSIGNED_COLOR := Color(0.36, 0.33, 0.3)   # 还没有形象(挑选中…)的灰圆片
 const CELL := 192                # 烘焙时每个头像的像素
-const SPACING := 0.62            # 烘焙台上酒客之间的间距(米):等于每格宽度(正交相机按高度定宽,8:1 的画面每格 VIEW_SIZE 宽)
-const HEAD_HEIGHT := 1.34        # 坐姿下头心离地约 1.27 m,镜头对准这里
-const VIEW_SIZE := 0.62          # 正交相机竖直方向拍多少米(一个头加帽子)
+# Q 版大头(头 ×1.3、帽子更大)之后格子拍得更大:原来 SPACING / VIEW_SIZE 0.62、HEAD_HEIGHT 1.34
+const SPACING := 0.8             # 烘焙台上酒客之间的间距(米):等于每格宽度(正交相机按高度定宽,8:1 的画面每格 VIEW_SIZE 宽)
+const HEAD_HEIGHT := 1.37        # 坐姿下头心离地约 1.24 m,帽子更高,镜头对准头心上方一点
+const VIEW_SIZE := 0.8           # 正交相机竖直方向拍多少米(一个大头加帽子)
 # 各物种主色(sRGB,取自子项目② §2 造型表的皮毛色),只用于回退圆片;下标与 Species.IDS 一致
 const FALLBACK_COLORS := [
 	Color(0.80, 0.40, 0.14),   # 狐狸

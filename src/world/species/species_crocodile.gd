@@ -7,6 +7,7 @@ extends RefCounted
 
 const LOOK := {
 	"id": "crocodile",
+	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.24, 0.46, 0.22), "muzzle": Color(0.28, 0.48, 0.24), "dark": Color(0.1, 0.16, 0.08),
 		"fur_back": Color(0.17, 0.34, 0.16), "jaw": Color(0.34, 0.50, 0.28), "coat": Color(0.22, 0.22, 0.24),
@@ -26,6 +27,7 @@ const LOOK := {
 		],
 		"blend": 0.04,
 		"material": 4.0,
+		"scale_z": 0.85,   # Q 版放大时前后方向少放一点:长吻不至于捅到桌心,伸脖子也不至于短太多
 	},
 	"eyes": {"pos": Vector3(0.058, 0.222, -0.112), "size": Vector3(0.032, 0.03, 0.016), "iris": Color(0.72, 0.62, 0.12),
 		"pupil": 1, "lid_rest": 0.28, "lashes": false, "yaw": 18.0},

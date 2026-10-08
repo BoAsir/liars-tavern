@@ -118,6 +118,7 @@ func _reveal(ev: Dictionary) -> void:
 		if world.patrons.has(challenger):
 			await world.patrons[challenger].slam_table()
 		Sfx.play("slam")
+		_startle_all(challenger)   # 拍桌一声,其他人吓一跳
 		rig.shake(0.45)
 		app.tavern.kick_lamp(0.07)
 	_leave_seat()
@@ -135,6 +136,7 @@ func _reveal(ev: Dictionary) -> void:
 		Sfx.play("sting_lie")
 		hud.announce("骗子!", UiTheme.LIE, "%s 在撒谎" % screen.name_of(liar), 0.7)
 		if world.patrons.has(liar):
+			world.patrons[liar].startle()   # 被抓包:一蹦、眼睛瞪圆
 			world.patrons[liar].set_expression("worried")
 	await _wait(0.6)
 
@@ -178,6 +180,7 @@ func _third_person_shot(shooter: int, hit: bool) -> void:
 		_bang(gun.muzzle_transform())
 		gun.recoil()
 		patron.die(gun, world)
+		_startle_all(shooter)   # 枪响,其他人吓一跳
 		_announce_shot(shooter, true)
 		await _wait(1.0)
 	else:
@@ -262,6 +265,13 @@ func _match_over(ev: Dictionary) -> void:
 
 
 # —— 工具 ——
+
+func _startle_all(except_pid) -> void:
+	# 桌上其他人吓一跳(Q 版搞笑表演);死了的不动
+	for pid in world.patrons:
+		if pid != except_pid and is_instance_valid(world.patrons[pid]):
+			world.patrons[pid].startle()
+
 
 func is_at_seat() -> bool:
 	# 镜头在自己座位的越肩机位(不是特写、不是观战)

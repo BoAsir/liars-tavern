@@ -6,6 +6,7 @@ extends RefCounted
 
 const LOOK := {
 	"id": "turtle",
+	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.37, 0.47, 0.25), "muzzle": Color(0.58, 0.60, 0.39), "dark": Color(0.2, 0.24, 0.12),
 		"fur_back": Color(0.32, 0.42, 0.22), "spot": Color(0.30, 0.38, 0.19), "beak": Color(0.56, 0.52, 0.34),

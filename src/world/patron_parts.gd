@@ -65,6 +65,19 @@ const ALBEDO_CAP := 0.65
 const EYE_WHITE := Color(0.65, 0.64, 0.62)   # = patron_eye.gdshader 的巩膜(约 0.66)
 const PAW_SHADE := 0.8
 const LAPEL_DARKEN := 0.35   # 翻领用压暗的外套色:浅色强调色做翻领会在胸前拼出一个突兀的「A」字
+# Q 版比例(2026-10-08 用户追加「Q 一点、搞笑一点」):头整体(颅骨、吻、眼、眉、耳、帽、头部特件)按头心放大
+# HEAD_SCALE 倍,物种 LOOK 里的数字不动,配方里统一换算(纯数组运算,工作线程安全);头心 (0, 0.12, 0) 不动,
+# 瞄准点、机位目标、名牌之外的镜头都不受影响。眼睛在此之上再放大 EYE_SCALE 倍(更大更圆),眉毛相应抬高。
+# 手爪、脚掌胖一圈(PAW_CHUBBY / FOOT_CHUBBY)。
+const HEAD_CENTER := Vector3(0, 0.12, 0)
+const HEAD_SCALE := 1.3
+const EYE_SCALE := 1.2
+# 帽子横向跟头一起放大(戴得上),竖向只放 HAT_SCALE_Y:Q 版的矮胖帽子,礼帽也不至于顶到德州铭牌(铭牌高度没动)
+const HAT_SCALE_Y := 1.15
+const PAW_CHUBBY := 1.2
+# 躯干竖向压扁(绕髋部,Body 局部 y = 0):身子更短更圆;肩、领口、头枢轴跟着降低(Patron.SHOULDER / HEAD_PIVOT)
+const BODY_SQUASH := 0.93
+const FOOT_CHUBBY := 1.15
 # 每个酒客的部件网格(左右手不对称,各一份;耳朵、眉毛、手臂左右共用)
 const PARTS := ["body", "neck", "head", "eyes", "brow", "ear", "hat", "arm", "paw_l", "paw_r", "fist", "legs"]
 
@@ -76,6 +89,34 @@ static func look_of(spec: Dictionary) -> Dictionary:
 static func palette(spec: Dictionary) -> Dictionary:
 	# 物种调色板(sRGB,已封顶):部件键 → Color
 	return SpeciesLooks.palette(look_of(spec))
+
+
+static func head_scale(look: Dictionary) -> Vector3:
+	# 头的放大倍数;长吻物种可以在 head.scale_z 里把前后方向少放一点(鳄鱼:吻尖不捅到桌心,伸脖子不至于短太多)
+	return Vector3(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE * look["head"].get("scale_z", 1.0))
+
+
+static func head_point(look: Dictionary, p: Vector3) -> Vector3:
+	# LOOK 里写的 Head 局部坐标 → Q 版放大后的位置(按头心缩放;眉、耳、帽枢轴和看向用)
+	return HEAD_CENTER + (p - HEAD_CENTER) * head_scale(look)
+
+
+static func head_xform(look: Dictionary) -> Transform3D:
+	# 头部网格整体的 Q 版放大(绕头心):配方开头 push、结尾 pop
+	return Transform3D(Basis.from_scale(head_scale(look)), HEAD_CENTER - HEAD_CENTER * head_scale(look))
+
+
+static func pivot_scale() -> Transform3D:
+	# 挂在头上的枢轴部件(眉、耳)网格绕自己的原点等比放大(帽子同倍数,见 PatronHatBuilder),枢轴位置另用 head_point 换算
+	return Transform3D(Basis.from_scale(Vector3.ONE * HEAD_SCALE), Vector3.ZERO)
+
+
+static func brow_point(look: Dictionary) -> Vector3:
+	# 眉心枢轴(右侧,左侧取 x 镜像):眼睛额外放大后上沿抬高,眉毛跟着抬,不压在眼睛上
+	var e: Dictionary = look["eyes"]
+	var size: Vector3 = e.get("size", Vector3(0.04, 0.045, 0.02))
+	var lift := size.y * HEAD_SCALE * (EYE_SCALE - 1.0) * 1.1
+	return head_point(look, look["brows"]["pos"]) + Vector3(0, lift, -0.004)
 
 
 static func capped(c: Color) -> Color:

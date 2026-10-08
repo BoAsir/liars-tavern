@@ -98,6 +98,7 @@ func _exit_tree() -> void:
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()
+	PatronAntics.clear_cache()
 	RoomTextures.clear()
 
 

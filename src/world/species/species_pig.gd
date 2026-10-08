@@ -7,6 +7,7 @@ const Kit := preload("res://src/world/species/species_fox.gd")   # 衣片工具
 
 const LOOK := {
 	"id": "pig",
+	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.76, 0.47, 0.45), "muzzle": Color(0.80, 0.55, 0.52), "dark": Color(0.45, 0.2, 0.2),
 		"coat": Color(0.20, 0.30, 0.48), "accent": Color(0.70, 0.16, 0.14), "shirt": Color(0.62, 0.14, 0.12),
