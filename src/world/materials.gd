@@ -191,6 +191,20 @@ static func particle(additive: bool, boost: float, softness: float) -> ShaderMat
 		return mat)
 
 
+static func muzzle_fire(shape: int, billboard: bool, boost: float, softness: float, view_offset := 0.0) -> ShaderMaterial:
+	# 枪口焰(加色):shape 1 星形火核、2 沿枪管的冠状十字面片;同参数共用一份(见 soft_particle.gdshaderinc)
+	return _cached("muzzle:%d:%s:%s:%s:%s" % [shape, billboard, boost, softness, view_offset], func():
+		var mat := ShaderMaterial.new()
+		mat.shader = PARTICLE_ADD_SHADER
+		mat.render_priority = 1
+		mat.set_shader_parameter("emission_boost", boost)
+		mat.set_shader_parameter("softness", softness)
+		mat.set_shader_parameter("shape", shape)
+		mat.set_shader_parameter("billboard", billboard)
+		mat.set_shader_parameter("view_offset", view_offset)
+		return mat)
+
+
 static func brass() -> StandardMaterial3D:
 	return _cached("brass", func(): return _standard(Color(0.78, 0.56, 0.24), 1.0, 0.32))
 

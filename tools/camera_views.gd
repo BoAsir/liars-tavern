@@ -49,7 +49,7 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(0, 1.42, 1.05), Vector3(0, 0.86, 0.0))
 		"table":
 			rig.snap(Vector3(1.9, 1.15, 1.9), Vector3(0, 0.55, 0))
-		"gunclose":
+		"gunclose", "flashclose":
 			rig.snap(Vector3(0.78, 1.42, -0.62), Vector3(1.22, 1.33, -0.3))
 		"flash":
 			rig.snap(Vector3(0.1, 1.42, 0.3), Vector3(1.25, 1.25, 0.0))
