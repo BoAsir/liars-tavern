@@ -283,7 +283,7 @@ func _handle_join_request(id: int, pname: String, version: int) -> void:
 	_lobby.add_member(id, pname)
 	# 对局中入座(德州)先让会话收人:名单放行而会话拒收(同一 peer id 本手里刚离开、桌上没座)时按拒绝处理,
 	# 否则他会被告知开局却不在会话里(收不到私有视图、意图全被拒)
-	var late := _accepting_late_join()
+	var late := _session != null and _accepting_late_join()
 	var events: Array = _session.add_player(id, _lobby.names()[id]) if late else []
 	if late and events.is_empty():
 		_lobby.remove(id)
