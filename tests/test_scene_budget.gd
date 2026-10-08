@@ -126,3 +126,18 @@ func test_chairs_share_one_mesh():
 	for patron: Patron in _tavern.find_children("*", "Patron", true, false):
 		chairs[patron.get_node("Chair").mesh] = true
 	assert_eq(chairs.size(), 1)
+
+
+func test_bottles_are_opaque_multimeshes_per_shape():
+	var bar := _tavern.get_node("Bar")
+	var multimeshes := bar.get_children().filter(func(n): return n is MultiMeshInstance3D)
+	assert_between(multimeshes.size(), 1, Bottles.KINDS.size())
+	var total := 0
+	for inst: MultiMeshInstance3D in multimeshes:
+		total += inst.multimesh.instance_count
+		assert_eq(inst.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+		assert_eq(inst.multimesh.mesh.surface_get_material(0), WorldMaterials.bottle_glass(), "不透明假玻璃")
+	assert_eq(total, 53, "瓶子数量与合批前一样(同一个随机种子)")
+	var glass_left := bar.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		return m.material_override is BaseMaterial3D and m.material_override.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED)
+	assert_eq(glass_left.size(), 0, "吧台不再有半透明的瓶子")

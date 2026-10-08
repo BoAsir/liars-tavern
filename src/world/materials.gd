@@ -10,6 +10,7 @@ const PARTICLE_SHADER := preload("res://src/world/shaders/soft_particle.gdshader
 const PARTICLE_ADD_SHADER := preload("res://src/world/shaders/soft_particle_add.gdshader")
 const PATRON_SHADER := preload("res://src/world/shaders/patron.gdshader")
 const PROP_SHADER := preload("res://src/world/shaders/prop.gdshader")
+const BOTTLE_SHADER := preload("res://src/world/shaders/bottle_glass.gdshader")
 
 # 木材预设:颜色 + 纹理参数
 const WOOD_PRESETS := {
@@ -81,6 +82,14 @@ static func patron() -> ShaderMaterial:
 	return _cached("patron", func():
 		var mat := ShaderMaterial.new()
 		mat.shader = PATRON_SHADER
+		return mat)
+
+
+static func bottle_glass() -> ShaderMaterial:
+	# 酒瓶 MultiMesh 共用的不透明假玻璃
+	return _cached("bottle_glass", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = BOTTLE_SHADER
 		return mat)
 
 

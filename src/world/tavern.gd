@@ -314,15 +314,18 @@ func _build_bar() -> void:
 	rng.seed = 2026
 	var bottle_colors := [Color(0.15, 0.35, 0.12), Color(0.55, 0.3, 0.05), Color(0.45, 0.05, 0.05),
 		Color(0.75, 0.75, 0.7), Color(0.1, 0.15, 0.35)]
+	var bottles := []
 	for shelf in 3:
 		var y := 1.55 + shelf * 0.45
 		MeshKit.add(bar, MeshKit.box(Vector3(0.3, 0.04, 3.0)), WorldMaterials.wood("dark"), Vector3(0.22, y, 0))
 		var z := -1.35
 		while z < 1.35:
-			var h := rng.randf_range(0.18, 0.3)
+			# 随机数的取用顺序不能变:后面啤酒杯的位置也取自同一个 rng
+			var h := rng.randf_range(Bottles.MIN_HEIGHT, Bottles.MAX_HEIGHT)
 			var color: Color = bottle_colors[rng.randi() % bottle_colors.size()]
-			_bottle(bar, Vector3(0.22, y + 0.02, z), h, color)
+			bottles.append({"pos": Vector3(0.22, y + 0.02, z), "height": h, "color": color})
 			z += rng.randf_range(0.1, 0.2)
+	Bottles.build(bar, bottles)
 	for i in 4:
 		_mug(bar, Vector3(1.05 + rng.randf_range(-0.15, 0.15), 1.11, -1.2 + i * 0.7 + rng.randf_range(-0.1, 0.1)))
 	var light := OmniLight3D.new()
@@ -331,16 +334,6 @@ func _build_bar() -> void:
 	light.light_energy = 1.4
 	light.omni_range = 3.8
 	bar.add_child(light)
-
-
-func _bottle(parent: Node3D, base: Vector3, height: float, color: Color) -> void:
-	var glass := WorldMaterials.glass(color)
-	var body_h := height * 0.62
-	MeshKit.add(parent, MeshKit.cylinder(0.035, 0.037, body_h, 14), glass, base + Vector3(0, body_h / 2.0, 0))
-	MeshKit.add(parent, MeshKit.cylinder(0.012, 0.034, height * 0.14, 14), glass, base + Vector3(0, body_h + height * 0.07, 0))
-	MeshKit.add(parent, MeshKit.cylinder(0.012, 0.012, height * 0.2, 10), glass, base + Vector3(0, body_h + height * 0.24, 0))
-	MeshKit.add(parent, MeshKit.cylinder(0.011, 0.011, 0.025, 8), WorldMaterials.wood("grip"),
-		base + Vector3(0, body_h + height * 0.35, 0))
 
 
 func _mug(parent: Node3D, base: Vector3) -> void:
