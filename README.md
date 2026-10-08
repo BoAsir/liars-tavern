@@ -104,8 +104,15 @@ $GODOT --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 # 联机冒烟:1 房主 + 2 个 bot(一个走局域网发现、一个直连),无头跑完整局
 tools/lan_smoke.sh
 
-# 截图检查(需要窗口):搭好酒馆并按机位截图
+# 截图检查(需要窗口):搭好酒馆并按机位截图(机位表见 tools/camera_views.gd)
 $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu --showcase
+#   --scene=menu 主菜单状态;--stats 打印脸/爪发白比例与灰泥亮度起伏
+#   --freeze(配合引擎参数 --fixed-fps 60)暂停场景树,两次截图逐像素一致,可做前后对比:
+$GODOT --fixed-fps 60 --path . -s tools/shot.gd -- --out=/tmp/before --views=seat,menu,opponent --showcase --freeze
+$GODOT --headless --path . -s tools/shot_diff.gd -- --a=/tmp/before --b=/tmp/after [--tolerance=0.0079 --max=0.0005]
+
+# 性能(需要窗口):离屏按游戏渲染配置测帧时间、CPU 渲染耗时与可见/阴影 draw call;超出 tools/perf_budget.gd 的预算时退出码为 1
+$GODOT --path . -s tools/perf_probe.gd -- --size=1920x1080 --view=seat,menu,opponent --cases=budget --frames=300 --assert-budget
 ```
 
 调试命令行开关(写在 `--` 之后):`--name=甲`、`--autohost[=人数]`、`--port=端口`、`--room=房名`、

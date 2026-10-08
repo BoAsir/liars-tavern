@@ -5,7 +5,7 @@ const PerfBudget := preload("res://tools/perf_budget.gd")
 
 
 func test_within_budget_reports_nothing():
-	var stats := {"draw_calls": 600, "frame_ms": 9.0, "cpu_ms": 0.8, "lights": 16}
+	var stats := {"draw_calls": 400, "frame_ms": 9.0, "cpu_ms": 0.7, "lights": 16}
 	assert_eq(PerfBudget.violations("seat", stats).size(), 0)
 
 
@@ -17,10 +17,10 @@ func test_each_exceeded_limit_reports_one_message():
 
 
 func test_menu_and_other_views_have_their_own_draw_call_limits():
-	assert_eq(PerfBudget.LIMITS["seat"]["draw_calls"], 650)
-	assert_eq(PerfBudget.LIMITS["menu"]["draw_calls"], 700)
+	assert_eq(PerfBudget.LIMITS["seat"]["draw_calls"], 450)
+	assert_eq(PerfBudget.LIMITS["menu"]["draw_calls"], 470)
 	for view in ["opponent", "closeup", "gun", "bar", "window", "fireplace", "overhead", "selfshot"]:
-		assert_eq(PerfBudget.LIMITS[view]["draw_calls"], 800, view)
+		assert_eq(PerfBudget.LIMITS[view]["draw_calls"], 500, view)
 
 
 func test_missing_stats_are_not_violations():
