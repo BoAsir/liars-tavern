@@ -59,25 +59,34 @@ static func first_free_species(used: Array) -> int:
 
 # —— 调色板:部件键 → [sRGB 颜色, 粗糙度, 金属度] ——
 
-# 去过曝:近白的底色在烛光 + ACES 下会削顶发白。所有酒客颜色按最大通道等比压到 ALBEDO_CAP 以下(保持色相);
+# 动森式粉彩(2026-10-08):物种调色板先「提亮暗色」——明度按 PASTEL_FLOOR 往上抬(色相、饱和度不变,黑帽子变深靛、
+# 深棕,不出纯黑),再按最大通道等比压到 ALBEDO_CAP 以下(保持色相)。上限从写实版的 0.65 放宽到 0.72:卡通光照的暗面
+# 留了 toon_shadow 的光、亮面整片是满光,整体比写实光照亮,再高(≥0.78)奶油色、白毛在烛光下就发白一片。
 # 爪子在桌上离烛光最近,再压暗一档
-const ALBEDO_CAP := 0.65
-const EYE_WHITE := Color(0.65, 0.64, 0.62)   # = patron_eye.gdshader 的巩膜(约 0.66)
+const ALBEDO_CAP := 0.72
+const PASTEL_FLOOR := 0.15
+const EYE_WHITE := Color(0.74, 0.73, 0.7)   # = patron_eye.gdshader 的巩膜(奶白,略高于上限:眼白要比脸亮)
 const PAW_SHADE := 0.8
 const LAPEL_DARKEN := 0.35   # 翻领用压暗的外套色:浅色强调色做翻领会在胸前拼出一个突兀的「A」字
-# Q 版比例(2026-10-08 用户追加「Q 一点、搞笑一点」):头整体(颅骨、吻、眼、眉、耳、帽、头部特件)按头心放大
-# HEAD_SCALE 倍,物种 LOOK 里的数字不动,配方里统一换算(纯数组运算,工作线程安全);头心 (0, 0.12, 0) 不动,
-# 瞄准点、机位目标、名牌之外的镜头都不受影响。眼睛在此之上再放大 EYE_SCALE 倍(更大更圆),眉毛相应抬高。
-# 手爪、脚掌胖一圈(PAW_CHUBBY / FOOT_CHUBBY)。
+# 动森式 2 头身(2026-10-08 用户追加「搞成动森那种风格」,接在 Q 版之后):头整体(颅骨、吻、眼、帽、头部特件)按头心
+# 放大 HEAD_SCALE 倍,前后方向再乘 HEAD_DEPTH(脸更平、吻更短,像软胶玩具的大圆头);物种 LOOK 里的数字不动,配方里
+# 统一换算(纯数组运算,工作线程安全)。头心 (0, 0.12, 0) 不动,瞄准点、机位目标照旧。
+# 耳朵、眉毛不跟着放那么大(EAR_SCALE / BROW_SCALE):动森的大头上五官和耳朵相对小,头才显得圆;
+# 眼睛在头放大之上横竖再放 EYE_SCALE、前后压到 EYE_DEPTH:大而平,像画在脸上。
 const HEAD_CENTER := Vector3(0, 0.12, 0)
-const HEAD_SCALE := 1.3
-const EYE_SCALE := 1.2
-# 帽子横向跟头一起放大(戴得上),竖向只放 HAT_SCALE_Y:Q 版的矮胖帽子,礼帽也不至于顶到德州铭牌(铭牌高度没动)
+const HEAD_SCALE := 1.95
+const HEAD_DEPTH := 0.86
+const EYE_SCALE := 1.05
+const EYE_DEPTH := 0.42
+const EAR_SCALE := 1.5
+const BROW_SCALE := 1.45
+# 帽子横向跟头一起放大(戴得上),竖向只放 HAT_SCALE_Y:矮胖的软胶玩具帽,礼帽顶也不碰名牌
 const HAT_SCALE_Y := 1.15
-const PAW_CHUBBY := 1.2
-# 躯干竖向压扁(绕髋部,Body 局部 y = 0):身子更短更圆;肩、领口、头枢轴跟着降低(Patron.SHOULDER / HEAD_PIVOT)
-const BODY_SQUASH := 0.93
-const FOOT_CHUBBY := 1.15
+# 躯干:竖向压扁(绕髋部,Body 局部 y = 0)、横向略加宽,肚子更圆;肩、领口、头枢轴跟着降低(Patron.SHOULDER / HEAD_PIVOT)
+const BODY_SQUASH := 0.82
+const BODY_WIDEN := 1.06
+# 腿:大腿缩短、小腿垂在座面前沿,圆圆的小脚悬在半空(座面高度不变)
+const FOOT_CHUBBY := 1.2
 # 每个酒客的部件网格(左右手不对称,各一份;耳朵、眉毛、手臂左右共用)
 const PARTS := ["body", "neck", "head", "eyes", "brow", "ear", "hat", "arm", "paw_l", "paw_r", "fist", "legs"]
 
@@ -92,8 +101,8 @@ static func palette(spec: Dictionary) -> Dictionary:
 
 
 static func head_scale(look: Dictionary) -> Vector3:
-	# 头的放大倍数;长吻物种可以在 head.scale_z 里把前后方向少放一点(鳄鱼:吻尖不捅到桌心,伸脖子不至于短太多)
-	return Vector3(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE * look["head"].get("scale_z", 1.0))
+	# 头的放大倍数:前后方向乘 HEAD_DEPTH;长吻物种可以在 head.scale_z 里再少放一点(鳄鱼:吻尖不捅到桌心)
+	return Vector3(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE * look["head"].get("scale_z", HEAD_DEPTH))
 
 
 static func head_point(look: Dictionary, p: Vector3) -> Vector3:
@@ -106,9 +115,15 @@ static func head_xform(look: Dictionary) -> Transform3D:
 	return Transform3D(Basis.from_scale(head_scale(look)), HEAD_CENTER - HEAD_CENTER * head_scale(look))
 
 
-static func pivot_scale() -> Transform3D:
-	# 挂在头上的枢轴部件(眉、耳)网格绕自己的原点等比放大(帽子同倍数,见 PatronHatBuilder),枢轴位置另用 head_point 换算
-	return Transform3D(Basis.from_scale(Vector3.ONE * HEAD_SCALE), Vector3.ZERO)
+static func pivot_scale(factor: float) -> Transform3D:
+	# 挂在头上的枢轴部件(眉 BROW_SCALE、耳 EAR_SCALE)网格绕自己的原点等比放大,枢轴位置另用 head_point 换算
+	return Transform3D(Basis.from_scale(Vector3.ONE * factor), Vector3.ZERO)
+
+
+static func hat_scale(look: Dictionary) -> Vector3:
+	# 帽子:横向跟头,前后跟头的前后倍数(戴在压扁一点的大圆头上),竖向只放 HAT_SCALE_Y
+	var s := head_scale(look)
+	return Vector3(s.x, HAT_SCALE_Y, s.z)
 
 
 static func brow_point(look: Dictionary) -> Vector3:
@@ -116,7 +131,13 @@ static func brow_point(look: Dictionary) -> Vector3:
 	var e: Dictionary = look["eyes"]
 	var size: Vector3 = e.get("size", Vector3(0.04, 0.045, 0.02))
 	var lift := size.y * HEAD_SCALE * (EYE_SCALE - 1.0) * 1.1
-	return head_point(look, look["brows"]["pos"]) + Vector3(0, lift, -0.004)
+	return head_point(look, look["brows"]["pos"]) + Vector3(0, lift, 0.0)
+
+
+static func pastel(c: Color) -> Color:
+	# 提亮暗色:明度 v → PASTEL_FLOOR + (1 − PASTEL_FLOOR)·v,色相不变;越暗的颜色饱和度收一点
+	# (深棕提亮后不变成橘色,深蓝不变成宝蓝),之后再 capped
+	return Color.from_hsv(c.h, c.s * (1.0 - 0.3 * (1.0 - c.v)), PASTEL_FLOOR + (1.0 - PASTEL_FLOOR) * c.v, c.a)
 
 
 static func capped(c: Color) -> Color:

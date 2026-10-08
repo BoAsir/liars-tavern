@@ -5,11 +5,11 @@ extends Node3D
 # 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直)。
 
 
-const ARM_LENGTH := 0.4
-const SHOULDER := Vector3(0.205, 0.485, -0.02)   # Q 版:躯干压扁后肩略低略窄(原 0.21, 0.52)
+const ARM_LENGTH := 0.45   # 动森式大头离肩更远:举枪时手要离头心 ≈0.64 m 才能把枪口抵在太阳穴(Q 版 0.4)
+const SHOULDER := Vector3(0.21, 0.38, -0.02)   # 动森式:躯干压扁加宽后肩更低,肩宽不变(举枪够得着大头;Q 版 0.205, 0.485;最初 0.21, 0.52)
 const PAW_RADIUS := 0.058
 const PAW_SCALE := Vector3(1, 0.8, 1.1)
-const HEAD_PIVOT := Vector3(0, 0.615, -0.02)   # Q 版:脖子更短,头跟着躯干降一点(原 0.65)
+const HEAD_PIVOT := Vector3(0, 0.62, -0.02)   # 动森式:下巴压在领口上,看不见脖子(Q 版 0.615;最初 0.65)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
 const NECK_BASE := Vector3(0, 0.55, -0.02)   # 物种 LOOK 按压扁前写,构建时乘 PatronParts.BODY_SQUASH
 const NECK_REACH := 0.85      # 头最远水平伸出(米):4 人同时探向桌心头不相撞;头平着伸出去,高度不变
@@ -43,7 +43,7 @@ const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
 const GUN_CLEARANCE := 0.008
 const DEFAULT_GUN_CLEARANCE := 0.17
 const GUN_APPROACH := Vector3(0.9656, 0.2414, -0.0966)   # = Vector3(1, 0.25, -0.1).normalized()
-const HAND_GUN_HEAD := Vector3(0.4393, 0.8066, -0.0613)   # Q 版肩、头枢轴降低后重算(原 0.4386, 0.8456, -0.0615)
+const HAND_GUN_HEAD := Vector3(0.4447, 0.7619, -0.0599)   # 动森式肩、头枢轴、臂长重算(Q 版 0.4393, 0.8066, -0.0613)
 const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心的时长
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
@@ -65,6 +65,7 @@ const DEBRIS_GROUP := &"patron_debris"
 const GREY := Color(0.42, 0.42, 0.42)   # 褪色的灰(patron.gdshader 里同值)
 const FADE_TIME := 1.4
 const DIE_BODY_ROT := Vector3(0.55, 0.15, -0.5)
+const DIE_HEAD_ROT := Vector3(0.3, 0.3, -0.4)
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
@@ -543,7 +544,7 @@ static func gun_hand_target(clearance: float) -> Vector3:
 	var center := HEAD_PIVOT + Vector3(0, 0.12, 0)
 	var want := clearance + GUN_CLEARANCE
 	var lo := 0.25
-	var hi := 1.2
+	var hi := 2.0
 	for i in 32:
 		var mid := (lo + hi) * 0.5
 		var hand := SHOULDER + (center + GUN_APPROACH * mid - SHOULDER).normalized() * ARM_LENGTH
@@ -597,7 +598,8 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	var fall := create_tween().set_parallel()
 	var body_rot: Vector3 = _look_data.get("anim", {}).get("die_body_rot", DIE_BODY_ROT)   # 乌龟侧倒,龟壳不穿椅背
 	fall.tween_property(body, "rotation", body_rot, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	fall.tween_property(head, "rotation", Vector3(-0.5, 0.3, -0.45), 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# 头往后仰、歪向一边(动森式大头往前栽会砸进自己的牌扇),脸朝上,头顶转星星
+	fall.tween_property(head, "rotation", DIE_HEAD_ROT, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_tween_arm(fall, _arm_l, _mirror(HAND_DEAD, -1.0), 0.5, Tween.TRANS_BOUNCE)
 	_tween_arm(fall, _arm_r, HAND_DEAD, 0.5, Tween.TRANS_BOUNCE)
 	_knock_hat_off()
