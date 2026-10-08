@@ -10,7 +10,7 @@ const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
 const BUBBLE_ABOVE_PLATE := -66.0  # 他人气泡挂在铭牌正上方(屏幕像素),不压住名字
 const SEAT_RETURN := 0.45          # 新一局前镜头回座的时长(强制验证为真话时没有开枪段)
 const SPECTATOR_SEAT_FACTOR := 1.6 # 观战者回俯视机位要走更远,时长按此倍数
-const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到越肩机位的时长(须在房主给的开场预算之内)
+const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到座位机位(越肩或第一人称)的时长(须在房主给的开场预算之内)
 
 var screen: Node        # TableScreen
 var app: Node
@@ -20,6 +20,7 @@ var rig: CameraRig
 var fx: PostFx
 var hud: TableHud
 var spectator := false
+var seat_camera: SeatCamera   # 座位上的镜头:越肩 / 第一人称(V 切换)
 var _at_seat := false
 
 
@@ -31,13 +32,15 @@ func _init(p_screen: Node, p_app: Node, p_hud: TableHud) -> void:
 	cards = world.cards
 	rig = app.tavern.camera_rig
 	fx = app.post_fx
+	var path = app.get("settings_path")
+	seat_camera = SeatCamera.new(rig, world, screen.my_pid, path if path is String else Settings.PATH)
+	add_child(seat_camera)
 
 
 func intro() -> void:
 	rig.parallax_enabled = false
 	Sfx.play("whoosh")
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, INTRO_MOVE)
-	await rig.move_to(world.third_person_view(screen.my_pid), INTRO_MOVE, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
+	await seat_camera.enter(INTRO_MOVE).finished
 	rig.parallax_enabled = true
 	_at_seat = true
 
@@ -273,8 +276,14 @@ func _startle_all(except_pid) -> void:
 			world.patrons[pid].startle()
 
 
+func toggle_camera_mode() -> void:
+	# V:越肩 ⇄ 第一人称(存进设置)。镜头在座位上就马上切过去,拍特写或观战时等回座再生效
+	var on := seat_camera.toggle()
+	app.toast(SeatCamera.toast_text(on, seat_camera.is_seated()), UiTheme.PARCHMENT)
+
+
 func is_at_seat() -> bool:
-	# 镜头在自己座位的越肩机位(不是特写、不是观战)
+	# 镜头在自己座位的常驻机位(越肩或第一人称;不是特写、不是观战)
 	return _at_seat and not spectator
 
 
@@ -289,8 +298,7 @@ func back_to_seat(duration: float) -> void:
 		await rig.move_to(world.overview_view(), duration * SPECTATOR_SEAT_FACTOR).finished
 		hud.set_away_from_seat(false)
 		return
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, duration)
-	await rig.move_to(world.third_person_view(screen.my_pid), duration).finished
+	await seat_camera.enter(duration).finished
 	# 镜头回到座位后再露出按钮行,免得特写还没切走就挡住角色
 	hud.set_away_from_seat(false)
 	rig.parallax_enabled = true
@@ -302,7 +310,7 @@ func _leave_seat() -> void:
 	hud.clear_my_bubble()
 	hud.set_away_from_seat(true)
 	rig.parallax_enabled = false
-	rig.set_fill(0.0, 0.5)
+	seat_camera.leave(0.5)
 
 
 func _bubble(pid: int, text: String, color := UiTheme.INK) -> void:
