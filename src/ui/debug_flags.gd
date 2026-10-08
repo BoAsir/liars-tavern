@@ -199,7 +199,9 @@ func _on_joined() -> void:
 
 
 func _on_lobby(players: Array) -> void:
-	print(species_line(players))
+	# 对局中的名单更新(有人散场离开、德州有人入座)不打印:冒烟测试比对的最后一条要是开局时的座位表
+	if not Net.in_game:
+		print(species_line(players))
 	if not Net.is_host or not opts.has("autohost"):
 		return
 	var want := int(opts["autohost"]) if opts["autohost"] != "true" else 2
