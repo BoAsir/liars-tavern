@@ -211,7 +211,9 @@ func _sync_table_mode() -> void:
 
 
 func _apply_table_mode() -> void:
-	# 桌子按玩法摆(德州桌更大、不摆烛台与立牌),已落座的酒客跟着桌沿挪,镜头换到等待厅机位
+	# 桌子按玩法摆(德州桌更大、不摆烛台与立牌),已落座的酒客跟着桌沿挪,镜头换到等待厅机位。
+	# 规格 §3.2 还要德州等待厅「在后台开始生成德州牌面」:PokerFaces 在牌面任务的分支里,这里还没有,
+	# 联调时在这里补一句 PokerFaces 的后台生成(is_poker(_table_mode) 时)
 	_table_mode = Net.game_mode
 	app.apply_table_mode(_table_mode)
 	app.tavern.camera_rig.move_to(app.world.lobby_view(), CAMERA_MOVE_TIME)

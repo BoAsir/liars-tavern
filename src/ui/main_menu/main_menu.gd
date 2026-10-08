@@ -5,13 +5,12 @@ extends Control
 
 
 const RoomRow := preload("res://src/ui/main_menu/room_row.gd")
+const ModePicker := preload("res://src/ui/main_menu/mode_picker.gd")
 const PANEL_WIDTH := 480.0
 const SIDE_MARGIN := 48
 const EDGE_MARGIN := 24
 const ROW_GAP := 6
 const ROOM_LIST_HEIGHT := 80.0   # 正好露出一个房间行,更多房间在列表内滚动
-const MODE_FONT_SIZE := 15
-const MODE_PADDING := Vector2(10, 4)   # 玩法按钮的内边距(左右, 上下):和小节标题挤在一行,不额外占高度
 
 var app: Node
 var _name_edit: LineEdit
@@ -142,61 +141,8 @@ func _mode_section() -> Control:
 	# 「开一桌」小节标题那一行放玩法三段切换:不另占一行,1280×720 下面板不用滚动
 	_mode = Settings.last_mode()
 	var row := _section("开一桌")
-	var group := ButtonGroup.new()
-	for mode in GameMode.ALL:
-		row.add_child(_mode_button(mode, group))
+	row.add_child(ModePicker.build(_mode, _select_mode))
 	return row
-
-
-func _mode_button(mode: String, group: ButtonGroup) -> Button:
-	var button := Button.new()
-	button.text = GameMode.short_label(mode)
-	button.tooltip_text = GameMode.summary(mode)
-	button.toggle_mode = true
-	button.button_group = group
-	button.button_pressed = mode == _mode
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	button.add_theme_font_size_override("font_size", MODE_FONT_SIZE)
-	_style_mode_button(button)
-	button.toggled.connect(func(on: bool):
-		if on:
-			_select_mode(mode))
-	return button
-
-
-func _style_mode_button(button: Button) -> void:
-	# 小号分段按钮:没选中的暗木底细描边,选中的用主按钮的酒红底;不要投影,挤在标题行里不显脏。
-	# 每种状态都要换成小内边距:按钮的最小尺寸取各状态样式里最大的那个
-	var states := {
-		"normal": [Color(0.16, 0.11, 0.07), Color(UiTheme.BRASS, 0.45)],
-		"hover": [Color(0.26, 0.17, 0.09), UiTheme.BRASS_BRIGHT],
-		"pressed": [Color(0.42, 0.09, 0.08), UiTheme.BRASS_BRIGHT],
-		"hover_pressed": [Color(0.58, 0.13, 0.1), UiTheme.BRASS_BRIGHT],
-		"disabled": [Color(0.1, 0.08, 0.07, 0.8), Color(UiTheme.BRASS, 0.3)],
-		"focus": [Color.TRANSPARENT, UiTheme.BRASS_BRIGHT],
-	}
-	for state: String in states:
-		var box := UiTheme.panel_box(states[state][0], states[state][1], 1, 6)
-		box.content_margin_left = MODE_PADDING.x
-		box.content_margin_right = MODE_PADDING.x
-		box.content_margin_top = MODE_PADDING.y
-		box.content_margin_bottom = MODE_PADDING.y
-		if state == "focus":
-			_as_focus_ring(box)
-		button.add_theme_stylebox_override(state, box)
-	button.add_theme_color_override("font_color", UiTheme.PARCHMENT_DIM)
-	button.add_theme_color_override("font_pressed_color", UiTheme.PARCHMENT)
-	button.add_theme_color_override("font_hover_pressed_color", UiTheme.PARCHMENT)
-
-
-static func _as_focus_ring(box: StyleBoxFlat) -> void:
-	# 键盘焦点只画一圈亮黄铜框,略向外扩,压在选中/悬停的底色上也看得见
-	box.draw_center = false
-	box.set_border_width_all(2)
-	box.expand_margin_left = 2
-	box.expand_margin_right = 2
-	box.expand_margin_top = 2
-	box.expand_margin_bottom = 2
 
 
 func _select_mode(mode: String) -> void:

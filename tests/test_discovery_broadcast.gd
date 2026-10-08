@@ -24,13 +24,23 @@ func before_each():
 	discovery = StubDiscovery.new()
 	add_child_autofree(discovery)
 	discovery._sender = PacketPeerUDP.new()
-	discovery._announce = func(): return {"id": "t", "room": "测试", "host": "甲", "players": 1,
-		"max": Protocol.MAX_PLAYERS, "version": Protocol.VERSION, "port": Protocol.GAME_PORT, "open": true}
+	# 报文桩按 NetworkManager._room_announcement 的样子写(v4 字段 seated/cap/mode/playing,旧字段 max 压在 4 以内)
+	discovery._announce = func(): return {"id": "t", "room": "测试", "host": "甲",
+		"players": 1, "max": Protocol.LEGACY_MAX_PLAYERS,
+		"seated": 1, "cap": GameMode.max_players(GameMode.LIARS), "mode": GameMode.LIARS, "playing": false,
+		"version": Protocol.VERSION, "port": Protocol.GAME_PORT, "open": true}
 
 
 func _tick(times: int) -> void:
 	for i in times:
 		discovery._broadcast_once()
+
+
+func test_stub_announcement_is_a_packet_this_build_would_accept():
+	# 桩不能和真报文脱节:本机 RoomList 得认它
+	var decoded: Dictionary = RoomList.decode(RoomList.encode(discovery._announce.call()))
+	assert_eq(decoded.get("mode"), GameMode.LIARS)
+	assert_eq([decoded.get("seated"), decoded.get("cap")], [1, GameMode.max_players(GameMode.LIARS)])
 
 
 func test_only_loopback_succeeding_turns_unhealthy():
