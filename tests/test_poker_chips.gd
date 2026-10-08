@@ -178,6 +178,13 @@ func test_award_slides_shares_to_the_winners():
 	assert_eq(chips.pot_amounts(), [])
 
 
+func test_award_falls_back_to_adding_the_share_when_the_view_stack_is_not_an_int():
+	chips.sync([_player(1, 1000), _player(2, 1000)], [{"amount": 300, "eligible": []}])
+	await chips.award(0, {1: 200, 2: 100}, {1: "oops", 2: null})
+	assert_eq(chips.stack_amount(1), 1200)
+	assert_eq(chips.stack_amount(2), 1100)
+
+
 func test_rebuy_drops_a_fresh_stack():
 	chips.sync([_player(1, 2000), _player(2, 0)], [])
 	await chips.rebuy(2, PokerRules.STARTING_STACK)

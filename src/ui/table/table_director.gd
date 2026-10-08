@@ -254,7 +254,8 @@ func _match_over(ev: Dictionary) -> void:
 		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4,
 			atan2(toward_table.x, toward_table.z))
 	else:
-		rig.orbit(Vector3(0, 0.95, 0), 2.4, 0.9, 0.18, 1.4)
+		var orbit := world.table_orbit()
+		rig.orbit(orbit.center, orbit.radius, orbit.height, orbit.speed, 1.4)
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
 	await _wait(2.2)
 	screen.show_settlement(winner)

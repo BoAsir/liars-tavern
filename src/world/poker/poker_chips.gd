@@ -196,7 +196,8 @@ func award(index: int, shares: Dictionary, stacks: Dictionary) -> void:
 		return
 	for pid in shares:
 		if world.patrons.has(pid) and shares[pid] is int:
-			_set_amount(_stacks, pid, stacks.get(pid, stack_amount(pid) + shares[pid]))
+			var stack: Variant = stacks.get(pid)
+			_set_amount(_stacks, pid, stack if stack is int else stack_amount(pid) + shares[pid])
 
 
 func rebuy(pid: int, stack: int) -> void:

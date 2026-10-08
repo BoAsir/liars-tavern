@@ -8,6 +8,7 @@ extends GutTest
 
 const R := SeatLayout.POKER_TABLE_RADIUS
 const ME := 1
+const SEATS := [1, 2, 3, 4]
 const SETTLE := 0.15
 const EPS := Vector3.ONE * 0.0001
 const TIMING_SLACK := 0.1   # 秒
@@ -226,7 +227,7 @@ func _view_players() -> Array:
 
 
 func test_sync_lays_out_the_table_from_the_view():
-	cards.sync(_view_players(), [_c(2, 0), _c(9, 1), _c(12, 2)], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [_c(2, 0), _c(9, 1), _c(12, 2)], ME, [_c(14, 0), _c(13, 0)])
 	assert_eq(_kinds(cards.board_cards()), [_c(2, 0), _c(9, 1), _c(12, 2)])
 	assert_eq(_kinds(_fan_cards(ME)), [_c(14, 0), _c(13, 0)])
 	assert_eq(_kinds(_fan_cards(4)), [CardFaces.BACK, CardFaces.BACK])
@@ -238,18 +239,48 @@ func test_sync_lays_out_the_table_from_the_view():
 		assert_true(cards.board_cards()[i].transform.is_equal_approx(PokerLayout.board_slot(i)))
 
 
+func test_sync_only_deals_to_pids_in_seats():
+	# 视图的 seats 是桌上有酒客的人;players 里还没登场的新人(排在最后)或刚离场的人不在 seats 里,不发牌
+	cards.sync([1, 2, 3], _view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
+	assert_eq(_fan_cards(4).size(), 0, "不在 seats 里的人手里没牌")
+	assert_eq(_kinds(cards.shown_cards(3)), [_c(11, 0), _c(11, 1)])
+	cards.sync([1, 2, 4], _view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
+	await wait_process_frames(1)
+	assert_eq(cards.shown_cards(3).size(), 0, "不在 seats 里的人座位前没牌")
+	assert_eq(_kinds(_fan_cards(4)), [CardFaces.BACK, CardFaces.BACK])
+	assert_eq(cards.muck_cards().size(), 2, "弃牌堆按弃牌人数算,离场者弃的牌还在桌上")
+
+
+func test_sync_tolerates_malformed_view_rows():
+	# 网络来的视图不可信:shown / status / pid 类型不对时跳过或当空,不报脚本错误
+	var players := [_player(1, PokerRules.STATUS_ACTIVE), {"pid": 3, "status": PokerRules.STATUS_ACTIVE, "shown": "junk"},
+		{"pid": 4, "status": 7, "shown": null}, {"pid": "x", "status": PokerRules.STATUS_ACTIVE, "shown": []}, 42]
+	cards.sync(SEATS, players, [_c(2, 0), "k", null], ME, [_c(14, 0), -1])
+	assert_eq(_kinds(cards.board_cards()), [_c(2, 0)])
+	assert_eq(_kinds(_fan_cards(3)), [CardFaces.BACK, CardFaces.BACK], "shown 不是数组当没亮牌")
+	assert_eq(_fan_cards(4).size(), 0, "status 不是字符串当不在本手中")
+	assert_eq(_kinds(_fan_cards(ME)), [CardFaces.BACK, CardFaces.BACK], "私有手牌里有不是牌的值就不按它亮面")
+
+
+func test_deal_and_reveal_ignore_values_that_are_not_cards():
+	await cards.deal_hole([2, 3, 4, 1], ME, [_c(14, 0), "oops"])
+	assert_eq(_kinds(_fan_cards(ME)), [_c(14, 0), CardFaces.BACK])
+	await cards.reveal(2, [-1, _c(10, 1), _c(10, 2)])
+	assert_eq(_kinds(cards.shown_cards(2)), [_c(10, 1), _c(10, 2)])
+
+
 func test_sync_again_removes_what_is_gone():
-	cards.sync(_view_players(), [_c(2, 0), _c(9, 1), _c(12, 2)], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [_c(2, 0), _c(9, 1), _c(12, 2)], ME, [_c(14, 0), _c(13, 0)])
 	var waiting := [1, 2, 3, 4].map(func(pid): return _player(pid, PokerRules.STATUS_WAITING))
-	cards.sync(waiting, [], ME, [])
+	cards.sync(SEATS, waiting, [], ME, [])
 	await wait_process_frames(1)
 	assert_eq(_live_cards().size(), 0)
 
 
 func test_sync_is_idempotent():
-	cards.sync(_view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
 	var before := _live_cards()
-	cards.sync(_view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
 	await wait_process_frames(1)
 	assert_eq(_live_cards(), before, "同样的视图不重建牌")
 
@@ -261,7 +292,7 @@ func test_sync_during_a_deal_settles_the_cards_and_the_deal_still_finishes():
 		done[0] = true
 	run.call()
 	await wait_seconds(PokerCards.DEAL_STAGGER * 3.0)
-	cards.sync(_view_players(), [], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [], ME, [_c(14, 0), _c(13, 0)])
 	await wait_seconds(PokerCards.deal_duration(8) + SETTLE)
 	assert_true(done[0], "协程走完,没有卡住")
 	assert_eq(_kinds(_fan_cards(4)), [CardFaces.BACK, CardFaces.BACK])
@@ -271,7 +302,7 @@ func test_sync_during_a_deal_settles_the_cards_and_the_deal_still_finishes():
 
 
 func test_clear_frees_every_card_but_keeps_the_rack():
-	cards.sync(_view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
+	cards.sync(SEATS, _view_players(), [_c(2, 0)], ME, [_c(14, 0), _c(13, 0)])
 	cards.clear()
 	await wait_process_frames(1)
 	assert_eq(_live_cards().size(), 0)
@@ -292,7 +323,7 @@ func test_clear_poker_mid_deal_takes_the_hole_cards_without_errors():
 # —— 朝向与预算 ——
 
 func test_cards_on_the_table_read_upright_from_the_local_seat():
-	cards.sync(_view_players(), [_c(2, 0), _c(9, 1), _c(12, 2), _c(5, 3), _c(7, 0)], ME, [])
+	cards.sync(SEATS, _view_players(), [_c(2, 0), _c(9, 1), _c(12, 2), _c(5, 3), _c(7, 0)], ME, [])
 	for card in cards.board_cards() + cards.shown_cards(3):
 		var top: Vector3 = (card.global_basis * Vector3.FORWARD).normalized()
 		assert_lt(top.z, 0.0, "牌顶朝 −Z")

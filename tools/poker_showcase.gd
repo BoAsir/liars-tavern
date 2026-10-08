@@ -35,7 +35,7 @@ func build(tavern: Tavern) -> void:
 	var players := _players()
 	chips.sync(players, _pots())
 	chips.place_button(BUTTON)
-	cards.sync(players, _board(), ME, [PokerCard.make(PokerCard.ACE, PokerCard.SPADES),
+	cards.sync(range(1, SEATS + 1), players, _board(), ME, [PokerCard.make(PokerCard.ACE, PokerCard.SPADES),
 		PokerCard.make(PokerCard.KING, PokerCard.HEARTS)])
 	await get_tree().create_timer(SETTLE).timeout
 	_pose()

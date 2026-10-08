@@ -23,7 +23,13 @@ const HIGHLIGHT_PEAK := 1.6
 const HIGHLIGHT_HOLD := 0.7
 const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.4)
 const DECK_SCALE := 0.5         # 牌在发牌处(飞出前、收回后)缩小
-const FLIGHT_ARC := 0.12
+const FLIGHT_ARC := 0.12        # 公共牌与亮牌的弧高
+const DEAL_ARC := FLIGHT_ARC * 1.5   # 发手牌飞得高些:越过别人的筹码堆
+const FOLD_ARC := FLIGHT_ARC * 0.5   # 弃牌贴着桌面推
+const SWEEP_ARC := FLIGHT_ARC * 0.6
+const FOLD_SPIN := 0.8          # 弧度:弃牌与收牌时牌随手一转
+const SWEEP_SPIN := 1.2
+const HIGHLIGHT_RISE := 0.3     # HIGHLIGHT_TIME 里升到峰值占的比例,其余回落
 const FLIGHT_META := &"poker_flight"
 
 var world: TableWorld
@@ -68,10 +74,11 @@ func muck_cards() -> Array:
 # —— 动画(协程)——
 
 func deal_hole(order: Array, p_my_pid: int, my_cards: Array) -> void:
-	# 发手牌:按发牌顺序每人一张、发两轮;自己的按私有视图亮面,别人的是牌背。没有酒客的人跳过
+	# 发手牌:按发牌顺序每人一张、发两轮;自己的按私有视图亮面(不是牌的值当牌背),别人的是牌背。没有酒客的人跳过
 	var epoch := _epoch
 	my_pid = p_my_pid
 	_present_my_fan()
+	my_cards = my_cards.filter(PokerCard.is_card)
 	for pid in order:
 		_free_cards(_held.get(pid, []))   # 上一手没收走的(视图与演出不同步时):换成新发的
 		_held.erase(pid)
@@ -104,7 +111,7 @@ func _deal_one(card: Card3D, pid: int, index: int, delay: float) -> void:
 	var fan: Node3D = world.patrons[pid].fan
 	card.visible = true
 	sfx.emit("deal")
-	_fly(card, fan.global_transform * CardTable.fan_slot(index, PokerRules.HOLE_CARDS, 0.0), DEAL_FLIGHT, FLIGHT_ARC * 1.5)
+	_fly(card, fan.global_transform * CardTable.fan_slot(index, PokerRules.HOLE_CARDS, 0.0), DEAL_FLIGHT, DEAL_ARC)
 	await _wait(DEAL_FLIGHT)
 	if _still_held(card, pid, epoch) and is_instance_valid(fan):
 		card.reparent(fan, true)
@@ -163,7 +170,7 @@ func fold(pid: int) -> void:
 			card = _new_card(CardFaces.BACK, slot)
 		else:
 			_lift_out(card)
-			_fly(card, global_transform * slot, FOLD_FLIGHT, FLIGHT_ARC * 0.5, 0.8)
+			_fly(card, global_transform * slot, FOLD_FLIGHT, FOLD_ARC, FOLD_SPIN)
 		_muck.append(card)
 	for i in range(PokerRules.HOLE_CARDS, held.size()):
 		_free_card(held[i])
@@ -171,7 +178,9 @@ func fold(pid: int) -> void:
 
 
 func reveal(pid: int, cards: Array) -> void:
-	# 亮牌:从牌扇里拿出来,正面朝上摊到座位前(本机视角正立);手里没牌(如已离桌)就在座位前现出来
+	# 亮牌:从牌扇里拿出来,正面朝上摊到座位前(本机视角正立);手里没牌(如已离桌)就在座位前现出来。
+	# cards 里不是牌的值跳过
+	cards = cards.filter(PokerCard.is_card)
 	var held: Array = _held.get(pid, [])
 	_held.erase(pid)
 	_free_cards(_shown.get(pid, []))
@@ -211,8 +220,8 @@ func highlight(kinds: Array) -> void:
 			if card != null:
 				card.set_glow(value, HIGHLIGHT_COLOR)
 	_glow_tween = create_tween()
-	_glow_tween.tween_method(glow, 0.0, HIGHLIGHT_PEAK, HIGHLIGHT_TIME * 0.3)
-	_glow_tween.tween_method(glow, HIGHLIGHT_PEAK, HIGHLIGHT_HOLD, HIGHLIGHT_TIME * 0.7)
+	_glow_tween.tween_method(glow, 0.0, HIGHLIGHT_PEAK, HIGHLIGHT_TIME * HIGHLIGHT_RISE)
+	_glow_tween.tween_method(glow, HIGHLIGHT_PEAK, HIGHLIGHT_HOLD, HIGHLIGHT_TIME * (1.0 - HIGHLIGHT_RISE))
 
 
 func sweep() -> void:
@@ -226,36 +235,40 @@ func sweep() -> void:
 	for card in all:
 		_lift_out(card)
 		card.set_glow(0.0)
-		_fly(card, global_transform * _deck_transform(), SWEEP_FLIGHT + randf() * SWEEP_JITTER, FLIGHT_ARC * 0.6, 1.2)
+		_fly(card, global_transform * _deck_transform(), SWEEP_FLIGHT + randf() * SWEEP_JITTER, SWEEP_ARC, SWEEP_SPIN)
 	await _wait(SWEEP_FLIGHT + SWEEP_JITTER)
 	_free_cards(all)
 
 
 # —— 对账 ——
 
-func sync(players: Array, board: Array, p_my_pid: int, my_hole: Array) -> void:
-	# 按公共 / 私有视图瞬时摆好(players、board 同公共视图字段,my_hole 是私有视图的 hole):
-	# 在本手中(active / allin)且没亮牌、有酒客的人手里两张(自己的按 my_hole);亮了牌的摊在座位前;
-	# 弃了牌的人的牌在弃牌堆。先停下所有还在走的动画
+func sync(seats: Array, players: Array, board: Array, p_my_pid: int, my_hole: Array) -> void:
+	# 按公共 / 私有视图瞬时摆好(seats、players、board 同公共视图字段,my_hole 是私有视图的 hole):
+	# 在 seats 里(桌上有酒客的人:还没登场的新人与已离场者不算)、在本手中(active / allin)且没亮牌、
+	# 有酒客的人手里两张(自己的按 my_hole);亮了牌的摊在座位前;弃了牌的人(含已离场者)的牌在弃牌堆。
+	# 视图来自网络,字段类型不对的行跳过或当空。先停下所有还在走的动画
 	_epoch += 1
 	my_pid = p_my_pid
 	_present_my_fan()
 	var held := {}
 	var shown := {}
 	var folded := 0
+	var my_cards: Array = my_hole.filter(PokerCard.is_card)
 	for p in players:
-		var pid: int = p.get("pid", 0)
-		var cards: Array = p.get("shown", [])
-		var status: String = p.get("status", "")
+		if p is not Dictionary:
+			continue
+		var pid := int(p.get("pid", 0))
+		var cards := _cards_of(p.get("shown"))
+		var status := str(p.get("status", ""))
 		if status == PokerRules.STATUS_FOLDED:
 			folded += 1
-		elif status not in [PokerRules.STATUS_ACTIVE, PokerRules.STATUS_ALLIN]:
+		elif status not in [PokerRules.STATUS_ACTIVE, PokerRules.STATUS_ALLIN] or not seats.has(pid):
 			continue
 		elif cards.size() == PokerRules.HOLE_CARDS and world.seat_angles.has(pid):
 			shown[pid] = cards
 		elif world.patrons.has(pid):
-			var mine := pid == my_pid and my_hole.size() == PokerRules.HOLE_CARDS
-			held[pid] = my_hole if mine else [CardFaces.BACK, CardFaces.BACK]
+			var mine := pid == my_pid and my_cards.size() == PokerRules.HOLE_CARDS
+			held[pid] = my_cards if mine else [CardFaces.BACK, CardFaces.BACK]
 	_sync_board(board)
 	_sync_hands(_held, held)
 	_sync_hands(_shown, shown)
@@ -418,6 +431,11 @@ func _forget_all() -> void:
 
 static func _kinds_of(cards: Array) -> Array:
 	return cards.map(func(card: Card3D) -> int: return card.kind)
+
+
+static func _cards_of(value: Variant) -> Array:
+	# 视图里的一组牌:不是数组当空,数组里不是牌的值丢掉
+	return value.filter(PokerCard.is_card) if value is Array else []
 
 
 func _free_cards(cards: Array) -> void:

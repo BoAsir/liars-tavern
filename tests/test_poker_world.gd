@@ -37,7 +37,7 @@ func _players(pids: Array, status := PokerRules.STATUS_ACTIVE) -> Array:
 func _sync(pids: Array, board: Array, pots: Array) -> void:
 	var players := _players(pids)
 	chips.sync(players, pots)
-	cards.sync(players, board, ME, [_c(14, 0), _c(14, 1)])
+	cards.sync(pids, players, board, ME, [_c(14, 0), _c(14, 1)])
 
 
 func _poker_nodes() -> Array:

@@ -6,6 +6,10 @@ extends Node3D
 
 const RADIUS := 0.05
 const THICKNESS := 0.014
+const SEGMENTS := 40               # 圆片的边数
+const FACE_INSET := 0.86           # 白色顶面半径占 RADIUS 的比例,露出一圈边
+const FACE_THICKNESS := 0.002
+const FACE_GAP := 0.001            # 顶面贴在边圈上方一点,免得 Z 冲突
 const FACE := Color(0.95, 0.93, 0.88)
 const RIM := Color(0.72, 0.7, 0.66)
 const INK := Color(0.12, 0.09, 0.07)
@@ -23,10 +27,11 @@ func _init() -> void:
 	var rim := StandardMaterial3D.new()
 	rim.albedo_color = RIM
 	rim.roughness = 0.5
-	var disc := MeshKit.add(self, MeshKit.cylinder(RADIUS, RADIUS, THICKNESS, 40), rim, Vector3(0, THICKNESS / 2.0, 0))
+	var disc := MeshKit.add(self, MeshKit.cylinder(RADIUS, RADIUS, THICKNESS, SEGMENTS), rim, Vector3(0, THICKNESS / 2.0, 0))
 	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var top := MeshKit.add(self, MeshKit.cylinder(RADIUS * 0.86, RADIUS * 0.86, 0.002, 40), face,
-		Vector3(0, THICKNESS + 0.001, 0))
+	var face_radius := RADIUS * FACE_INSET
+	var top := MeshKit.add(self, MeshKit.cylinder(face_radius, face_radius, FACE_THICKNESS, SEGMENTS), face,
+		Vector3(0, THICKNESS + FACE_GAP, 0))
 	top.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var letter := Label3D.new()
 	letter.text = "D"
@@ -38,7 +43,7 @@ func _init() -> void:
 	letter.double_sided = false
 	# 平躺在顶面上:字面朝上,字头朝 −Z(本机视角正立)
 	letter.rotation_degrees = Vector3(-90, 0, 0)
-	letter.position = Vector3(0, THICKNESS + 0.002 + LETTER_LIFT, 0)
+	letter.position = Vector3(0, THICKNESS + FACE_THICKNESS + LETTER_LIFT, 0)
 	add_child(letter)
 
 
