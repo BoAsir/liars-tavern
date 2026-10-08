@@ -1,15 +1,15 @@
 extends RefCounted
-# 性能预算:按机位列出各项统计的上限(子项目①发版验收,见 2026-10-07-visual-overhaul-p1-foundation.md「① 发版验收」),
+# 性能预算:按机位列出各项统计的上限(四个子项目全部完成后的总预算,见 2026-10-07-visual-overhaul-design.md §4.1),
 # 性能探针 --assert-budget 据此核对。tools/ 不进导出包,所以不声明 class_name,用 preload 取用。
 
-const FRAME_MS := 9.7     # M3、1080p、游戏实际渲染配置(RenderBudget),不得比改造前差
-const CPU_MS := 0.8       # CPU 渲染线程
+const FRAME_MS := 10.0    # M3、1080p、游戏实际渲染配置(RenderBudget)
+const CPU_MS := 1.0       # CPU 渲染线程
 const MAX_LIGHTS := 16
-const OTHER_VIEW_DRAW_CALLS := 500
+const OTHER_VIEW_DRAW_CALLS := 900
 
 const LIMITS := {
-	"seat": {"draw_calls": 450, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
-	"menu": {"draw_calls": 470, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"seat": {"draw_calls": 700, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"menu": {"draw_calls": 800, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"opponent": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"closeup": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"gun": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},

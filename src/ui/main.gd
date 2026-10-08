@@ -53,6 +53,7 @@ func _ready() -> void:
 	Net.returned_to_lobby.connect(_show_lobby)
 	Net.left_lobby.connect(_back_to_menu)
 	Net.game_started.connect(_show_table)
+	RoomTextures.build(self)   # 墙地噪声与墙饰图集(不 await:与牌面共用等待帧,烘好后材质自动换图)
 	await CardFaces.build(self)
 	await MeshForge.wait_prebuilt(get_tree())
 	Card3D.refresh_materials()
@@ -98,6 +99,7 @@ func _exit_tree() -> void:
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()
 	PatronAntics.clear_cache()
+	RoomTextures.clear()
 
 
 static func resolve_species(path: String, args: PackedStringArray = OS.get_cmdline_user_args()) -> int:

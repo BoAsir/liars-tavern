@@ -12,6 +12,7 @@ const PATRON_SHADER := preload("res://src/world/shaders/patron.gdshader")
 const PATRON_EYE_SHADER := preload("res://src/world/shaders/patron_eye.gdshader")
 const PROP_SHADER := preload("res://src/world/shaders/prop.gdshader")
 const BOTTLE_SHADER := preload("res://src/world/shaders/bottle_glass.gdshader")
+const DECOR_SHADER := preload("res://src/world/shaders/decor.gdshader")
 
 # 木材预设:颜色 + 纹理参数
 const WOOD_PRESETS := {
@@ -19,16 +20,26 @@ const WOOD_PRESETS := {
 		"color_dark": Color(0.075, 0.05, 0.035), "color_light": Color(0.25, 0.165, 0.105),
 		"scale": 1.0, "ring_frequency": 7.0, "grain_axis": 0, "across_axis": 2,
 		"plank_width": 0.22, "plank_length": 2.1, "roughness_base": 0.7, "wear": 0.8,
+		# v2:逐板色差、倒角、钉头、酒渍;牌桌一圈和门口到吧台、壁炉前的走道踩得发亮
+		"plank_tint": 0.16, "bevel": 1.0, "nails": 1.0, "stains": 0.8,
+		"wear_ring": Vector4(0.0, -0.05, 2.15, 0.35), "wear_seg_a": Vector4(-0.35, 4.35, -0.3, 1.8),
+		"wear_seg_b": Vector4(-1.0, -1.85, -1.5, -3.1),
+		"stain_focus_a": Vector3(-2.6, -0.6, 1.6), "stain_focus_b": Vector3(0.0, 0.0, 2.6),
 	},
-	"wall": {
+	"wainscot": {
+		# 框芯护墙板(部件空间:CUSTOM0 = 沿墙 u、离地 v、深度),四面墙与吧台台身共用一份
 		"color_dark": Color(0.07, 0.045, 0.03), "color_light": Color(0.2, 0.125, 0.08),
 		"scale": 1.0, "ring_frequency": 6.0, "grain_axis": 1, "across_axis": 0,
-		"plank_width": 0.18, "plank_length": 3.0, "roughness_base": 0.66, "wear": 0.5,
+		"roughness_base": 0.66, "wear": 0.5, "varnish": 0.15,
+		"pattern": 1, "panel": Vector3(0.08, 0.10, 0.045), "panel_pitch": 0.62, "panel_height": 1.1,
+		"bevel": 1.0, "plank_tint": 0.12,
 	},
-	"wall_side": {
-		"color_dark": Color(0.07, 0.045, 0.03), "color_light": Color(0.2, 0.125, 0.08),
-		"scale": 1.0, "ring_frequency": 6.0, "grain_axis": 1, "across_axis": 2,
-		"plank_width": 0.18, "plank_length": 3.0, "roughness_base": 0.66, "wear": 0.5,
+	"ceiling": {
+		# 天花板木板:板端都落在 z = 1.5k,藏在梁下
+		"color_dark": Color(0.06, 0.035, 0.02), "color_light": Color(0.18, 0.10, 0.05),
+		"scale": 1.0, "ring_frequency": 5.0, "grain_axis": 2, "across_axis": 0,
+		"plank_width": 0.18, "plank_length": 1.5, "stagger": 0.0, "bevel": 1.0, "plank_tint": 0.1,
+		"roughness_base": 0.8, "wear": 0.7,
 	},
 	"table": {
 		"color_dark": Color(0.07, 0.035, 0.02), "color_light": Color(0.22, 0.12, 0.06),
@@ -104,6 +115,7 @@ static func wood(preset: String, part_space := false) -> ShaderMaterial:
 			var value = WOOD_PRESETS[preset][key]
 			mat.set_shader_parameter(key, Vector3(value.r, value.g, value.b) if value is Color else value)
 		mat.set_shader_parameter("use_part_space", part_space)
+		mat.set_shader_parameter("surface_noise", SurfaceNoise.texture())
 		return mat)
 
 
@@ -159,17 +171,69 @@ static func stone(kind: String) -> ShaderMaterial:
 	return _cached("stone:" + kind, func():
 		var mat := ShaderMaterial.new()
 		mat.shader = STONE_SHADER
+		mat.set_shader_parameter("surface_noise", SurfaceNoise.texture())
 		match kind:
 			"fireplace":
-				mat.set_shader_parameter("block_size", 0.22)
+				# 行高 0.2、块宽 0.32,网格原点对齐壁炉外框左下前角:砖面边上没有细条
+				mat.set_shader_parameter("block_size", RoomLayout.FIRE_COURSE)
+				mat.set_shader_parameter("grid_origin", RoomLayout.FIRE_GRID_ORIGIN)
 				mat.set_shader_parameter("soot", 0.9)
 				mat.set_shader_parameter("soot_height", 1.4)
 			"plaster":
-				mat.set_shader_parameter("color_a", Vector3(0.3, 0.27, 0.23))
-				mat.set_shader_parameter("color_b", Vector3(0.19, 0.17, 0.15))
-				mat.set_shader_parameter("soot", 0.35)
-				mat.set_shader_parameter("soot_height", 3.6)
+				mat.set_shader_parameter("color_a", Vector3(0.31, 0.275, 0.23))
+				mat.set_shader_parameter("color_b", Vector3(0.19, 0.165, 0.14))
+				mat.set_shader_parameter("brick_amount", 0.3)
+				mat.set_shader_parameter("crack_amount", 0.5)
+				mat.set_shader_parameter("rail_y", RoomLayout.RAIL_TOP)
+				mat.set_shader_parameter("ceiling_y", Tavern.ROOM_HEIGHT)
+				mat.set_shader_parameter("top_soot", 0.45)
+				var halos := []
+				for sconce in Tavern.SCONCES:
+					halos.append(Vector4(sconce[0].x, sconce[0].y + 0.05, sconce[0].z, 0.0))
+				mat.set_shader_parameter("halos", halos)
+				mat.set_shader_parameter("halo_count", halos.size())
 		return mat)
+
+
+static func decor() -> ShaderMaterial:
+	# 墙饰、外景、烟熏镜、地毯、布料、余烬共用一份(模式写在顶点 UV2.x 上,可以跨物件合并)
+	return _cached("decor", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = DECOR_SHADER
+		mat.set_shader_parameter("atlas", DecorAtlas.texture())
+		mat.set_shader_parameter("surface_noise", SurfaceNoise.texture())
+		mat.set_shader_parameter("rug_sizes", RoomLayout.rug_sizes())
+		mat.set_shader_parameter("mirror_size", RoomLayout.MIRROR_SIZE)
+		return mat)
+
+
+static func lut() -> GradientTexture1D:
+	# 暖色 1D 调色表:暗部微冷、高光微暖,高光不提亮(Environment.adjustment_color_correction,逐通道查表)
+	return _cached("lut", func():
+		var gradient := Gradient.new()
+		gradient.offsets = PackedFloat32Array([0.0, 0.18, 0.5, 0.82, 1.0])
+		gradient.colors = PackedColorArray([Color(0.0, 0.004, 0.018), Color(0.170, 0.178, 0.196),
+			Color(0.505, 0.497, 0.478), Color(0.835, 0.815, 0.775), Color(1.0, 0.985, 0.95)])
+		var tex := GradientTexture1D.new()
+		tex.gradient = gradient
+		tex.width = 256
+		return tex)
+
+
+static func decal_soft() -> GradientTexture2D:
+	# 接地贴花:中心 alpha 0.7 的径向黑色渐变
+	return _cached("decal_soft", func():
+		var gradient := Gradient.new()
+		gradient.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+		gradient.colors = PackedColorArray([Color(0, 0, 0, 0.7), Color(0, 0, 0, 0.45), Color(0, 0, 0, 0.0)])
+		var tex := GradientTexture2D.new()
+		tex.gradient = gradient
+		tex.width = 64
+		tex.height = 64
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.0, 0.5)
+		return tex)
 
 
 static func flame() -> ShaderMaterial:

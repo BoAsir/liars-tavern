@@ -3,7 +3,10 @@ extends RefCounted
 # tools/ 不进导出包,所以不声明 class_name,用 preload 取用。
 
 const NAMES := ["seat", "selfshot", "gun", "menu", "overhead", "fireplace", "bar", "window", "closeup", "opponent",
-	"lineup_front", "lineup_back", "lineup_heads", "lineup_left", "lineup_right"]
+	"lineup_front", "lineup_back", "lineup_heads", "lineup_left", "lineup_right",
+	"focus0", "focus90", "focus180", "focus270", "focus120", "focus240", "door", "corner", "corner_front"]
+# 特写机位(复刻 TableWorld.focus_view:镜头在桌心斜上方、偏向座位左侧,看向座位上的头):名字 -> 座位角(度)
+const FOCUS := {"focus0": 0.0, "focus90": 90.0, "focus180": 180.0, "focus270": 270.0, "focus120": 120.0, "focus240": 240.0}
 
 
 static func place(rig: CameraRig, view: String) -> bool:
@@ -67,6 +70,18 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(-1.56, 1.35, 3.1), Vector3(-1.56, 1.0, 1.5))
 		"lineup_right":
 			rig.snap(Vector3(1.56, 1.35, 3.1), Vector3(1.56, 1.0, 1.5))
+		"door":
+			rig.snap(Vector3(0.9, 1.55, 1.0), Vector3(-0.35, 1.25, 4.4))
+		"corner":
+			rig.snap(Vector3(1.0, 1.6, -0.6), Vector3(3.7, 0.55, -3.5))
+		"corner_front":
+			rig.snap(Vector3(0.8, 1.7, 1.2), Vector3(3.5, 0.7, 3.9))
 		_:
-			return false
+			if not FOCUS.has(view):
+				return false
+			var angle := deg_to_rad(FOCUS[view])
+			var dir := SeatLayout.direction(angle)
+			var head := dir * (SeatLayout.SEAT_RADIUS + 0.10) + Vector3(0, 1.27, 0)
+			var pos := dir * 0.15 + Vector3(0, 1.42, 0) - Vector3.UP.cross(dir) * 0.35
+			rig.snap(pos, head + Vector3(0, -0.08, 0))
 	return true

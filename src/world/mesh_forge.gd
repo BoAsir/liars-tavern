@@ -23,6 +23,7 @@ var rough := 0.7
 var metal := 0.0
 var part_space := false
 var part_basis := Basis.IDENTITY   # part_space 时先把部件局部坐标转一下再写(竖直的车削件让木纹顺着长度走)
+var part_origin := Vector3.ZERO    # part_space 时再加的偏移:CUSTOM0.xyz = part_basis × 局部顶点 + part_origin(护墙板按墙段写 u/v)
 var seed := 0.0
 var write_custom := false     # true:CUSTOM0 写 custom(酒客网格:材质类, 摆动权重, 种子, 透光)
 var custom := Vector4.ZERO
@@ -464,6 +465,107 @@ func lathe(profile: PackedVector2Array, segments := 24, creases := PackedInt32Ar
 	return _append(points, normals, indices, t)
 
 
+func quad(size: Vector2, rect := Rect2(0, 0, 1, 1), t := Transform3D.IDENTITY, curl := 0.0, seg := 1) -> MeshForge:
+	# 贴图面片:XY 平面、朝 +Z、中心在原点;UV 按 rect 铺(u 向右、v 向下,同图集像素方向)。
+	# curl > 0 时下沿向 +Z 卷起(海报卷边):离下沿越近抬得越高,最大 curl 米;seg 是竖向分段数
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var rows := maxi(seg, 1)
+	for j in rows + 1:
+		var v := float(j) / rows            # 0 = 上沿,1 = 下沿
+		var lift := curl * pow(maxf(v - 0.55, 0.0) / 0.45, 2.0)
+		var slope := curl * 2.0 * maxf(v - 0.55, 0.0) / (0.45 * 0.45) / maxf(size.y, 1e-6)
+		var n := Vector3(0.0, -slope, 1.0).normalized()
+		for i in 2:
+			points.append(Vector3((float(i) - 0.5) * size.x, (0.5 - v) * size.y, lift))
+			normals.append(n)
+			uvs.append(Vector2(rect.position.x + rect.size.x * i, rect.position.y + rect.size.y * v))
+			if j > 0 and i > 0:
+				var a := (j - 1) * 2
+				indices.append_array([a, a + 1, a + 2, a + 1, a + 3, a + 2])
+	return _append(points, normals, indices, t, PackedColorArray(), PackedFloat32Array(), uvs)
+
+
+func extrude_x(profile: PackedVector2Array, length: float, t := Transform3D.IDENTITY, caps := Vector2i(1, 1)) -> MeshForge:
+	# 截面沿 X 挤出(线脚、托架、门套;沿 Z、带倒角的见 extrude):profile 是局部 (z, y) 平面上的闭合多边形(逆时针,从 +X 看),
+	# 沿局部 X 从 -length/2 挤到 +length/2;侧面每条边各自一组法线(硬边),两端按多边形三角化封口
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var n := profile.size()
+	if n < 3:
+		return self
+	var area := 0.0
+	for k in n:
+		var a := profile[k]
+		var b := profile[(k + 1) % n]
+		area += a.x * b.y - b.x * a.y
+	var orient := 1.0 if area > 0.0 else -1.0   # 顺时针给的截面也按外法线算
+	var hx := length * 0.5
+	for k in n:
+		var a := profile[k]
+		var b := profile[(k + 1) % n]
+		var d := b - a
+		if d.length_squared() < 1e-14:
+			continue
+		var nn := Vector3(0.0, -d.x, d.y).normalized() * orient   # (z, y) 边的外法线:z 分量 = dy,y 分量 = -dz
+		var base := points.size()
+		points.append_array([Vector3(-hx, a.y, a.x), Vector3(hx, a.y, a.x), Vector3(-hx, b.y, b.x), Vector3(hx, b.y, b.x)])
+		normals.append_array([nn, nn, nn, nn])
+		if orient > 0.0:
+			indices.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+		else:
+			indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+	var tris := Geometry2D.triangulate_polygon(profile)
+	for end in 2:
+		if (end == 0 and caps.x == 0) or (end == 1 and caps.y == 0):
+			continue
+		var x := -hx if end == 0 else hx
+		var nn := Vector3(-1.0 if end == 0 else 1.0, 0.0, 0.0)
+		var base := points.size()
+		for p in profile:
+			points.append(Vector3(x, p.y, p.x))
+			normals.append(nn)
+		for k in range(0, tris.size(), 3):
+			# 逐个三角形按封口法线定绕序(与 Godot 基础体同向:叉积背向法线)
+			var i0 := tris[k]
+			var i1 := tris[k + 1]
+			var i2 := tris[k + 2]
+			var face := (points[base + i1] - points[base + i0]).cross(points[base + i2] - points[base + i0])
+			if face.dot(nn) > 0.0:
+				indices.append_array([base + i0, base + i2, base + i1])
+			else:
+				indices.append_array([base + i0, base + i1, base + i2])
+	return _append(points, normals, indices, t)
+
+
+func grid(rows: Array, t := Transform3D.IDENTITY) -> MeshForge:
+	# 网格面(布料、窗帘):rows 是若干行等长的 PackedVector3Array(自上而下),相邻两行连成四边形带;
+	# 法线按相邻点差分,朝向 (列方向 × 行方向)
+	var nr := rows.size()
+	if nr < 2:
+		return self
+	var nc: int = rows[0].size()
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for r in nr:
+		var row: PackedVector3Array = rows[r]
+		for c in nc:
+			var du: Vector3 = row[mini(c + 1, nc - 1)] - row[maxi(c - 1, 0)]
+			var dv: Vector3 = rows[mini(r + 1, nr - 1)][c] - rows[maxi(r - 1, 0)][c]
+			var n := du.cross(dv)
+			points.append(row[c])
+			normals.append(n.normalized() if n.length_squared() > 1e-14 else Vector3.UP)
+			if r > 0 and c > 0:
+				var a := (r - 1) * nc + c - 1
+				var b := r * nc + c - 1
+				indices.append_array([a, b, a + 1, a + 1, b, b + 1])
+	return _append(points, normals, indices, t)
+
+
 # —— 有机形体 ——
 
 func blob(center: Vector3, shapes: Array, seg := 40, rings := 24, k := 0.03, t := Transform3D.IDENTITY) -> MeshForge:
@@ -819,7 +921,8 @@ static func _signed_area(pts: PackedVector2Array) -> float:
 
 func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array, t: Transform3D,
 		colors := PackedColorArray(), customs := PackedFloat32Array(), uvs := PackedVector2Array()) -> MeshForge:
-	# colors / customs 可选:逐顶点颜色(sRGB,a = AO)与逐顶点 CUSTOM0(每顶点 4 个数);不给就用当前绘制状态
+	# colors / customs / uvs 可选:逐顶点颜色(sRGB,a = AO)、逐顶点 CUSTOM0(每顶点 4 个数)与 UV;不给就用当前绘制状态。
+	# 一个 surface 里只要有部件给了 UV 或发光,整个 surface 都写 UV(没给的部件补发光值或 0)
 	var xform: Transform3D = _stack.back() * t
 	var det := xform.basis.determinant()
 	if absf(det) < 1e-9:
@@ -847,7 +950,7 @@ func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: P
 			if not customs.is_empty():
 				s.custom0.append_array([customs[k * 4], customs[k * 4 + 1], customs[k * 4 + 2], customs[k * 4 + 3]])
 			elif part_space:
-				var q := part_basis * points[k]
+				var q := part_basis * points[k] + part_origin
 				s.custom0.append_array([q.x, q.y, q.z, seed])
 			elif write_custom:
 				s.custom0.append_array([custom.x, custom.y, custom.z, custom.w])
