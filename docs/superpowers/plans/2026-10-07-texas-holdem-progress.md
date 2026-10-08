@@ -53,7 +53,7 @@
 - `PokerSession._named` 改为生成新字典(不变性);`public_view` 去掉只服务测试的 `_table == null` 分支。
 - 规格 §4.2 伪代码补上 `_schedule_hand_timer` 的「只提前不推迟」夹紧,与正文一致。
 - 新测试(4):会话拒收的迟到者;输光者在选择时间里断线则下一手提前;输光 3 秒后再领(§8);`_named` 不改原事件。全量 822 通过,`tools/lan_smoke.sh` 通过。
-- 未做:`network_manager.gd` 740 行(目标 400、上限 800),任务 8 若再长就把视线转发或德州意图入口抽成 RefCounted。
+- 未做:`network_manager.gd` 749 行(目标 400、上限 800),任务 8 若再长就把视线转发或德州意图入口抽成 RefCounted。
 
 ## 接手须知(当前)
 
