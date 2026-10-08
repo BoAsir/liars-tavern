@@ -6,6 +6,7 @@ extends Node3D
 const BARREL_LENGTH := 0.15
 const DRUM_POS := Vector3(0, 0.045, -0.035)
 const MUZZLE_POS := Vector3(0, 0.058, -0.235)
+const REST_HALF_WIDTH := 0.026   # 侧放时离桌面的高度:转轮半径 0.025 + 1 mm(槽线外缘也在 0.026)
 # 合批:机身 / 转轮 / 击锤各一份共享网格(所有左轮共用);钢、铁、黄铜走顶点 PBR(prop 材质),木握把单独一个 surface
 const STEEL := [Color(0.30, 0.31, 0.34), 0.38, 0.70]  # [sRGB 颜色, 粗糙度, 金属度],枪钢:原来太黑,背景又暗,枪读成一团黑
 const BRASS := [Color(0.78, 0.56, 0.24), 0.32, 1.0]   # 同 WorldMaterials.brass()
@@ -50,7 +51,8 @@ static func _paint(f: MeshForge, m: Array) -> void:
 
 
 static func _chamber_offset(i: int) -> Vector3:
-	var a := TAU * i / Revolver.CHAMBERS
+	# 第一个弹膛在转轮 12 点位,与枪管同轴
+	var a := PI / 2.0 + TAU * i / Revolver.CHAMBERS
 	return Vector3(cos(a), sin(a), 0) * 0.0145
 
 
@@ -90,7 +92,7 @@ static func drum_recipe(f: MeshForge) -> void:
 		f.cylinder(0.0055, 0.0055, 0.004, 10, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, -0.022), Vector3(90, 0, 0)))
 		_paint(f, BRASS)
 		f.cylinder(0.003, 0.003, 0.004, 8, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, 0.022), Vector3(90, 0, 0)))
-		var a := TAU * i / Revolver.CHAMBERS + PI / Revolver.CHAMBERS
+		var a := PI / 2.0 + TAU * i / Revolver.CHAMBERS + PI / Revolver.CHAMBERS
 		_paint(f, IRON)
 		f.box(Vector3(0.004, 0.004, 0.032), xf.call(Vector3(cos(a), sin(a), 0) * 0.024))
 
@@ -104,9 +106,11 @@ static func hammer_recipe(f: MeshForge) -> void:
 
 
 func spin_drum(duration: float, turns := 2.5) -> Tween:
+	# 转整数格停下,总有一个弹膛对准枪管(转几格与子弹位置无关,所有弹膛外观一样)
+	var step := TAU / Revolver.CHAMBERS
+	var target := snappedf(drum.rotation.z, step) + step * roundi(turns * Revolver.CHAMBERS)
 	var tween := create_tween()
-	tween.tween_property(drum, "rotation:z", drum.rotation.z + TAU * turns, duration) \
-		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tween.tween_property(drum, "rotation:z", target, duration).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	return tween
 
 

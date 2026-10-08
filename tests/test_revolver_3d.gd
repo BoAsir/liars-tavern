@@ -35,3 +35,22 @@ func test_chambers_are_markers():
 	add_child_autofree(gun)
 	for node in gun.drum.get_children().filter(func(n): return n.name.begins_with("Chamber")):
 		assert_true(node is Marker3D, node.name)
+
+
+func test_spinning_stops_on_a_whole_chamber():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	await gun.spin_drum(0.05, 2.37).finished
+	await gun.cock_hammer(0.05).finished
+	var step := TAU / Revolver.CHAMBERS
+	var rest := fposmod(gun.drum.rotation.z, step)
+	assert_true(rest < 0.001 or step - rest < 0.001, "停在整格(余 %.4f)" % rest)
+
+
+func test_a_chamber_lines_up_with_the_barrel():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	var chamber: Marker3D = gun.drum.get_node("Chamber1")
+	var p := gun.to_local(chamber.global_position)
+	assert_almost_eq(p.x, 0.0, 0.0005)
+	assert_almost_eq(p.y, Revolver3D.MUZZLE_POS.y, 0.002)

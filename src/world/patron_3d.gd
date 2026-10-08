@@ -31,7 +31,8 @@ const SLAM_SPREAD := 0.08
 # 出牌手势:双手抬离桌面、朝桌心前推(座位坐标)
 const REACH_POINT := Vector3(0.06, SeatLayout.TABLE_TOP + 0.14, -0.75)
 const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
-const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
+const HAND_GUN_HEAD := Vector3(0.355, 0.85, -0.05)   # 举枪手位:枪口抵在太阳穴外(枪口到头心 ≈ 0.18,头半径 0.17)
+const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
 # 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线。
@@ -416,8 +417,8 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	if gun != null and table_parent != null:
 		gun.reparent(table_parent, true)
 		var drop := create_tween()
-		var landing := Vector3(gun.global_position.x, SeatLayout.TABLE_TOP + 0.02, gun.global_position.z)
-		drop.tween_property(gun, "global_position", landing.lerp(global_position, 0.25), 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+		var landing := global_transform * Vector3(GUN_DROP.x, SeatLayout.FELT_TOP + Revolver3D.REST_HALF_WIDTH, GUN_DROP.z)
+		drop.tween_property(gun, "global_position", landing, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 		drop.parallel().tween_property(gun, "rotation", Vector3(0, gun.rotation.y + 1.8, PI / 2.0), 0.45)
 	var fall := create_tween().set_parallel()
 	fall.tween_property(body, "rotation", Vector3(0.55, 0.15, -0.5), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
