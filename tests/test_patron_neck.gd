@@ -1,5 +1,5 @@
 extends GutTest
-# 弹簧脖子:头按座位坐标的水平偏移伸出去(越远越往上探),脖子自动拉长连着头;
+# 弹簧脖子:头按座位坐标的水平偏移平着伸出去(高度不变),脖子自动拉长连着头;
 # 追到目标就停稳(不过冲);伸出距离有上限;出局时缩回。
 
 
@@ -31,21 +31,38 @@ func _head_pivot() -> Vector3:
 	return patron.transform.affine_inverse() * patron.head.global_position
 
 
-func test_head_moves_forward_and_rises_when_neck_stretches():
+func test_head_moves_flat_when_neck_stretches():
 	await wait_seconds(SETTLE)
 	var rest := _seat_head()
 	patron.set_neck_target(Vector3(0, 0, -0.4))
 	await wait_seconds(SETTLE)
 	var moved := _seat_head() - rest
 	assert_almost_eq(moved.z, -0.4, EPS, "往前(朝桌心)伸出 0.4 米")
-	assert_almost_eq(moved.y, 0.4 * Patron.NECK_RISE, EPS, "伸得越远头抬得越高")
+	assert_almost_eq(moved.y, 0.0, EPS, "头的高度不变")
 	assert_almost_eq(moved.x, 0.0, EPS)
+
+
+func test_head_height_ignores_vertical_target():
+	# 目标里带了高度(比如旧版本发来的同步)也只取水平分量
+	await wait_seconds(SETTLE)
+	var rest := _seat_head()
+	patron.set_neck_target(Vector3(0.6, 0.5, -0.6))
+	await wait_seconds(SETTLE)
+	assert_almost_eq(_seat_head().y, rest.y, EPS, "伸到最远头也不抬高")
 
 
 func test_neck_mesh_reaches_the_head():
 	patron.set_neck_target(Vector3(0.3, 0, -0.3))
 	await wait_seconds(SETTLE)
 	assert_lt(_neck_top().distance_to(_head_pivot()), 0.005, "脖子顶端始终连着头")
+
+
+func test_head_does_not_go_behind_its_rest_position():
+	# 头只能往前、往两侧探:往后(朝越肩镜头)会挡在镜头和自己的手牌之间
+	patron.set_neck_target(Vector3(0.3, 0, 0.5))
+	await wait_seconds(SETTLE)
+	assert_almost_eq(patron.neck_offset().z, 0.0, EPS, "不往后探")
+	assert_almost_eq(patron.neck_offset().x, 0.3, EPS, "横向照常")
 
 
 func test_reach_is_limited():

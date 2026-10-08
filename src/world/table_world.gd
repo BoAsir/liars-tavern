@@ -8,10 +8,10 @@ extends Node3D
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
 const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
-# 越肩机位(规格 §5.5):座位外 0.85 米、右移 0.55、高 1.92;骗子酒馆桌(座位半径 1.25)正好是原来的 2.1 米
-const THIRD_PERSON_BEHIND := 0.85
-const THIRD_PERSON_HEIGHT := 1.92
-const THIRD_PERSON_SIDE := 0.55
+# 越肩机位(规格 §5.5):座位外 BEHIND 米、右移 SIDE、高 HEIGHT;骗子酒馆桌(座位半径 1.25)正好是上游拉远后的 2.45 米
+const THIRD_PERSON_BEHIND := 1.2
+const THIRD_PERSON_HEIGHT := 2.05
+const THIRD_PERSON_SIDE := 0.6
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
 # 观战与等待厅机位 [位置, 看向]:骗子酒馆的数值不变;德州桌放大后另用一组(规格 §5.5),

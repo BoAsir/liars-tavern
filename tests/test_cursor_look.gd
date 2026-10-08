@@ -2,7 +2,7 @@ extends GutTest
 # SeatGaze 的纯函数:光标 → 视线目标(射线落在桌面上看桌面那一点,否则看射线上远处一点);WASD → 脖子伸出的目标偏移。
 
 
-const SEAT_CAMERA := Vector3(0.55, 1.92, 2.1)
+const SEAT_CAMERA := Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, SeatLayout.SEAT_RADIUS + TableWorld.THIRD_PERSON_BEHIND)
 
 
 func test_ray_onto_the_table_looks_at_the_tabletop_point():
@@ -53,6 +53,20 @@ func test_neck_input_stays_when_released():
 
 func test_neck_input_does_not_go_backward():
 	# 头只能往前、往两侧探:往后(朝越肩镜头)会挡在镜头和自己的手牌之间(同 feature/liars-tavern-mvp 的 eadc745)
+	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, 1), 0.5)
+	assert_eq(input, Vector3.ZERO, "在原位按 S 不往后探")
+	input = SeatGaze.next_neck_input(input, Vector3(0, 0, -1), 0.1)
+	assert_almost_eq(input.z, -SeatGaze.NECK_SPEED * 0.1, 0.0001, "随后按 W 立刻往前,不用先抵消攒下的后退量")
+
+
+func test_neck_input_back_key_stops_at_rest():
+	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(1, 0, -1), 0.4)
+	input = SeatGaze.next_neck_input(input, Vector3(0, 0, 1), 2.0)
+	assert_almost_eq(input.z, 0.0, 0.0001, "按 S 收回到原位就停")
+	assert_gt(input.x, 0.0, "横向位置保留")
+
+
+func test_neck_input_does_not_go_backward():
 	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, 1), 0.5)
 	assert_eq(input, Vector3.ZERO, "在原位按 S 不往后探")
 	input = SeatGaze.next_neck_input(input, Vector3(0, 0, -1), 0.1)

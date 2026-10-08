@@ -8,10 +8,6 @@ extends Node
 
 const CURSOR_LOOK_FAR := 4.0    # 光标指向桌面以上时,取射线上这么远的一点作为视线目标(米)
 const NECK_SPEED := 0.9         # 按住 WASD 时头部移动的速度(米/秒);松开就停在原处
-# 头只能往前、往两侧探,不往后(+Z,朝越肩镜头):往后会挡在镜头和自己的手牌之间。
-# 与 feature/liars-tavern-mvp 的 eadc745 里 Patron.clamp_neck 的规则相同;合并后这里改为直接调 Patron.clamp_neck,
-# 发给别人的探头偏移才始终等于自己的头真正停住的位置(test_seat_gaze 核对这一点)
-const NECK_MAX_BACK := 0.0
 # WASD → 座位坐标的方向(-Z 朝桌心,+X 是越肩镜头里的右边);按物理键位,换键盘布局也在同一位置
 const NECK_KEYS := {KEY_W: Vector3(0, 0, -1), KEY_S: Vector3(0, 0, 1), KEY_A: Vector3(-1, 0, 0), KEY_D: Vector3(1, 0, 0)}
 
@@ -105,8 +101,8 @@ static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Ve
 	# 按住方向键时头朝那个方向持续移动(斜向不更快),不往后、最远到 NECK_REACH;松开就停在原处,按反方向收回到原位就停
 	if held == Vector3.ZERO:
 		return current
-	var moved := current + held.normalized() * NECK_SPEED * delta
-	return Vector3(moved.x, 0.0, minf(moved.z, NECK_MAX_BACK)).limit_length(Patron.NECK_REACH)
+	# 范围由 Patron.clamp_neck 统一限定(不往后、最远 NECK_REACH):发给别人的探头偏移就是自己的头真正停住的位置
+	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta)
 
 
 static func cursor_look_target(origin: Vector3, direction: Vector3, table_radius := SeatLayout.TABLE_RADIUS) -> Vector3:
