@@ -32,7 +32,7 @@ float luma(vec3 c) {
 
 // —— 纳瓦霍地毯 ——
 // 甘纳多配色(sRGB,用前转线性)
-const vec3 RUG_RED = vec3(0.32, 0.075, 0.05);
+const vec3 RUG_RED = vec3(0.29, 0.08, 0.055);
 const vec3 RUG_CHAR = vec3(0.07, 0.06, 0.055);
 const vec3 RUG_CREAM = vec3(0.56, 0.49, 0.37);
 const vec3 RUG_TAUPE = vec3(0.30, 0.25, 0.20);
@@ -59,6 +59,9 @@ vec3 rug_color(vec2 uv, vec2 size, float fringe) {
 			col = RUG_CREAM;
 		}
 	} else {
+		// 红底上隔 0.36 m 一道暗色细纹,打散大块平涂
+		float band = abs(fract((q.y - 0.18) / 0.36) - 0.5) * 0.36;
+		col = band < 0.012 ? RUG_RED * 0.62 : RUG_RED;
 		// 中间沿长轴排 3 个阶梯菱形
 		vec2 c = size * 0.5;
 		float span = (size.y - 0.36) / 3.0;

@@ -122,7 +122,7 @@ const PROPS := {
 	"fireplace": [Vector3(-2.62, 0.0, -4.40), Vector3(-0.38, HEIGHT, -3.92)],
 	"mantel": [Vector3(-2.78, 1.4, -4.40), Vector3(-0.22, 1.6, -3.86)],
 	"mantel_items": [Vector3(-2.55, 1.6, -4.25), Vector3(-0.45, 1.95, -3.95)],
-	"skull": [Vector3(-2.02, 2.45, -4.40), Vector3(-0.98, 2.80, -3.86)],
+	"skull": [Vector3(-2.02, 2.33, -4.40), Vector3(-0.98, 2.90, -3.86)],
 	"hearth": [Vector3(-2.78, 0.0, -4.24), Vector3(-0.22, 0.06, -3.12)],
 	"log_pile": [Vector3(-3.35, 0.0, -4.35), Vector3(-2.9, 0.62, -3.85)],
 	"fire_tools": [Vector3(-0.22, 0.0, -4.32), Vector3(-0.02, 0.85, -4.08)],

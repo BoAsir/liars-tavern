@@ -155,15 +155,15 @@ static func _skull(f: MeshForge) -> void:
 	var bone: Color = RoomKit.BONE[0]
 	RoomKit.paint(f, RoomKit.BONE)
 	f.blob(c, [
-		[Vector3(0, 0.04, 0.0), Vector3(0.10, 0.08, 0.06), bone],
-		[Vector3(0, -0.07, 0.035), Vector3(0.065, 0.10, 0.045), bone],
-		[Vector3(0, -0.17, 0.05), Vector3(0.05, 0.05, 0.04), bone],
-		[Vector3(0.07, 0.0, 0.03), Vector3(0.04, 0.04, 0.035), bone, "mirror"],
-	], 28, 16, 0.03)
+		[Vector3(0, 0.05, 0.0), Vector3(0.125, 0.10, 0.07), bone],
+		[Vector3(0, -0.085, 0.04), Vector3(0.08, 0.125, 0.055), bone],
+		[Vector3(0, -0.21, 0.06), Vector3(0.062, 0.062, 0.05), bone],
+		[Vector3(0.085, 0.0, 0.035), Vector3(0.05, 0.05, 0.04), bone, "mirror"],
+	], 28, 16, 0.035)
 	RoomKit.paint(f, RoomKit.BLACK)
 	for s in [-1, 1]:
-		f.sphere(0.024, 10, MeshForge.xf(c + Vector3(s * 0.058, 0.0, 0.06), Vector3.ZERO, Vector3(1, 1.2, 0.6)))
-		f.sphere(0.011, 8, MeshForge.xf(c + Vector3(s * 0.02, -0.2, 0.085)))
+		f.sphere(0.03, 10, MeshForge.xf(c + Vector3(s * 0.07, 0.0, 0.07), Vector3.ZERO, Vector3(1, 1.2, 0.6)))
+		f.sphere(0.013, 8, MeshForge.xf(c + Vector3(s * 0.025, -0.25, 0.105)))
 	RoomKit.paint(f, RoomKit.HORN)
 	for s in [-1, 1]:
 		var path := PackedVector3Array()

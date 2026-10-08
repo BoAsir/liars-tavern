@@ -145,7 +145,7 @@ static func stone(kind: String) -> ShaderMaterial:
 			"plaster":
 				mat.set_shader_parameter("color_a", Vector3(0.31, 0.275, 0.23))
 				mat.set_shader_parameter("color_b", Vector3(0.19, 0.165, 0.14))
-				mat.set_shader_parameter("brick_amount", 0.18)
+				mat.set_shader_parameter("brick_amount", 0.3)
 				mat.set_shader_parameter("crack_amount", 0.5)
 				mat.set_shader_parameter("rail_y", RoomLayout.RAIL_TOP)
 				mat.set_shader_parameter("ceiling_y", Tavern.ROOM_HEIGHT)

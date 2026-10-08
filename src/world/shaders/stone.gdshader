@@ -23,7 +23,7 @@ uniform float ceiling_y = 3.4;
 uniform float top_soot = 0.0;        // 天花板下的烟熏
 uniform vec4 halos[8];               // 壁灯熏痕中心 (x, y, z, 未用)
 uniform int halo_count = 0;
-uniform vec3 brick_color : source_color = vec3(0.34, 0.20, 0.14);
+uniform vec3 brick_color : source_color = vec3(0.30, 0.19, 0.14);
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -86,9 +86,10 @@ void fragment() {
 			vec2 bid = floor(bq);
 			vec2 bc = vec2((bid.x + 0.5 - mod(bid.y, 2.0) * 0.5) * 0.22, (bid.y + 0.5) * 0.075);
 			float bband = smoothstep(rail_y + 0.35, rail_y + 0.6, bc.y) * (1.0 - smoothstep(ceiling_y - 0.9, ceiling_y - 0.6, bc.y));
-			float pn_c = n_lo(bc * 0.9 + wall_seed + 21.0) * 0.75 + n_lo(bc * 3.1 + 2.0) * 0.25;
+			// 斑块用低频噪声:一片露出好几块砖,而不是零星一块
+			float pn_c = n_lo(bc * 0.55 + wall_seed + 21.0) * 0.8 + n_lo(bc * 2.0 + 2.0) * 0.2;
 			float open = step(0.0, pn_c - (1.0 - brick_amount) - (1.0 - bband) * 0.5);
-			float pn = n_lo(p * 0.9 + wall_seed + 21.0) * 0.75 + n_lo(p * 3.1 + 2.0) * 0.25;
+			float pn = n_lo(p * 0.55 + wall_seed + 21.0) * 0.8 + n_lo(p * 2.0 + 2.0) * 0.2;
 			float pm = pn - (1.0 - brick_amount) - (1.0 - band) * 0.5;
 			float lip = (1.0 - smoothstep(0.0, 0.05, abs(pm + 0.02))) * (1.0 - open);
 			vec2 bf = fract(bq);
