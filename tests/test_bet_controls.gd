@@ -150,6 +150,35 @@ func test_layout_fits_the_bottom_centre_budget():
 	assert_true(controls._slider.custom_minimum_size.x >= BetControls.SLIDER_WIDTH)
 
 
+func test_slider_track_is_visible_on_the_dark_panel():
+	# 游戏主题下滑条的轨道要有高度、要在深色面板上看得见(默认主题的轨道是深灰,看不见范围与当前位置)
+	controls.theme = UiTheme.theme()
+	controls.update(_pub(_legal()), ME)
+	var track: StyleBoxFlat = controls._slider.get_theme_stylebox("slider")
+	var fill: StyleBoxFlat = controls._slider.get_theme_stylebox("grabber_area")
+	assert_true(track.get_minimum_size().y >= 4.0, "轨道高度 %s" % track.get_minimum_size())
+	assert_true(track.bg_color.a >= 0.2 and track.bg_color.v >= 0.5, "轨道颜色 %s" % track.bg_color)
+	assert_true(fill.bg_color.v >= 0.7, "已选部分颜色 %s" % fill.bg_color)
+
+
+func test_a_new_street_with_the_same_legal_set_still_resets_the_amount():
+	# 新回合的判定不能只靠合法动作集合变了:翻牌圈大家都过牌,转牌圈又轮到我先手,合法动作一模一样,金额仍要回到最小
+	var legal := _legal({"to_call": 0, "call_amount": 0, "can_check": true, "min_raise_to": 20, "max_raise_to": 980})
+	var pub := _pub(legal, 0, [{"amount": 300, "eligible": [1, 2, 3]}], [0, 0, 0])
+	pub.merge({"hand": 3, "street": "flop", "current_pid": ME}, true)
+	assert_eq(BetControls.situation(pub, ME)["turn"], [3, "flop", ME])
+	controls.update(pub, ME)
+	controls.set_amount(300)
+	controls.update(pub, ME)
+	assert_eq(controls.amount(), 300, "同一回合的刷新(倒计时)保留调好的金额")
+	var next := pub.duplicate(true)
+	next["street"] = "turn"
+	controls.update(next, ME)
+	assert_eq(controls.amount(), 20, "新一条街:合法动作一样也回到最小")
+	var junk := {"actions": legal, "hand": "x", "street": 7, "current_pid": "me"}
+	assert_eq(BetControls.situation(junk, ME)["turn"], [null, null, null], "视图不可信:类型不对当空")
+
+
 # —— 快捷键 ——
 
 func test_hotkey_map():

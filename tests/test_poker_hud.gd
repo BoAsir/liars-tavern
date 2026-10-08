@@ -214,6 +214,26 @@ func test_nameplate_highlights_the_actor_and_dims_folded_or_spectating():
 	assert_true(plate.size.y <= PokerNameplate.MAX_SIZE.y, "两行:%s" % plate.size)
 
 
+func test_nameplate_info_line_is_not_trimmed_by_a_short_name():
+	# 第二行(筹码 + 状态)是铭牌存在的意义:名字比它短时宽度要跟着第二行走,而不是把第二行截成「2,65」
+	var plate := PokerNameplate.new("小熊")
+	add_child_autofree(plate)
+	plate.set_info(_player("active", {"stack": 960, "bet": 200}), "小盲", false)
+	await wait_process_frames(2)
+	assert_eq(plate._info.text, "960 · 下注 200")
+	var font: Font = plate._info.get_theme_font("font")
+	var needed := font.get_string_size(plate._info.text, HORIZONTAL_ALIGNMENT_LEFT, -1, PokerNameplate.INFO_FONT).x
+	assert_true(plate._info.size.x >= needed - 0.5, "第二行不截断:%s < %s" % [plate._info.size.x, needed])
+	assert_true(plate.size.x <= PokerNameplate.MAX_SIZE.x, "宽 %s" % plate.size)
+	assert_true(plate.size.y <= PokerNameplate.MAX_SIZE.y, "高 %s" % plate.size)
+	# 长名字 + 长状态:两行都省略,整体仍 ≤ 150
+	var long := PokerNameplate.new("一个名字非常非常长的客人")
+	add_child_autofree(long)
+	long.set_info(_player("active", {"stack": 5370, "bet": 200}), "D", true)
+	await wait_process_frames(2)
+	assert_true(long.size.x <= PokerNameplate.MAX_SIZE.x, "宽 %s" % long.size)
+
+
 # —— 布局预算(1280×720)——
 
 func _fill() -> void:
