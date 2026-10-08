@@ -6,6 +6,10 @@ extends Node3D
 const BARREL_LENGTH := 0.15
 const DRUM_POS := Vector3(0, 0.045, -0.035)
 const MUZZLE_POS := Vector3(0, 0.058, -0.235)
+# 合批:机身 / 转轮 / 击锤各一份共享网格(所有左轮共用);钢、铁、黄铜走顶点 PBR(prop 材质),木握把单独一个 surface
+const STEEL := [Color(0.16, 0.17, 0.2), 0.3, 0.92]    # [sRGB 颜色, 粗糙度, 金属度],枪钢
+const BRASS := [Color(0.78, 0.56, 0.24), 0.32, 1.0]   # 同 WorldMaterials.brass()
+const IRON := [Color(0.09, 0.09, 0.1), 0.55, 0.8]     # 同 WorldMaterials.iron()
 
 var drum: Node3D
 var hammer: Node3D
@@ -13,44 +17,81 @@ var muzzle: Marker3D
 
 
 func _init() -> void:
-	var steel := WorldMaterials.gunmetal()
-	var brass := WorldMaterials.brass()
-	var wood := WorldMaterials.wood("grip")
 	var body := MeshKit.pivot(self, Vector3.ZERO, "Body")
-	# 握把:略后倾的圆角木柄 + 底部金属护帽
-	MeshKit.add(body, MeshKit.capsule(0.016, 0.1), wood, Vector3(0, -0.02, 0.012), Vector3(-18, 0, 0), Vector3(1, 1, 1.35))
-	MeshKit.add(body, MeshKit.sphere(0.018, 12), steel, Vector3(0, -0.068, 0.028), Vector3.ZERO, Vector3(0.9, 0.5, 1.3))
-	# 机匣与顶梁
-	MeshKit.add(body, MeshKit.box(Vector3(0.026, 0.05, 0.075)), steel, Vector3(0, 0.04, -0.01))
-	MeshKit.add(body, MeshKit.box(Vector3(0.02, 0.012, 0.07)), steel, Vector3(0, 0.074, -0.04))
-	# 枪管 + 下护套 + 准星
-	MeshKit.add(body, MeshKit.cylinder(0.0085, 0.0085, BARREL_LENGTH, 16), steel,
-		Vector3(0, 0.058, -0.16), Vector3(90, 0, 0))
-	MeshKit.add(body, MeshKit.box(Vector3(0.012, 0.012, 0.09)), steel, Vector3(0, 0.046, -0.12))
-	MeshKit.add(body, MeshKit.box(Vector3(0.004, 0.009, 0.008)), brass, Vector3(0, 0.069, -0.228))
-	MeshKit.add(body, MeshKit.torus(0.0045, 0.0085, 16), brass, MUZZLE_POS + Vector3(0, 0, 0.004), Vector3(90, 0, 0))
-	# 扳机护圈与扳机
-	MeshKit.add(body, MeshKit.torus(0.016, 0.02, 24), steel, Vector3(0, 0.0, -0.022), Vector3(0, 0, 90),
-		Vector3(1, 1.0, 1.25))
-	MeshKit.add(body, MeshKit.box(Vector3(0.004, 0.022, 0.006)), brass, Vector3(0, 0.005, -0.02), Vector3(-12, 0, 0))
-	# 转轮:弹膛孔(与规则的膛数一致)+ 槽线,绕枪管轴旋转
+	MeshKit.add(body, MeshForge.cached("revolver:body", body_recipe,
+		{&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}), null).name = "BodyMesh"
+	# 转轮:弹膛(与规则的膛数一致)+ 槽线,绕枪管轴旋转
 	drum = MeshKit.pivot(body, DRUM_POS, "Drum")
-	MeshKit.add(drum, MeshKit.cylinder(0.025, 0.025, 0.046, 24), steel, Vector3.ZERO, Vector3(90, 0, 0))
+	MeshKit.add(drum, MeshForge.cached("revolver:drum", drum_recipe, {&"metal": WorldMaterials.prop()}), null).name = "DrumMesh"
 	for i in Revolver.CHAMBERS:
-		var a := TAU * i / Revolver.CHAMBERS
-		var off := Vector3(cos(a), sin(a), 0) * 0.0145
-		MeshKit.add(drum, MeshKit.cylinder(0.0055, 0.0055, 0.004, 10), WorldMaterials.iron(),
-			off + Vector3(0, 0, -0.022), Vector3(90, 0, 0)).name = "Chamber%d" % (i + 1)
-		MeshKit.add(drum, MeshKit.cylinder(0.003, 0.003, 0.004, 8), brass, off + Vector3(0, 0, 0.022), Vector3(90, 0, 0))
-		var flute := Vector3(cos(a + PI / Revolver.CHAMBERS), sin(a + PI / Revolver.CHAMBERS), 0) * 0.024
-		MeshKit.add(drum, MeshKit.box(Vector3(0.004, 0.004, 0.032)), WorldMaterials.iron(), flute)
+		var marker := Marker3D.new()
+		marker.name = "Chamber%d" % (i + 1)
+		marker.position = _chamber_offset(i) + Vector3(0, 0, -0.022)
+		drum.add_child(marker)
 	# 击锤:绕后端铰点扳动
 	hammer = MeshKit.pivot(body, Vector3(0, 0.06, 0.022), "Hammer")
-	MeshKit.add(hammer, MeshKit.box(Vector3(0.008, 0.026, 0.01)), steel, Vector3(0, 0.01, 0.002), Vector3(-25, 0, 0))
-	MeshKit.add(hammer, MeshKit.box(Vector3(0.012, 0.005, 0.012)), steel, Vector3(0, 0.024, 0.01))
+	MeshKit.add(hammer, MeshForge.cached("revolver:hammer", hammer_recipe, {&"metal": WorldMaterials.prop()}), null).name = "HammerMesh"
 	muzzle = Marker3D.new()
 	muzzle.position = MUZZLE_POS
 	add_child(muzzle)
+
+
+static func _paint(f: MeshForge, m: Array) -> void:
+	f.paint(m[0], m[1], m[2])
+
+
+static func _chamber_offset(i: int) -> Vector3:
+	var a := TAU * i / Revolver.CHAMBERS
+	return Vector3(cos(a), sin(a), 0) * 0.0145
+
+
+static func body_recipe(f: MeshForge) -> void:
+	var xf := MeshForge.xf
+	# 握把:略后倾的圆角木柄
+	f.surface(&"grip")
+	f.part_space = true
+	f.capsule(0.016, 0.1, 20, xf.call(Vector3(0, -0.02, 0.012), Vector3(-18, 0, 0), Vector3(1, 1, 1.35)))
+	f.part_space = false
+	f.surface(&"metal")
+	_paint(f, STEEL)
+	# 底部金属护帽、机匣与顶梁
+	f.sphere(0.018, 12, xf.call(Vector3(0, -0.068, 0.028), Vector3.ZERO, Vector3(0.9, 0.5, 1.3)))
+	f.box(Vector3(0.026, 0.05, 0.075), xf.call(Vector3(0, 0.04, -0.01)))
+	f.box(Vector3(0.02, 0.012, 0.07), xf.call(Vector3(0, 0.074, -0.04)))
+	# 枪管 + 下护套
+	f.cylinder(0.0085, 0.0085, BARREL_LENGTH, 16, MeshForge.CAPS_BOTH, xf.call(Vector3(0, 0.058, -0.16), Vector3(90, 0, 0)))
+	f.box(Vector3(0.012, 0.012, 0.09), xf.call(Vector3(0, 0.046, -0.12)))
+	# 扳机护圈
+	f.torus(0.016, 0.02, 24, xf.call(Vector3(0, 0.0, -0.022), Vector3(0, 0, 90), Vector3(1, 1.0, 1.25)))
+	# 准星、枪口环、扳机
+	_paint(f, BRASS)
+	f.box(Vector3(0.004, 0.009, 0.008), xf.call(Vector3(0, 0.069, -0.228)))
+	f.torus(0.0045, 0.0085, 16, xf.call(MUZZLE_POS + Vector3(0, 0, 0.004), Vector3(90, 0, 0)))
+	f.box(Vector3(0.004, 0.022, 0.006), xf.call(Vector3(0, 0.005, -0.02), Vector3(-12, 0, 0)))
+
+
+static func drum_recipe(f: MeshForge) -> void:
+	var xf := MeshForge.xf
+	f.surface(&"metal")
+	_paint(f, STEEL)
+	f.cylinder(0.025, 0.025, 0.046, 24, MeshForge.CAPS_BOTH, xf.call(Vector3.ZERO, Vector3(90, 0, 0)))
+	for i in Revolver.CHAMBERS:
+		var off := _chamber_offset(i)
+		_paint(f, IRON)
+		f.cylinder(0.0055, 0.0055, 0.004, 10, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, -0.022), Vector3(90, 0, 0)))
+		_paint(f, BRASS)
+		f.cylinder(0.003, 0.003, 0.004, 8, MeshForge.CAPS_BOTH, xf.call(off + Vector3(0, 0, 0.022), Vector3(90, 0, 0)))
+		var a := TAU * i / Revolver.CHAMBERS + PI / Revolver.CHAMBERS
+		_paint(f, IRON)
+		f.box(Vector3(0.004, 0.004, 0.032), xf.call(Vector3(cos(a), sin(a), 0) * 0.024))
+
+
+static func hammer_recipe(f: MeshForge) -> void:
+	var xf := MeshForge.xf
+	f.surface(&"metal")
+	_paint(f, STEEL)
+	f.box(Vector3(0.008, 0.026, 0.01), xf.call(Vector3(0, 0.01, 0.002), Vector3(-25, 0, 0)))
+	f.box(Vector3(0.012, 0.005, 0.012), xf.call(Vector3(0, 0.024, 0.01)))
 
 
 func spin_drum(duration: float, turns := 2.5) -> Tween:

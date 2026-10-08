@@ -135,10 +135,6 @@ static func particle(additive: bool, boost: float, softness: float) -> ShaderMat
 		return mat)
 
 
-static func gunmetal() -> StandardMaterial3D:
-	return _cached("gunmetal", func(): return _standard(Color(0.16, 0.17, 0.2), 0.92, 0.3))
-
-
 static func brass() -> StandardMaterial3D:
 	return _cached("brass", func(): return _standard(Color(0.78, 0.56, 0.24), 1.0, 0.32))
 
