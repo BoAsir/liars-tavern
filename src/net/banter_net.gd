@@ -50,7 +50,7 @@ func _on_reset() -> void:
 
 func throw_tomato(target_pid: int) -> bool:
 	# 返回是否发出(本机冷却中或不在房间里时不发)。房主本机走同一套校验和广播
-	if not _in_room() or tomato_cooldown_left() > 0.0:
+	if not in_room() or tomato_cooldown_left() > 0.0:
 		return false
 	_local_tomato_until = now_ms.call() + int(TOMATO_COOLDOWN * 1000.0)
 	if _net.is_host:
@@ -61,7 +61,7 @@ func throw_tomato(target_pid: int) -> bool:
 
 
 func say(phrase_id: int) -> bool:
-	if not _in_room() or say_cooldown_left() > 0.0 or not is_phrase(phrase_id):
+	if not in_room() or say_cooldown_left() > 0.0 or not is_phrase(phrase_id):
 		return false
 	_local_say_until = now_ms.call() + int(SAY_COOLDOWN * 1000.0)
 	if _net.is_host:
@@ -87,8 +87,8 @@ static func phrase_text(phrase_id: int) -> String:
 	return PHRASES[phrase_id] if is_phrase(phrase_id) else ""
 
 
-func _in_room() -> bool:
-	# 在等待厅或牌局里(握手完成):对局中入座者握手期间也不能丢
+func in_room() -> bool:
+	# 在等待厅或牌局里(握手完成):对局中入座者握手期间也不能丢;界面据此显示 T / Q 小圆牌
 	return _net != null and _net.get("_session_active") == true and _net.get("_joining") == false \
 		and (_net.is_host or not _net.lobby_players.is_empty() or _net.in_game)
 
@@ -158,7 +158,7 @@ func patron_holders() -> Array:
 
 @rpc("authority", "call_remote", "reliable")
 func rpc_tomato_thrown(from_pid, target_pid, seed) -> void:
-	if _net == null or _net.is_host or not _in_room():
+	if _net == null or _net.is_host or not in_room():
 		return
 	if typeof(from_pid) != TYPE_INT or typeof(target_pid) != TYPE_INT or typeof(seed) != TYPE_INT:
 		return
@@ -167,7 +167,7 @@ func rpc_tomato_thrown(from_pid, target_pid, seed) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func rpc_said(pid, phrase_id) -> void:
-	if _net == null or _net.is_host or not _in_room():
+	if _net == null or _net.is_host or not in_room():
 		return
 	if typeof(pid) != TYPE_INT or not is_phrase(phrase_id):
 		return
