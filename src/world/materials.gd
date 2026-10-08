@@ -208,12 +208,13 @@ static func decor() -> ShaderMaterial:
 
 
 static func lut() -> GradientTexture1D:
-	# 暖色 1D 调色表:暗部微冷、高光微暖,高光不提亮(Environment.adjustment_color_correction,逐通道查表)
+	# 粉彩暖色 1D 调色表(Environment.adjustment_color_correction,逐通道查表):
+	# 黑位抬起并带一点靛紫(最暗处也有色相,不死黑),中间调微暖,高光奶油色、不削顶
 	return _cached("lut", func():
 		var gradient := Gradient.new()
 		gradient.offsets = PackedFloat32Array([0.0, 0.18, 0.5, 0.82, 1.0])
-		gradient.colors = PackedColorArray([Color(0.0, 0.004, 0.018), Color(0.170, 0.178, 0.196),
-			Color(0.505, 0.497, 0.478), Color(0.835, 0.815, 0.775), Color(1.0, 0.985, 0.95)])
+		gradient.colors = PackedColorArray([Color(0.045, 0.035, 0.07), Color(0.215, 0.195, 0.215),
+			Color(0.53, 0.505, 0.475), Color(0.845, 0.815, 0.765), Color(0.985, 0.96, 0.9)])
 		var tex := GradientTexture1D.new()
 		tex.gradient = gradient
 		tex.width = 256

@@ -20,11 +20,13 @@ static func build(tavern: Node3D) -> Array:
 		RoomKit.flame(fp, Vector2(h * 0.75, h), Vector3(-0.3 + i * 0.12, 0.08 + h / 2.0, 0.32 + (i % 2) * 0.04), 3.0, 20.0 + i)
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 0.5, 0.75)
-	light.light_color = Color(1.0, 0.56, 0.3)
-	light.light_energy = 2.7
+	light.light_color = Color(1.0, 0.64, 0.4)
+	light.light_energy = 2.2
 	light.omni_range = 7.0
 	light.shadow_enabled = true
 	light.shadow_caster_mask = MeshKit.LAYER_WORLD
+	light.shadow_opacity = 0.7   # 卡通:影子又浅又软
+	light.shadow_blur = 2.0
 	light.light_volumetric_fog_energy = 0.6
 	fp.add_child(light)
 	fp.add_child(Fx.embers(Vector3(0, 0.3, 0.3)))

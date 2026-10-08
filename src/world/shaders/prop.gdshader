@@ -6,7 +6,7 @@ shader_type spatial;
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
 // 柔和卡通光照(见 toon_light.gdshaderinc)
 #define TOON_RIM 0.18
-#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#define TOON_SHADOW_TINT vec3(0.86, 0.82, 1.0)
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 emission_color : source_color = vec3(1.0, 0.78, 0.5);

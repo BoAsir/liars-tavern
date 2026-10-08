@@ -33,6 +33,8 @@ static func _window(tavern: Node3D) -> void:
 	moon.spot_angle = 24.0
 	moon.shadow_enabled = true
 	moon.shadow_caster_mask = MeshKit.LAYER_MOON
+	moon.shadow_opacity = 0.65
+	moon.shadow_blur = 1.5
 	moon.light_volumetric_fog_energy = 3.2
 	tavern.add_child(moon)
 	moon.look_at_from_position(RoomLayout.MOON_POS, RoomLayout.MOON_TARGET)

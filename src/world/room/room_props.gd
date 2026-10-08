@@ -534,8 +534,8 @@ static func _sconces(tavern: Node3D) -> Array:
 		RoomKit.flame(root, Vector2(0.035, 0.07), Vector3(0, 0.025, -0.15), 3.5, seed)
 		var light := OmniLight3D.new()
 		light.position = Vector3(0, 0.05, -0.2)
-		light.light_color = Color(1.0, 0.74, 0.48)
-		light.light_energy = 1.0
+		light.light_color = Color(1.0, 0.8, 0.58)
+		light.light_energy = 0.65
 		light.omni_range = 4.6
 		light.light_volumetric_fog_energy = 0.5
 		root.add_child(light)
@@ -547,14 +547,14 @@ static func _sconces(tavern: Node3D) -> Array:
 
 static func atmosphere(tavern: Node3D, environment: Environment) -> void:
 	environment.adjustment_color_correction = WorldMaterials.lut()
-	environment.volumetric_fog_density = 0.03
+	environment.volumetric_fog_density = 0.014   # 薄雾:只留一点灯光的空气感
 	var smoke := FogVolume.new()
 	smoke.name = "SmokeLayer"
 	smoke.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
 	smoke.size = Vector3(8.8, 1.6, 8.8)
 	smoke.position = Vector3(0, 3.0, 0)
 	var smoke_mat := FogMaterial.new()
-	smoke_mat.density = 0.05
+	smoke_mat.density = 0.02
 	smoke_mat.edge_fade = 0.6
 	smoke.material = smoke_mat
 	tavern.add_child(smoke)
@@ -564,7 +564,7 @@ static func atmosphere(tavern: Node3D, environment: Environment) -> void:
 	haze.size = Vector3(1.8, 1.4, 1.2)
 	haze.position = Vector3(-1.5, 1.0, -3.6)
 	var haze_mat := FogMaterial.new()
-	haze_mat.density = 0.04
+	haze_mat.density = 0.025
 	haze_mat.emission = Color(0.08, 0.036, 0.012)
 	haze.material = haze_mat
 	tavern.add_child(haze)

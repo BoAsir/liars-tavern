@@ -30,7 +30,7 @@ static func build(tavern: Node3D) -> Node3D:
 	var light := OmniLight3D.new()
 	light.position = Vector3(0.9, 2.5, 0)
 	light.light_color = Color(1.0, 0.7, 0.4)
-	light.light_energy = 1.4
+	light.light_energy = 1.1
 	light.omni_range = 3.8
 	bar.add_child(light)
 	return bar

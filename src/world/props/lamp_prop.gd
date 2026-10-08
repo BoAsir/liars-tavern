@@ -44,13 +44,14 @@ static func build(parent: Node3D, top: float, flickers: Array) -> Node3D:
 	spot.spot_angle_attenuation = 0.7
 	spot.shadow_enabled = true
 	spot.shadow_caster_mask = MeshKit.LAYER_WORLD   # 窗户层只给月光投影
-	spot.shadow_blur = 1.5
+	spot.shadow_blur = 2.5
+	spot.shadow_opacity = 0.72   # 卡通:影子又浅又软
 	spot.light_volumetric_fog_energy = 2.2
 	pivot.add_child(spot)
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(0, FILL_Y, 0)
-	fill.light_color = Color(1.0, 0.72, 0.45)
-	fill.light_energy = 1.5
+	fill.light_color = Color(1.0, 0.78, 0.55)
+	fill.light_energy = 0.8
 	fill.omni_range = 7.5
 	fill.light_volumetric_fog_energy = 0.3
 	pivot.add_child(fill)
