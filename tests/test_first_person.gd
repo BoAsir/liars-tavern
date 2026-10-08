@@ -183,6 +183,37 @@ func test_parts_added_to_the_head_while_hidden_are_hidden_too():
 	assert_eq(splat.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
 
 
+func test_tomato_splats_on_my_head_are_hidden_in_first_person():
+	# 番茄泥挂在 Head 下:进第一人称之前贴上的、之后才贴上的都不渲染,换回越肩都回来
+	_setup([{"pid": 1}, {"pid": 2}])
+	var fx := BanterFx.new(world)
+	add_child_autofree(fx)
+	var before := fx.splat(me, Vector3(0, 0.12, -0.25), Vector3(0, 0, -1))
+	me.set_head_hidden(true)
+	var after := fx.splat(me, Vector3(0.1, 0.15, -0.24), Vector3(0, 0, -1))
+	await wait_seconds(0.1)
+	var cull := _rig_cull()
+	assert_true(_hidden_from(before, cull), "进第一人称前贴上的")
+	assert_true(_hidden_from(after, cull), "进第一人称后贴上的")
+	me.set_head_hidden(false)
+	assert_false(_hidden_from(before, cull))
+	assert_false(_hidden_from(after, cull))
+
+
+func test_my_speech_bubble_hangs_in_front_of_the_eyes_in_first_person():
+	_setup([{"pid": 1}, {"pid": 2}])
+	await wait_seconds(SETTLE)
+	var above := me.speech_anchor()
+	assert_gt(above.y, me.head_position().y, "越肩:头顶上方")
+	me.set_head_hidden(true)
+	var view := world.first_person_view(1)
+	var local := view.affine_inverse() * me.speech_anchor()
+	var half := tan(deg_to_rad(TableWorld.FIRST_PERSON_FOV) / 2.0)
+	assert_gt(-local.z, 0.3, "第一人称:在镜头前")
+	assert_lt(absf(local.y), -local.z * half * 0.8, "在画面里")
+	assert_gt(local.y, 0.0, "画面上半")
+
+
 func test_other_patrons_are_never_touched():
 	_setup([{"pid": 1}, {"pid": 2}])
 	var rig := _rig()
