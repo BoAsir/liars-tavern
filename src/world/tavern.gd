@@ -109,7 +109,8 @@ func _build_environment() -> void:
 func _build_room() -> void:
 	var room := MeshKit.pivot(self, Vector3.ZERO, "Room")
 	var size := ROOM_HALF * 2.0
-	MeshKit.add(room, MeshKit.plane(Vector2(size, size)), WorldMaterials.wood("floor"))
+	MeshKit.add(room, MeshKit.plane(Vector2(size, size)), WorldMaterials.wood("floor"), Vector3.ZERO, Vector3.ZERO,
+		Vector3.ONE, MeshKit.SHADOW_OFF).name = "Floor"
 	var ceiling := MeshKit.add(room, MeshKit.plane(Vector2(size, size)), WorldMaterials.wood("beam"),
 		Vector3(0, ROOM_HEIGHT, 0), Vector3(180, 0, 0))
 	ceiling.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -117,28 +118,37 @@ func _build_room() -> void:
 		MeshKit.add(room, MeshKit.box(Vector3(size, 0.24, 0.22)), WorldMaterials.wood("beam"),
 			Vector3(0, ROOM_HEIGHT - 0.12, z))
 	# 后墙(壁炉)与前墙(门)、左墙(吧台)完整;右墙为窗户开洞
-	_wall(room, Vector3(0, 0, -ROOM_HALF), Vector3(size, 0, WALL_THICKNESS), "wall")
-	_wall(room, Vector3(0, 0, ROOM_HALF), Vector3(size, 0, WALL_THICKNESS), "wall")
-	_wall(room, Vector3(-ROOM_HALF, 0, 0), Vector3(WALL_THICKNESS, 0, size), "wall_side")
+	_wall(room, Vector3(0, 0, -ROOM_HALF), Vector3(size, 0, WALL_THICKNESS), "wall", 0.0, ROOM_HEIGHT, "WallBack")
+	_wall(room, Vector3(0, 0, ROOM_HALF), Vector3(size, 0, WALL_THICKNESS), "wall", 0.0, ROOM_HEIGHT, "WallFront")
+	_wall(room, Vector3(-ROOM_HALF, 0, 0), Vector3(WALL_THICKNESS, 0, size), "wall_side", 0.0, ROOM_HEIGHT, "WallLeft")
 	_window_wall(room)
 
 
 func _wall(parent: Node3D, base: Vector3, extent: Vector3, wood_preset: String,
-		bottom := 0.0, top := ROOM_HEIGHT) -> void:
-	# 下半截木护墙板 + 上半截灰泥,外加一道压条
+		bottom := 0.0, top := ROOM_HEIGHT, name_prefix := "Wall", casts_panels := false,
+		layers := MeshKit.LAYER_WORLD) -> void:
+	# 下半截木护墙板 + 上半截灰泥,外加一道压条。实墙的护墙板与灰泥不投影(房间壳挡不住任何灯照到的东西),
+	# 压条照常投影;窗墙要投影,月光柱才保持窗形
+	var panel_shadow := MeshKit.SHADOW_ON if casts_panels else MeshKit.SHADOW_OFF
 	var low_top := minf(WAINSCOT_HEIGHT, top)
 	if low_top > bottom:
 		var h := low_top - bottom
-		MeshKit.add(parent, MeshKit.box(Vector3(extent.x, h, extent.z)), WorldMaterials.wood(wood_preset),
-			base + Vector3(0, bottom + h / 2.0, 0))
+		var panel := MeshKit.add(parent, MeshKit.box(Vector3(extent.x, h, extent.z)), WorldMaterials.wood(wood_preset),
+			base + Vector3(0, bottom + h / 2.0, 0), Vector3.ZERO, Vector3.ONE, panel_shadow)
+		panel.name = name_prefix + "Wainscot"
+		panel.layers = layers
 	var high_bottom := maxf(WAINSCOT_HEIGHT, bottom)
 	if top > high_bottom:
 		var h2 := top - high_bottom
-		MeshKit.add(parent, MeshKit.box(Vector3(extent.x, h2, extent.z)), WorldMaterials.stone("plaster"),
-			base + Vector3(0, high_bottom + h2 / 2.0, 0))
+		var plaster := MeshKit.add(parent, MeshKit.box(Vector3(extent.x, h2, extent.z)), WorldMaterials.stone("plaster"),
+			base + Vector3(0, high_bottom + h2 / 2.0, 0), Vector3.ZERO, Vector3.ONE, panel_shadow)
+		plaster.name = name_prefix + "Plaster"
+		plaster.layers = layers
 	if bottom < WAINSCOT_HEIGHT and top > WAINSCOT_HEIGHT:
 		var rail := Vector3(maxf(extent.x, 0.06) + 0.04, 0.06, maxf(extent.z, 0.06) + 0.04)
-		MeshKit.add(parent, MeshKit.box(rail), WorldMaterials.wood("dark"), base + Vector3(0, WAINSCOT_HEIGHT, 0))
+		var strip := MeshKit.add(parent, MeshKit.box(rail), WorldMaterials.wood("dark"), base + Vector3(0, WAINSCOT_HEIGHT, 0))
+		strip.name = name_prefix + "Rail"
+		strip.layers = layers
 
 
 func _window_wall(room: Node3D) -> void:
@@ -148,10 +158,14 @@ func _window_wall(room: Node3D) -> void:
 	var top := WINDOW_BOTTOM + WINDOW_SIZE.y
 	var front_len := ROOM_HALF - z1
 	var back_len := z0 + ROOM_HALF
-	_wall(room, Vector3(x, 0, z1 + front_len / 2.0), Vector3(WALL_THICKNESS, 0, front_len), "wall_side")
-	_wall(room, Vector3(x, 0, z0 - back_len / 2.0), Vector3(WALL_THICKNESS, 0, back_len), "wall_side")
-	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side", 0.0, WINDOW_BOTTOM)
-	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side", top, ROOM_HEIGHT)
+	_wall(room, Vector3(x, 0, z1 + front_len / 2.0), Vector3(WALL_THICKNESS, 0, front_len), "wall_side",
+		0.0, ROOM_HEIGHT, "WindowWall0", true)
+	_wall(room, Vector3(x, 0, z0 - back_len / 2.0), Vector3(WALL_THICKNESS, 0, back_len), "wall_side",
+		0.0, ROOM_HEIGHT, "WindowWall1", true)
+	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side",
+		0.0, WINDOW_BOTTOM, "WindowWall2", true)
+	_wall(room, Vector3(x, 0, WINDOW_Z), Vector3(WALL_THICKNESS, 0, WINDOW_SIZE.x), "wall_side",
+		top, ROOM_HEIGHT, "WindowWall3", true)
 
 
 # —— 牌桌 ——

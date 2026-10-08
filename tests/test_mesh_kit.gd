@@ -65,3 +65,33 @@ func test_clear_cache_empties_it():
 	var a := MeshKit.box(Vector3(0.5, 0.5, 0.5))
 	MeshKit.clear_cache()
 	assert_not_same(MeshKit.box(Vector3(0.5, 0.5, 0.5)), a)
+
+
+func test_auto_shadow_turns_off_for_parts_smaller_than_8_cm():
+	var parent := Node3D.new()
+	add_child_autofree(parent)
+	var small := MeshKit.add(parent, MeshKit.box(Vector3(0.05, 0.05, 0.05)), null)
+	var big := MeshKit.add(parent, MeshKit.box(Vector3(0.2, 0.05, 0.05)), null)
+	var scaled_up := MeshKit.add(parent, MeshKit.box(Vector3(0.05, 0.05, 0.05)), null, Vector3.ZERO, Vector3.ZERO, Vector3(2, 1, 1))
+	assert_eq(small.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+	assert_eq(big.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+	assert_eq(scaled_up.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON, "按节点自身缩放后的尺寸判断")
+
+
+func test_explicit_shadow_overrides_auto_and_marks_forced_casters():
+	var parent := Node3D.new()
+	add_child_autofree(parent)
+	var forced := MeshKit.add(parent, MeshKit.box(Vector3(0.02, 0.02, 0.02)), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_ON)
+	var off := MeshKit.add(parent, MeshKit.box(Vector3(1, 1, 1)), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_OFF)
+	assert_eq(forced.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+	assert_true(forced.has_meta(&"force_shadow"))
+	assert_eq(off.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+func test_auto_shadow_ignores_parent_scale():
+	# 登场动画把整个酒客缩到 0.01,不能因此把所有件判成小件
+	var parent := Node3D.new()
+	parent.scale = Vector3.ONE * 0.01
+	add_child_autofree(parent)
+	var part := MeshKit.add(parent, MeshKit.box(Vector3(0.3, 0.3, 0.3)), null)
+	assert_eq(part.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_ON)

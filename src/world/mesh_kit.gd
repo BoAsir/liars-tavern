@@ -7,20 +7,41 @@ const CAPS_NONE := 0
 const CAPS_TOP := 1
 const CAPS_BOTTOM := 2
 const CAPS_BOTH := 3
+# 投影:默认按节点自身尺寸自动判断,小件不投影(阴影 pass 里小件的 draw call 占大头,影子又几乎看不见)
+const SHADOW_AUTO := -1
+const SHADOW_OFF := 0     # 与 GeometryInstance3D.SHADOW_CASTING_SETTING_OFF / ON 取值一致
+const SHADOW_ON := 1
+const SMALL_CASTER := 0.08   # 米:节点自身变换下网格包围盒最大边小于它就不投影
+# 可见层(位值):月光只让窗框与窗墙投影(Light3D.shadow_caster_mask = LAYER_MOON)
+const LAYER_WORLD := 1    # 编辑器第 1 层,所有物体的默认层
+const LAYER_MOON := 4     # 编辑器第 3 层
 
 static var _cache := {}   # key -> 只读 PrimitiveMesh
 
 
 static func add(parent: Node3D, mesh: Mesh, material: Material, pos := Vector3.ZERO,
-		rot_deg := Vector3.ZERO, scale := Vector3.ONE) -> MeshInstance3D:
+		rot_deg := Vector3.ZERO, scale := Vector3.ONE, shadow := SHADOW_AUTO) -> MeshInstance3D:
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.material_override = material
 	inst.position = pos
 	inst.rotation_degrees = rot_deg
 	inst.scale = scale
+	if shadow == SHADOW_AUTO:
+		shadow = SHADOW_ON if caster_size(inst) >= SMALL_CASTER else SHADOW_OFF
+	elif shadow == SHADOW_ON:
+		inst.set_meta(&"force_shadow", true)   # 小但必须投影的件,预算测试据此豁免
+	inst.cast_shadow = shadow as GeometryInstance3D.ShadowCastingSetting
 	parent.add_child(inst)
 	return inst
+
+
+static func caster_size(inst: MeshInstance3D) -> float:
+	# 只按节点自身变换算,不含父节点缩放(登场动画会把整个酒客缩到 0.01)
+	if inst.mesh == null:
+		return 0.0
+	var box := Transform3D(inst.transform.basis, Vector3.ZERO) * inst.mesh.get_aabb()
+	return maxf(box.size.x, maxf(box.size.y, box.size.z))
 
 
 static func pivot(parent: Node3D, pos := Vector3.ZERO, node_name := "") -> Node3D:
