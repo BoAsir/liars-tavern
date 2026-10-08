@@ -82,6 +82,11 @@ func set_target(kind: int, animate := true) -> void:
 	await tween.finished
 
 
+func set_stand_visible(shown: bool) -> void:
+	# 德州没有目标牌:立牌收起来,给公共牌让位
+	_stand.visible = shown
+
+
 func stand_position() -> Vector3:
 	return _stand.global_position + Vector3(0, STAND_HEIGHT, 0)
 

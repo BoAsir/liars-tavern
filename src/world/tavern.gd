@@ -28,6 +28,8 @@ var table_root: Node3D
 var environment: Environment
 
 var _lamp_pivot: Node3D
+var _table: Node3D                       # 牌桌模型:德州时按半径放大
+var _table_decor: Array[Node3D] = []     # 桌面摆设(烛台):德州时隐藏,给筹码与公共牌让位
 var _lamp_swing := 0.015
 var _flickers: Array = []   # [{"light": Light3D, "base": float, "speed": float, "depth": float, "seed": float}]
 var _time := 0.0
@@ -65,6 +67,44 @@ func _process(delta: float) -> void:
 
 func kick_lamp(strength: float) -> void:
 	_lamp_swing = maxf(_lamp_swing, strength)
+
+
+func set_table_radius(radius: float) -> void:
+	# 接口桩:整张桌子按半径在水平方向缩放。3D 模型重做分支(feature/model-detail)会换成
+	# 按半径重建桌面、包边、铜圈与绒布且桌腿不动的正式实现,合并时以那边为准
+	var k := radius / SeatLayout.TABLE_RADIUS
+	_table.scale = Vector3(k, 1.0, k)
+	# 德州灯光补丁(规格 §9;合并时核对模型重做分支做了没有,做了就删掉这段):吊灯聚光在桌面高度只照到
+	# 半径约 1.5 米,放大的桌沿在半影外。按桌面半径放宽到照到桌沿外 EDGE_REACH,再加一点半影;
+	# 骗子酒馆桌保持 _build_lamp 里原来的角度
+	const LIARS_SPOT_ANGLE := 52.0
+	const EDGE_REACH := 0.15
+	const SOFT_EDGE_DEG := 2.5
+	for spot in _lamp_pivot.get_children().filter(func(n: Node) -> bool: return n is SpotLight3D):
+		var drop: float = (_lamp_pivot.transform * spot.transform).origin.y - SeatLayout.TABLE_TOP
+		var needed := rad_to_deg(atan((radius + EDGE_REACH) / drop)) + SOFT_EDGE_DEG
+		spot.spot_angle = maxf(LIARS_SPOT_ANGLE, needed)
+
+
+func set_table_decor_visible(shown: bool) -> void:
+	# 接口桩:烛台连同它们的灯一起显示/隐藏(正式实现同上)
+	for holder in _table_decor:
+		holder.visible = shown
+	# 德州灯光补丁(规格 §9;合并时以模型重做分支为准):烛台一藏,桌沿与酒客的脸少了暖色补光,
+	# 换一盏桌心上方、不投影、像烛光一样微微起伏的暖光
+	var rim := get_node_or_null("TableRimLight") as OmniLight3D
+	if rim == null and not shown:
+		rim = OmniLight3D.new()
+		rim.name = "TableRimLight"
+		rim.position = Vector3(0, SeatLayout.TABLE_TOP + 0.35, 0)
+		rim.light_color = Color(1.0, 0.74, 0.48)
+		rim.light_energy = 0.9
+		rim.omni_range = 2.8
+		rim.light_volumetric_fog_energy = 0.0
+		add_child(rim)
+		_flickers.append({"light": rim, "base": rim.light_energy, "speed": 3.0, "depth": 0.08, "seed": 91.0})
+	if rim != null:
+		rim.visible = not shown
 
 
 # —— 环境 ——
@@ -174,6 +214,7 @@ func _window_wall(room: Node3D) -> void:
 
 func _build_table() -> void:
 	var table := MeshKit.pivot(self, Vector3.ZERO, "Table")
+	_table = table
 	var top_y := SeatLayout.TABLE_TOP
 	var r := SeatLayout.TABLE_RADIUS
 	MeshKit.add(table, MeshKit.cylinder(r, r, 0.06, 64), WorldMaterials.wood("table"), Vector3(0, top_y - 0.03, 0))
@@ -237,6 +278,7 @@ func _build_candles() -> void:
 		var base := SeatLayout.direction(spec[0]) * 0.7 + Vector3(0, top_y, 0)
 		# 名字以 Candles 开头:性能探针按这个前缀找烛光;两个烛台各自命名,免得重名被自动改名
 		var holder := MeshKit.pivot(self, base, "Candles%d" % k)
+		_table_decor.append(holder)
 		MeshKit.add(holder, MeshKit.cylinder(0.07, 0.08, 0.012, 24), WorldMaterials.brass(), Vector3(0, 0.006, 0))
 		var total_height := 0.0
 		for i in spec[1]:

@@ -87,3 +87,17 @@ func test_sanitize_huge_input_is_fast_and_truncated():
 func test_raw_join_name_limit_leaves_room_for_any_legit_name():
 	# 正常客户端只发清洗后的短昵称;房主在 RPC 入口按这个上限直接拒绝超长昵称
 	assert_gt(Protocol.MAX_RAW_NAME_LENGTH, Protocol.MAX_NAME_LENGTH)
+
+
+func test_absolute_player_cap_covers_every_mode():
+	# MAX_PLAYERS 是所有玩法的绝对上限(传输层槽位、发现报文校验);各玩法自己的上限看 GameMode
+	for mode in GameMode.ALL:
+		assert_lte(GameMode.max_players(mode), Protocol.MAX_PLAYERS, mode)
+	assert_eq(Protocol.MAX_PLAYERS, GameMode.max_players(GameMode.HOLDEM))
+	assert_gt(Protocol.MAX_TRANSPORT_CLIENTS, Protocol.MAX_PLAYERS, "满员时还要能握手并收到「房间已满」")
+
+
+func test_legacy_discovery_cap_is_what_released_v3_clients_accept():
+	# 已发布的 v3 客户端丢弃 max > 4 的发现报文:这个值冻结,不随玩法上限变
+	assert_eq(Protocol.LEGACY_MAX_PLAYERS, 4)
+	assert_lte(Protocol.LEGACY_MAX_PLAYERS, Protocol.MAX_PLAYERS)

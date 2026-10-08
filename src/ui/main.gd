@@ -14,6 +14,7 @@ var post_fx: PostFx
 var labels: WorldLabels
 var toasts: ToastLayer
 var flags: DebugFlags
+var settings_path := Settings.PATH   # 本机设置文件;测试换成临时文件
 
 var _ui: Control
 var _screen: Control = null
@@ -21,7 +22,7 @@ var _confirms: Array[ConfirmOverlay] = []
 var _default_fov := 0.0
 var _rules_root: Control
 var _rulebook: Rulebook = null
-var _rules_page := 0
+var _rules_pages := {}   # 每本说明书读到的页 {书: 页码}:合上时记下,下次翻开接着读
 
 
 func _ready() -> void:
@@ -54,7 +55,7 @@ func _ready() -> void:
 	await MeshForge.wait_prebuilt(get_tree())
 	Card3D.refresh_materials()
 	# 先应用上次保存的静音设置再开环境音:静音启动时环境音等取消静音后才开始
-	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED))
+	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED, false, settings_path))
 	Sfx.start_ambience()
 	_show_menu()
 	flags = DebugFlags.new(self)
@@ -114,15 +115,22 @@ func current_screen() -> Control:
 
 
 func show_rules() -> void:
-	# 翻开说明书,停在上次读到的那一章
+	# 翻开说明书:默认是当前玩法那本,两本书各停在上次读到的那一章
 	if is_rules_open():
 		return
-	_rulebook = Rulebook.new(Net.in_game)
+	_rulebook = Rulebook.new(Net.in_game, RulebookContent.book_for_mode(_rules_mode()), _rules_pages)
 	_rulebook.closed.connect(func():
-		_rules_page = _rulebook.current_section()
+		_rules_pages = _rulebook.bookmarks()
 		_rulebook = null)
 	_rules_root.add_child(_rulebook)
-	_rulebook.show_section(_rules_page)
+
+
+func _rules_mode() -> String:
+	# 说明书默认翻哪种玩法(规格 §6.6):在房间里(等待厅、牌桌)看本房的玩法;主菜单上(含它出来之前)
+	# 看上次选的玩法。设置里读到非法值时 book_for_mode 回退骗子酒馆那本
+	if _screen == null or _screen is MainMenuScreen:
+		return Settings.get_string(Settings.KEY_LAST_MODE, GameMode.DEFAULT, settings_path)
+	return Net.game_mode
 
 
 func is_modal_open() -> bool:
@@ -135,11 +143,20 @@ func is_rules_open() -> bool:
 	return is_instance_valid(_rulebook)
 
 
+func apply_table_mode(mode: String) -> void:
+	# 桌子跟着玩法走:德州桌更大,不摆烛台与目标牌立牌;主菜单与骗子酒馆用原来的桌子
+	var poker := GameMode.is_poker(mode)
+	world.configure_table(SeatLayout.table_radius_for(mode))
+	tavern.set_table_decor_visible(not poker)
+	world.cards.set_stand_visible(not poker)
+
+
 # —— 屏幕切换 ——
 
 func _show_menu() -> void:
 	world.clear()
 	labels.clear()
+	apply_table_mode(GameMode.LIARS)
 	tavern.camera_rig.parallax_enabled = false
 	tavern.camera_rig.orbit(Vector3(0, 0.9, -0.2), 3.3, 1.15, 0.045, 2.2)
 	_switch_to(MainMenuScreen.new(self))

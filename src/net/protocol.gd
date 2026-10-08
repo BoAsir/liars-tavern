@@ -2,7 +2,9 @@ class_name Protocol
 # 网络协议常量与地址解析。版本不匹配的客户端会被拒绝加入。
 
 
-const VERSION := 4   # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了)
+# v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了);
+# v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent)
+const VERSION := 5
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800
@@ -19,7 +21,11 @@ const PEER_TIMEOUT_LIMIT := 32
 const PEER_TIMEOUT_MIN_MS := 3000
 const PEER_TIMEOUT_MAX_MS := 8000
 const MIN_PLAYERS := 2
-const MAX_PLAYERS := 4
+# 所有玩法的绝对人数上限(传输层槽位、发现报文校验);各玩法自己的上限一律用 GameMode.max_players(mode)
+const MAX_PLAYERS := 8
+# 已发布的 v3 客户端丢弃人数上限超过 4 的发现报文:报文里给它们看的旧字段 max/players 压在这以内,
+# 旧玩家才看得到德州房间、能从房主那里更新。冻结,不随玩法上限变
+const LEGACY_MAX_PLAYERS := 4
 # ENet 传输层多留几个槽位,满员时仍能完成握手并收到"房间已满"的明确提示
 const MAX_TRANSPORT_CLIENTS := MAX_PLAYERS + 2
 const TURN_TIMEOUT := 30.0

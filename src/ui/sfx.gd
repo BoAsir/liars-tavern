@@ -13,7 +13,12 @@ const VOLUMES := {
 	"bell": -6.0, "cock": -4.0, "spin": -5.0, "click": -2.0, "bang": 0.0, "heartbeat": -3.0,
 	"ui_click": -14.0, "ui_hover": -22.0, "whoosh": -12.0, "sting_lie": -6.0, "sting_truth": -8.0,
 	"win": -6.0, "join": -10.0, "thud": -4.0,
+	"chips": -9.0, "chips_push": -7.0, "fold": -14.0,   # 德州:筹码碰撞 / 全下推筹码 / 轻推牌(规格 §6.7)
 }
+const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
+const CHIP_PUSH_COUNT := 14           # 全下推一整摞
+const CHIP_CLICK_SECONDS := 0.035
+const CHIP_FREQ := Vector2(1900.0, 3400.0)   # 筹码是硬塑料:比金属咔哒低、比牌纸脆
 
 var muted := false
 var _headless := false
@@ -148,6 +153,13 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_mix([_bell(659.0, 0.6), _offset(_bell(988.0, 0.7), 0.08)]))
 		"thud":
 			return _wav(_mix([_thump(60.0, 0.35, 1.0), _noise_burst(0.2, 0.2, 0.01)]))
+		"chips":
+			return _wav(_mix([_chip_clatter(CHIP_CLATTER_COUNT, 0.22), _thump(180.0, 0.05, 0.3)]))
+		"chips_push":
+			# 推筹码:一摞筹码在绒布上滑过(闷噪声)+ 密集的碰撞
+			return _wav(_mix([_noise_burst(0.45, 0.1, 0.08), _offset(_chip_clatter(CHIP_PUSH_COUNT, 0.5), 0.05)]))
+		"fold":
+			return _wav(_noise_burst(0.11, 0.2, 0.02))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -214,6 +226,22 @@ func _ratchet(duration: float) -> PackedFloat32Array:
 				out[start + i] += click[i]
 		t += gap
 		gap *= 1.16
+	return out
+
+
+func _chip_clatter(count: int, duration: float) -> PackedFloat32Array:
+	# 几枚筹码先后落下:每枚一声短促的双音敲击,时间与音高都带一点随机
+	var out := PackedFloat32Array()
+	out.resize(int(duration * RATE))
+	var click_len := int(CHIP_CLICK_SECONDS * RATE)
+	for k in count:
+		var start := int(_rng.randf_range(0.0, duration - CHIP_CLICK_SECONDS) * RATE)
+		var freq := _rng.randf_range(CHIP_FREQ.x, CHIP_FREQ.y)
+		var gain := _rng.randf_range(0.35, 0.7)
+		for i in click_len:
+			if start + i < out.size():
+				var t := float(i) / RATE
+				out[start + i] += (sin(TAU * freq * t) * 0.6 + sin(TAU * freq * 1.9 * t) * 0.3) * exp(-t * 160.0) * gain
 	return out
 
 

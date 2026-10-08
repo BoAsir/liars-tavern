@@ -7,17 +7,21 @@ extends SceneTree
 # 每帧都让投影灯的阴影图失效重画(游戏里酒客呼吸、吊灯摆动,阴影图每帧都在重画);
 # 每组打印整帧耗时、CPU 渲染线程耗时与可见 / 阴影 draw call、物体、图元。
 # --assert-budget:按 tools/perf_budget.gd 核对 budget 那一组(游戏实际渲染配置),超预算时退出码为 1。
+# --showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、7 个底池,约 900 枚筹码),
+# 机位 seat / overview 取自 TableWorld;德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(德州规格 §8)。
 
 const CameraViews := preload("res://tools/camera_views.gd")
 const PerfBudget := preload("res://tools/perf_budget.gd")
 const SceneCensus := preload("res://tools/scene_census.gd")
 const WARMUP_FRAMES := 60
 const BIAS_NUDGE := 0.00001   # 每帧来回微调投影灯的 shadow_bias,让阴影图失效重画(画面看不出差别)
+const SHOWCASES := {"liars": "res://tools/showcase.gd", "poker": "res://tools/poker_showcase.gd"}
 
 var opts := {}
 var _viewport: SubViewport
 var _tavern: Tavern
 var _post_fx: PostFx
+var _world: TableWorld = null   # 德州展台的牌桌:机位从它取
 
 
 func _initialize() -> void:
@@ -40,9 +44,17 @@ func _run() -> void:
 	_viewport.add_child(_tavern)
 	_post_fx = PostFx.new()
 	_viewport.add_child(_post_fx)
-	var showcase: Node = load("res://tools/showcase.gd").new()
+	var kind: String = opts.get("showcase", "liars")
+	if not SHOWCASES.has(kind):
+		push_error("unknown showcase %s (known: %s)" % [kind, ", ".join(SHOWCASES.keys())])
+		quit(1)
+		return
+	var showcase: Node = load(SHOWCASES[kind]).new()
+	if kind == "poker":
+		showcase.set("worst_case", true)
 	_viewport.add_child(showcase)
 	await showcase.build(_tavern)
+	_world = showcase.get("world") if kind == "poker" else null
 	var rid := _viewport.get_viewport_rid()
 	RenderingServer.viewport_set_measure_render_time(rid, true)
 	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
@@ -54,7 +66,7 @@ func _run() -> void:
 		cases.append("budget")
 	var failures := PackedStringArray()
 	for view in opts.get("view", "seat").split(","):
-		if not CameraViews.place(_tavern.camera_rig, view):
+		if not _place_camera(view):
 			push_error("unknown view %s (known: %s)" % [view, ", ".join(CameraViews.NAMES)])
 			quit(1)
 			return
@@ -279,6 +291,16 @@ func _measure() -> Dictionary:
 		"primitives": info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME)
 			+ info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME),
 	}
+
+
+func _place_camera(view: String) -> bool:
+	if _world != null:
+		# 德州展台:本机座位 = 1 号的越肩或观战机位
+		var xform := _world.overview_view() if view == "overview" else _world.third_person_view(1)
+		_tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
+		_tavern.camera_rig.fill_light.light_energy = 0.0 if view == "overview" else TableWorld.SEAT_FILL_LIGHT
+		return true
+	return CameraViews.place(_tavern.camera_rig, view)
 
 
 func _nudge(lights: Array, frame: int) -> void:

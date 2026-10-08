@@ -34,6 +34,9 @@ static func chamber_points(center: Vector2, radius: float) -> PackedVector2Array
 
 
 static func texture(kind: int) -> Texture2D:
+	# 德州牌(取值 8–59)另有缓存与生成时机,转给 PokerFaces;-1 牌背与 0–3 骗子酒馆的牌仍在这里
+	if PokerCard.is_card(kind):
+		return PokerFaces.texture(kind)
 	if _textures.has(kind):
 		return _textures[kind]
 	return _fallback(kind)
@@ -111,6 +114,19 @@ static func _bold_font(names: Array) -> SystemFont:
 	return font
 
 
+static func draw_rounded(target: CanvasItem, rect: Rect2, fill: Color, radius: int, border := 0,
+		border_color := Color.TRANSPARENT, draw_fill := true) -> void:
+	# 抗锯齿的圆角矩形(可只画边框),骗子酒馆与德州牌面的纸底、纸边、金边都用它;只能在 target 的 _draw 里调用
+	var box := StyleBoxFlat.new()
+	box.bg_color = fill
+	box.draw_center = draw_fill
+	box.set_corner_radius_all(radius)
+	box.set_border_width_all(border)
+	box.border_color = border_color
+	box.anti_aliasing = true
+	target.draw_style_box(box, rect)
+
+
 class CardPainter:
 	extends Control
 	# 单张牌面的矢量绘制
@@ -128,26 +144,15 @@ class CardPainter:
 	func _card_rect(inset: float) -> Rect2:
 		return Rect2(Vector2(inset, inset), size - Vector2(inset, inset) * 2.0)
 
-	func _rounded(rect: Rect2, fill: Color, radius: int, border := 0, border_color := Color.TRANSPARENT,
-			draw_fill := true) -> void:
-		var box := StyleBoxFlat.new()
-		box.bg_color = fill
-		box.draw_center = draw_fill
-		box.set_corner_radius_all(radius)
-		box.set_border_width_all(border)
-		box.border_color = border_color
-		box.anti_aliasing = true
-		draw_style_box(box, rect)
-
 	# —— 牌面 ——
 
 	func _draw_face() -> void:
 		var accent: Color = CardFaces.ACCENTS[kind]
-		_rounded(_card_rect(0), CardFaces.PAPER_EDGE, CardFaces.CORNER_RADIUS)
-		_rounded(_card_rect(4), CardFaces.PAPER, CardFaces.CORNER_RADIUS - 4)
+		CardFaces.draw_rounded(self, _card_rect(0), CardFaces.PAPER_EDGE, CardFaces.CORNER_RADIUS)
+		CardFaces.draw_rounded(self, _card_rect(4), CardFaces.PAPER, CardFaces.CORNER_RADIUS - 4)
 		_paper_texture()
-		_rounded(_card_rect(18), Color.TRANSPARENT, 14, 3, CardFaces.GOLD, false)
-		_rounded(_card_rect(25), Color.TRANSPARENT, 10, 1, Color(accent, 0.5), false)
+		CardFaces.draw_rounded(self, _card_rect(18), Color.TRANSPARENT, 14, 3, CardFaces.GOLD, false)
+		CardFaces.draw_rounded(self, _card_rect(25), Color.TRANSPARENT, 10, 1, Color(accent, 0.5), false)
 		var center := size / 2.0
 		draw_circle(center, 112.0, Color(accent, 0.08))
 		draw_arc(center, 112.0, 0.0, TAU, 96, CardFaces.GOLD, 4.0, true)
@@ -178,7 +183,7 @@ class CardPainter:
 			var p := Vector2(rng.randf_range(10, size.x - 10), rng.randf_range(10, size.y - 10))
 			draw_circle(p, rng.randf_range(0.6, 2.2), Color(CardFaces.INK, rng.randf_range(0.02, 0.06)))
 		for i in 6:
-			_rounded(_card_rect(4 + i * 3), Color.TRANSPARENT, CardFaces.CORNER_RADIUS - 4, 3,
+			CardFaces.draw_rounded(self, _card_rect(4 + i * 3), Color.TRANSPARENT, CardFaces.CORNER_RADIUS - 4, 3,
 				Color(0.55, 0.42, 0.25, 0.05), false)
 
 	func _corner_index(label: String, accent: Color, font: Font, flipped: bool) -> void:
@@ -240,8 +245,8 @@ class CardPainter:
 	# —— 牌背 ——
 
 	func _draw_back() -> void:
-		_rounded(_card_rect(0), Color(0.2, 0.03, 0.04), CardFaces.CORNER_RADIUS)
-		_rounded(_card_rect(4), CardFaces.BACK_RED, CardFaces.CORNER_RADIUS - 4)
+		CardFaces.draw_rounded(self, _card_rect(0), Color(0.2, 0.03, 0.04), CardFaces.CORNER_RADIUS)
+		CardFaces.draw_rounded(self, _card_rect(4), CardFaces.BACK_RED, CardFaces.CORNER_RADIUS - 4)
 		var inner := _card_rect(22)
 		var spacing := 22.0
 		var line_color := Color(CardFaces.GOLD, 0.22)
@@ -251,8 +256,8 @@ class CardPainter:
 			_clipped_line(inner, Vector2(inner.position.x + t, inner.position.y), Vector2(1, 1), line_color)
 			_clipped_line(inner, Vector2(inner.end.x - t, inner.position.y), Vector2(-1, 1), line_color)
 			t += spacing
-		_rounded(_card_rect(14), Color.TRANSPARENT, 16, 4, CardFaces.GOLD, false)
-		_rounded(_card_rect(22), Color.TRANSPARENT, 10, 1, Color(CardFaces.GOLD, 0.6), false)
+		CardFaces.draw_rounded(self, _card_rect(14), Color.TRANSPARENT, 16, 4, CardFaces.GOLD, false)
+		CardFaces.draw_rounded(self, _card_rect(22), Color.TRANSPARENT, 10, 1, Color(CardFaces.GOLD, 0.6), false)
 		var center := size / 2.0
 		draw_circle(center, 86.0, Color(0.12, 0.02, 0.03))
 		draw_arc(center, 86.0, 0.0, TAU, 96, CardFaces.GOLD, 4.0, true)

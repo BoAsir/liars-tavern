@@ -11,7 +11,8 @@ static func place(rig: CameraRig, view: String) -> bool:
 	rig.fill_light.light_energy = 0.0
 	match view:
 		"seat":
-			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK),
+			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT,
+				SeatLayout.SEAT_RADIUS + TableWorld.THIRD_PERSON_BEHIND),
 				Vector3(0, top, -0.12))
 			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
 		"selfshot":

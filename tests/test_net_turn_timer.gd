@@ -1,6 +1,7 @@
 extends GutTest
 # 房主回合计时的真实接线(不是 Pacing 的纯函数):开局预算含开场运镜、断线只顺延不重置、剩余时间进公共状态。
 # 用一个离线的 NetworkManager 实例(不是 Net 自动加载):没有对端时 _is_connected 全为 false,不会真的发 RPC。
+# 玩法逻辑抽成会话对象(LiarsSession)前后,这里的期望值不变:它是抽取没有改变骗子酒馆行为的回归。
 
 
 const NetworkManagerScript := preload("res://src/net/network_manager.gd")
@@ -24,7 +25,7 @@ func before_each():
 
 func _guest_not_on_turn() -> int:
 	for pid in [10, 11]:
-		if net._gs.current_pid != pid:
+		if net.last_public["current_pid"] != pid:
 			return pid
 	return 10
 
@@ -47,8 +48,8 @@ func test_bystander_disconnect_extends_instead_of_resetting():
 
 func test_accepted_action_restarts_a_full_turn_from_the_batch_budget():
 	net.start_game()
-	var actor: int = net._gs.current_pid
-	net._handle_intent(actor, "play", [0])
+	var actor: int = net.last_public["current_pid"]
+	net._handle_intent(actor, {"kind": "play", "indices": [0]})
 	var events := [{"type": "played", "pid": actor, "count": 1}, {"type": "turn", "pid": 0}]
 	assert_almost_eq(net._turn_timer.time_left, Protocol.TURN_TIMEOUT + Pacing.estimate(events), EPS,
 		"玩家行动后开场运镜的欠账已清零,新回合 = 30 秒 + 本批演出")
