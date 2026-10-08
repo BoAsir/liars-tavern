@@ -89,6 +89,36 @@ func test_raw_join_name_limit_leaves_room_for_any_legit_name():
 	assert_gt(Protocol.MAX_RAW_NAME_LENGTH, Protocol.MAX_NAME_LENGTH)
 
 
+func test_contains_blacklist_chars_detects_banned_characters():
+	# 测试黑名单字检测:笑、晓、马、飞、火、狐、楚、储
+	for ch in ["笑", "晓", "马", "飞", "火", "狐", "楚", "储"]:
+		assert_true(Protocol.contains_blacklist_chars(ch), "单字 '%s' 应在黑名单" % ch)
+		assert_true(Protocol.contains_blacklist_chars("名字%s字" % ch), "'%s' 在中间应检测" % ch)
+		assert_true(Protocol.contains_blacklist_chars("%s开头" % ch), "'%s' 在开头应检测" % ch)
+		assert_true(Protocol.contains_blacklist_chars("结尾%s" % ch), "'%s' 在结尾应检测" % ch)
+
+
+func test_validate_name_rejects_blacklist():
+	var fail_msg := "昵称不能含有敏感字"
+	assert_false(Protocol.validate_name("")["ok"], "空昵称应被拒绝")
+	var blacklist_check := ["笑", "晓", "马", "飞", "火", "狐", "楚", "储"]
+	for ch in blacklist_check:
+		var result := Protocol.validate_name("名字%s字" % ch)
+		assert_false(result["ok"], "含 '%s' 应被拒绝" % ch)
+		assert_eq(result.get("error", ""), fail_msg, "'%s' 错误提示" % ch)
+
+
+func test_validate_name_accepts_legit_names():
+	assert_true(Protocol.validate_name("阿杰")["ok"], "合法昵称应通过")
+	assert_true(Protocol.validate_name("一二三四")["ok"], "普通中文应通过")
+	assert_true(Protocol.validate_name("Fj").get("ok", true), "不含黑名单字应通过")
+	# sanitize 后再校验:前后空白与控制字符不应绕过黑名单
+	assert_false(Protocol.validate_name(Protocol.sanitize_name("  火狐  "))["ok"])
+	assert_false(Protocol.validate_name(Protocol.sanitize_name("楚\n天"))["ok"])
+	# 确保不含黑名单的字不会误报
+	assert_false(Protocol.contains_blacklist_chars("一二三四五六"), "不含黑名单字应返回 false")
+
+
 func test_absolute_player_cap_covers_every_mode():
 	# MAX_PLAYERS 是所有玩法的绝对上限(传输层槽位、发现报文校验);各玩法自己的上限看 GameMode
 	for mode in GameMode.ALL:

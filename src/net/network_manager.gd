@@ -79,6 +79,10 @@ func host_game(pname: String, room_name: String, preferred_port := 0, mode := Ga
 	if not GameMode.is_valid(mode):
 		push_error("开房失败:未知玩法 %s" % mode)
 		return ERR_INVALID_PARAMETER
+	var validation := Protocol.validate_name(Protocol.sanitize_name(pname))
+	if not validation["ok"]:
+		push_warning("开房失败:%s" % validation["error"])
+		return ERR_INVALID_PARAMETER
 	leave()
 	var created := _create_server(preferred_port)
 	if created["error"] != OK:
@@ -110,6 +114,10 @@ func _open_room(pname: String, room_name: String, port: int, mode: String, speci
 
 func join_game(pname: String, address_text: String, species := Species.UNASSIGNED) -> void:
 	# species:本机想要的形象,握手通过后单独发给房主(rpc_lobby_species),握手消息本身不变
+	var validation := Protocol.validate_name(Protocol.sanitize_name(pname))
+	if not validation["ok"]:
+		join_failed.emit(validation["error"])
+		return
 	var addr := Protocol.parse_address(address_text)
 	if not addr["ok"]:
 		join_failed.emit(addr["error"])
@@ -307,11 +315,15 @@ func _seat_late_joiner(id: int) -> void:
 
 
 func _join_denial(id: int, pname: String, version: int) -> String:
-	# 昵称来自不可信的对端:超长的在做任何逐字处理前就拒绝
+	# 昵称来自不可信的对端:超长的在做任何逐字处理前就拒绝;黑名单在sanitize之后检查
 	if pname.length() > Protocol.MAX_RAW_NAME_LENGTH:
 		push_warning("拒绝连接 %d 的加入请求:昵称长度 %d 超过上限 %d"
 			% [id, pname.length(), Protocol.MAX_RAW_NAME_LENGTH])
 		return "昵称过长"
+	var sanitized := Protocol.sanitize_name(pname)
+	var validation := Protocol.validate_name(sanitized)
+	if not validation["ok"]:
+		return validation["error"]
 	return _lobby.check_join(version, in_game, game_mode, _accepting_late_join())
 
 
