@@ -32,9 +32,9 @@ float luma(vec3 c) {
 
 // —— 纳瓦霍地毯 ——
 // 甘纳多配色(sRGB,用前转线性)
-const vec3 RUG_RED = vec3(0.36, 0.08, 0.05);
+const vec3 RUG_RED = vec3(0.32, 0.075, 0.05);
 const vec3 RUG_CHAR = vec3(0.07, 0.06, 0.055);
-const vec3 RUG_CREAM = vec3(0.62, 0.55, 0.42);
+const vec3 RUG_CREAM = vec3(0.56, 0.49, 0.37);
 const vec3 RUG_TAUPE = vec3(0.30, 0.25, 0.20);
 
 vec3 rug_color(vec2 uv, vec2 size, float fringe) {
@@ -119,7 +119,9 @@ void fragment() {
 		rough = mix(rough, 0.3, gold);
 		metal = mix(metal, 1.0, gold);
 		float warm = (1.0 - smoothstep(0.0, mirror_size.y, UV.y)) * vignette * (0.6 + 0.4 * smoke);
-		emission = vec3(0.10, 0.055, 0.025) * warm * 0.3 * (1.0 - gold);
+		// 假反光:几道斜向的柔和亮带,读得出是镜面
+		float streak = smoothstep(0.35, 0.0, abs(fract((UV.x + UV.y * 0.7) / 1.3) - 0.5)) * 0.5 + 0.5;
+		emission = vec3(0.10, 0.055, 0.025) * warm * 0.55 * streak * (1.0 - gold);
 	} else if (mode == 3) {
 		int id = int(param + 0.5);
 		vec4 rs = rug_sizes[id];

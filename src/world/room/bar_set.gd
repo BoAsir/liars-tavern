@@ -42,7 +42,9 @@ static func _world(f: MeshForge) -> void:
 
 # —— 酒瓶与啤酒杯(随机数的取用顺序不能变)——
 
-static func _bottles_and_mugs(bar: Node3D) -> void:
+static func shelf_layout() -> Dictionary:
+	# 酒瓶与啤酒杯的摆放(Bar 枢轴局部坐标):{"bottles": [{pos, height, color}], "mugs": [杯底位置]}。
+	# 随机数的取用顺序不能变:先 53 个酒瓶,再 4 只杯子,和改造前同一个 rng(种子 2026)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
 	var bottles := []
@@ -50,19 +52,25 @@ static func _bottles_and_mugs(bar: Node3D) -> void:
 		var y := 1.55 + shelf * 0.45
 		var z := -1.35
 		while z < 1.35:
-			# 随机数的取用顺序不能变:后面啤酒杯的位置也取自同一个 rng
 			var h := rng.randf_range(Bottles.MIN_HEIGHT, Bottles.MAX_HEIGHT)
 			var color: Color = BOTTLE_COLORS[rng.randi() % BOTTLE_COLORS.size()]
 			bottles.append({"pos": Vector3(0.22, y + 0.02, z), "height": h, "color": color})
 			z += rng.randf_range(0.1, 0.2)
-	Bottles.build(bar, bottles)
+	var mugs := []
+	for i in 4:
+		mugs.append(Vector3(1.05 + rng.randf_range(-0.15, 0.15), 1.11, -1.2 + i * 0.7 + rng.randf_range(-0.1, 0.1)))
+	return {"bottles": bottles, "mugs": mugs}
+
+
+static func _bottles_and_mugs(bar: Node3D) -> void:
+	var layout := shelf_layout()
+	Bottles.build(bar, layout["bottles"])
 	var mugs := MultiMesh.new()
 	mugs.transform_format = MultiMesh.TRANSFORM_3D
 	mugs.mesh = mug_mesh()
-	mugs.instance_count = 4
-	for i in 4:
-		var base := Vector3(1.05 + rng.randf_range(-0.15, 0.15), 1.11, -1.2 + i * 0.7 + rng.randf_range(-0.1, 0.1))
-		mugs.set_instance_transform(i, Transform3D(Basis(Vector3.UP, i * 0.9 - 0.4), base))
+	mugs.instance_count = layout["mugs"].size()
+	for i in mugs.instance_count:
+		mugs.set_instance_transform(i, Transform3D(Basis(Vector3.UP, i * 0.9 - 0.4), layout["mugs"][i]))
 	var holder := MeshKit.pivot(bar, Vector3.ZERO, "BarTop")
 	var inst := MultiMeshInstance3D.new()
 	inst.name = "Mugs"

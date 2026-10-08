@@ -28,6 +28,7 @@ const RECTS := {
 	"porch": Rect2i(1024, 480, 512, 256),
 	"sign_tavern": Rect2i(0, 768, 1024, 128),
 	"sign_cheat": Rect2i(1024, 768, 512, 128),
+	"chalkboard": Rect2i(1536, 480, 256, 192),
 }
 # 玩笑赏金(不出现数字金额、货币符号或筹码):按物种 id 查,查不到用回退
 const BOUNTIES := {
@@ -176,6 +177,8 @@ class DecorPainter:
 		_sign_tavern()
 		_region(DecorAtlas.RECTS["sign_cheat"])
 		_sign_cheat()
+		_region(DecorAtlas.RECTS["chalkboard"])
+		_chalkboard()
 		draw_set_transform(Vector2.ZERO)
 
 	func _region(r: Rect2i) -> void:
@@ -748,6 +751,23 @@ class DecorPainter:
 			_text(_latin, "LIAR'S TAVERN", Vector2(size.x / 2.0, 68), 72, gold, 900)
 		for x in [36.0, 988.0]:
 			draw_circle(Vector2(x, 64), 9, gold)
+
+	func _chalkboard() -> void:
+		# 吧台边的粉笔菜单:只写酒名,不写价钱
+		var size := Vector2(256, 192)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.10, 0.13, 0.11))
+		_rng.seed = 404
+		for i in 40:
+			var p := Vector2(_rng.randf() * size.x, _rng.randf() * size.y)
+			draw_line(p, p + Vector2(_rng.randf_range(10, 40), _rng.randf_range(-3, 3)), Color(0.8, 0.8, 0.75, 0.04), 6.0)
+		var chalk := Color(0.86, 0.84, 0.76)
+		_cn_or("今日供应", "TODAY", Vector2(size.x / 2.0, 30), 28, chalk, size.x - 30)
+		draw_line(Vector2(40, 50), Vector2(size.x - 40, 50), Color(chalk, 0.7), 1.5, true)
+		var lines := ["WHISKEY", "COLD BEER", "SARSAPARILLA", "BEANS & BREAD"]
+		for k in lines.size():
+			_text(_latin, lines[k], Vector2(size.x / 2.0, 72 + k * 28), 19, Color(chalk, 0.92), size.x - 40)
+		draw_circle(Vector2(30, 72), 3, Color(0.9, 0.6, 0.5))
+		draw_circle(Vector2(30, 100), 3, Color(0.9, 0.8, 0.5))
 
 	func _sign_cheat() -> void:
 		var size := Vector2(512, 128)

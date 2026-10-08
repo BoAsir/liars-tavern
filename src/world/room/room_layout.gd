@@ -86,7 +86,7 @@ const FRINGE := 0.08
 const DECOR := [
 	{"id": "poster_fox", "kind": "poster", "wall": "back", "u": 0.22, "y": 1.62, "size": Vector2(0.30, 0.40), "tilt": -2.0, "species": 0, "curl": 0.02},
 	{"id": "poster_bear", "kind": "poster", "wall": "back", "u": 0.62, "y": 1.55, "size": Vector2(0.30, 0.40), "tilt": 3.0, "species": 1, "curl": 0.0},
-	{"id": "clock", "kind": "clock", "wall": "back", "u": 2.30, "y": 1.72, "size": Vector2(0.34, 0.85), "tilt": 0.0},
+	{"id": "clock", "kind": "clock", "wall": "back", "u": 2.30, "y": 1.80, "size": Vector2(0.34, 0.85), "tilt": 0.0},
 	{"id": "painting_bison", "kind": "painting", "wall": "back", "u": 3.82, "y": 1.62, "size": Vector2(0.56, 0.40), "tilt": 0.0, "art": "bison"},
 	{"id": "poster_pig", "kind": "poster", "wall": "left", "u": 2.60, "y": 1.62, "size": Vector2(0.30, 0.40), "tilt": 1.5, "species": 2, "curl": 0.015},
 	{"id": "poster_cat", "kind": "poster", "wall": "left", "u": 3.40, "y": 1.58, "size": Vector2(0.30, 0.40), "tilt": -2.5, "species": 3, "curl": 0.0},
@@ -98,9 +98,23 @@ const DECOR := [
 	{"id": "horseshoe", "kind": "horseshoe", "wall": "front", "u": -0.35, "y": 2.66, "size": Vector2(0.14, 0.15), "tilt": 0.0},
 	{"id": "poster_crocodile", "kind": "poster", "wall": "right", "u": 0.55, "y": 1.60, "size": Vector2(0.30, 0.40), "tilt": -2.0, "species": 7, "curl": 0.02},
 	{"id": "painting_mesa", "kind": "painting", "wall": "right", "u": -2.45, "y": 1.62, "size": Vector2(0.60, 0.42), "tilt": 0.0, "art": "mesa"},
-	{"id": "lasso", "kind": "lasso", "wall": "right", "u": -3.35, "y": 1.75, "size": Vector2(0.34, 0.40), "tilt": 0.0},
+	{"id": "wagon_wheel", "kind": "wheel", "wall": "right", "u": 2.40, "y": 1.72, "size": Vector2(0.72, 0.72), "tilt": 0.0},
+	{"id": "chalkboard", "kind": "chalkboard", "wall": "left", "u": -3.9, "y": 1.58, "size": Vector2(0.5, 0.38), "tilt": 1.0},
+	{"id": "lasso", "kind": "lasso", "wall": "right", "u": -3.35, "y": 1.75, "size": Vector2(0.34, 0.46), "tilt": 0.0},
 ]
 const FLAT_OFFSET := 0.005       # 平面件离墙
+# 墙上的大件(特写背景测试与墙饰避让用):wall、u 中心、宽、y 下沿、y 上沿
+const WALL_FEATURES := {
+	"mirror": {"wall": "left", "u": -0.6, "width": 3.08, "y0": 0.95, "y1": 2.62},
+	"bar_sign": {"wall": "left", "u": -0.6, "width": 2.48, "y0": 2.64, "y1": 2.93},
+	"door": {"wall": "front", "u": DOOR_X, "width": DOOR_WIDTH + DOOR_CASING * 2.0, "y0": 0.0, "y1": 2.5},
+	"window": {"wall": "right", "u": Tavern.WINDOW_Z, "width": 1.3 + WINDOW_CASING * 2.0, "y0": 1.05, "y1": 2.56},
+	"curtain_a": {"wall": "right", "u": -1.675, "width": 0.55, "y0": 1.05, "y1": 2.62},
+	"curtain_b": {"wall": "right", "u": -0.125, "width": 0.55, "y0": 1.05, "y1": 2.62},
+	"piano": {"wall": "front", "u": -2.75, "width": 1.4, "y0": 0.0, "y1": 1.25},
+	"coat_rack": {"wall": "front", "u": 2.55, "width": 0.5, "y0": 0.0, "y1": 1.85},
+	"fireplace": {"wall": "back", "u": -1.5, "width": 2.56, "y0": 0.0, "y1": HEIGHT},
+}
 const FRAME_DEPTH := 0.03        # 画框厚
 
 # 家具与道具簇的 AABB(世界坐标 min / max):镜头净空测试与构建器共用
@@ -170,8 +184,10 @@ static func wall_xform(wall: String, u: float, y: float, offset := 0.0, tilt_deg
 
 
 static func panel_fit(length: float, target: float) -> float:
-	# 墙段里放整数块面板:块数取最接近的整数(至少 1),返回实际节距
-	var n := maxi(roundi(length / target), 1)
+	# 墙段里放整数块面板:取节距最接近 target 的块数(至少 1),返回实际节距
+	var n := maxi(floori(length / target), 1)
+	if absf(length / (n + 1) - target) < absf(length / n - target):
+		n += 1
 	return length / n
 
 
@@ -220,8 +236,8 @@ static func rug_sizes() -> Array:
 
 
 static func moon_uv() -> Vector2:
-	# 从窗心朝月光方向与外景板(x = BACKDROP_X)的交点,换算成外景板 UV(u 沿 +Z,v 自上而下)
-	var dir := (MOON_POS - WINDOW_CENTER).normalized()
+	# 从窗心逆着月光方向(MOON_TARGET → MOON_POS)与外景板(x = BACKDROP_X)的交点,换算成外景板 UV(u 沿 +Z,v 自上而下)
+	var dir := (MOON_POS - MOON_TARGET).normalized()
 	var t := (BACKDROP_X - WINDOW_CENTER.x) / dir.x
 	var hit := WINDOW_CENTER + dir * t
 	return Vector2((hit.z - BACKDROP_Z.x) / (BACKDROP_Z.y - BACKDROP_Z.x), (BACKDROP_Y.y - hit.y) / (BACKDROP_Y.y - BACKDROP_Y.x))
@@ -254,25 +270,30 @@ static func all_aabbs() -> Dictionary:
 
 
 static func focus_backdrop(angle: float) -> Dictionary:
-	# 特写机位(TableWorld 的 focus:镜头在桌心上方看向座位上的头)背后的墙:从桌心穿过头心的射线打到哪面墙。
-	# 头心取座位外移 0.10 m、高 1.27 m。返回 {"wall", "u", "y", "point"}
+	# 特写机位(TableWorld.focus_view:镜头在桌心斜上方、偏向座位左侧 0.35 m,看向头心)背后的墙:
+	# 从镜头穿过头心的射线打到哪面墙。头心取座位外移 0.10 m、高 1.27 m。返回 {"wall", "u", "y", "point"}
 	var dir := SeatLayout.direction(angle)
+	var right := Vector3.UP.cross(dir)
+	var camera := dir * 0.15 + Vector3(0, 1.42, 0) - right * 0.35
 	var head := dir * (SeatLayout.SEAT_RADIUS + 0.10) + Vector3(0, 1.27, 0)
-	var origin := Vector3(0, 1.27, 0)
-	var d := (head - origin).normalized()
+	return wall_hit(camera, head - camera)
+
+
+static func wall_hit(origin: Vector3, d: Vector3) -> Dictionary:
+	# 射线 origin + d·t 先打到的墙(墙面在 ±INNER)
+	d = d.normalized()
 	var best := INF
 	var out := {}
 	for wall in ["back", "front", "left", "right"]:
-		var n := wall_normal(wall)
+		var n := wall_normal(wall)   # 朝屋里
 		var denom := d.dot(-n)
 		if denom <= 1e-6:
 			continue
-		var plane_d := INNER   # 墙面到原点的距离
-		var t := (plane_d - origin.dot(-n)) / denom
+		var t := (INNER + origin.dot(n)) / denom
 		if t > 0.0 and t < best:
 			best = t
 			var p := origin + d * t
-			out = {"wall": wall, "u": p.x if wall in ["back", "front"] else p.z, "y": p.y, "point": p}
+			out = {"wall": wall, "u": p.x if wall in ["back", "front"] else p.z, "y": p.y, "point": p, "t": t}
 	return out
 
 
