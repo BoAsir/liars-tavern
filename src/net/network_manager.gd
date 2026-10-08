@@ -20,6 +20,7 @@ signal gaze_updated(pid: int, point: Vector3, neck: Vector3, active: bool)   # �
 
 const HOST_ID := LobbyModel.HOST_ID
 const DISCONNECT_GRACE := 1.0
+const LATE_SEAT_REASON := "牌桌暂时坐不下,请稍后再来"   # 名单放行但会话拒收中途加入者
 
 # —— 只读状态(UI 读取) ——
 var player_name := ""
@@ -280,19 +281,28 @@ func _handle_join_request(id: int, pname: String, version: int) -> void:
 		_disconnect_peer_later(id)
 		return
 	_lobby.add_member(id, pname)
+	# 对局中入座(德州)先让会话收人:名单放行而会话拒收(同一 peer id 本手里刚离开、桌上没座)时按拒绝处理,
+	# 否则他会被告知开局却不在会话里(收不到私有视图、意图全被拒)
+	var late := _session != null and _accepting_late_join()
+	var events: Array = _session.add_player(id, _lobby.names()[id]) if late else []
+	if late and events.is_empty():
+		_lobby.remove(id)
+		_send_to(id, "rpc_join_denied", [LATE_SEAT_REASON])
+		_disconnect_peer_later(id)
+		return
 	# 获准里带上玩法:客户端一进等待厅就要按玩法摆桌,带 meta 的名单比它晚到。
-	# 对局中入座(德州)的人先不进等待厅:客户端保持「加入中」,等随后发来的牌局信息
+	# 对局中入座的人先不进等待厅:客户端保持「加入中」,等随后发来的牌局信息
 	_send_to(id, "rpc_join_accepted", [{"in_game": in_game, "mode": game_mode}])
-	if _session != null and _accepting_late_join():
-		_seat_late_joiner(id)
+	if late:
+		_seat_late_joiner(id, events)
 	_broadcast_lobby()
 
 
-func _seat_late_joiner(id: int) -> void:
-	# 中途加入的顺序(规格 §4.2):只对他发牌局信息(当前桌上有酒客的人,不含他)→ 会话入座 → 事件与视图全员同步。
+func _seat_late_joiner(id: int, events: Array) -> void:
+	# 中途加入的顺序(规格 §4.2):只对他发牌局信息(当前桌上有酒客的人,不含他:新人要下一手才登场)→ 入座事件与视图全员同步。
 	# 他已在名单里,所以加入事件、公共视图与之后的每一批他都收得到
 	_send_to(id, "rpc_game_started", [_seat_entries(_session.seats_with_patrons()), {"mode": game_mode, "late": true}])
-	_after_action(_session.add_player(id, _lobby.names()[id]))
+	_after_action(events)
 
 
 func _join_denial(id: int, pname: String, version: int) -> String:
