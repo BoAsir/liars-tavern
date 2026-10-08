@@ -6,6 +6,7 @@ extends Node
 const MainMenuScreen := preload("res://src/ui/main_menu/main_menu.gd")
 const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
+const PokerScreen := preload("res://src/ui/poker/poker_screen.gd")
 const VIEW_RESET_TIME := 0.8   # 切换屏幕时紧张度、闪光染色与镜头焦距回到平静的时长
 
 var tavern: Tavern
@@ -84,6 +85,7 @@ func _exit_tree() -> void:
 	# 静态缓存持有的资源在退出时释放,避免 ObjectDB 泄漏告警
 	Card3D.clear_materials()
 	CardFaces.clear()
+	PokerFaces.clear()
 	WorldMaterials.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
@@ -117,7 +119,19 @@ func show_rules() -> void:
 	_rulebook.closed.connect(func():
 		_rules_pages = _rulebook.bookmarks()
 		_rulebook = null)
+	# 翻到德州那本就在后台生成德州牌面(规格 §5.2),生成完让当前页的示例小牌重新取纹理;
+	# 连的是说明书节点的方法,说明书合上释放后连接自动断开
+	_rulebook.book_shown.connect(_on_book_shown)
 	_rules_root.add_child(_rulebook)
+
+
+func _on_book_shown(book: String) -> void:
+	if book != RulebookContent.BOOK_POKER or PokerFaces.is_built() or not is_instance_valid(_rulebook):
+		return
+	var built := PokerFaces.built_signal()
+	if not built.is_connected(_rulebook.refresh_card_faces):
+		built.connect(_rulebook.refresh_card_faces)
+	PokerFaces.build(_rulebook)
 
 
 func _rules_mode() -> String:
@@ -149,6 +163,7 @@ func apply_table_mode(mode: String) -> void:
 # —— 屏幕切换 ——
 
 func _show_menu() -> void:
+	world.clear_poker()   # 从德州房间回来:拆掉德州的 3D 节点(规格 §5.1)
 	world.clear()
 	labels.clear()
 	apply_table_mode(GameMode.LIARS)
@@ -163,7 +178,8 @@ func _show_lobby() -> void:
 
 
 func _show_table(_seats: Array) -> void:
-	_switch_to(TableScreen.new(self))
+	# 按本房玩法选牌桌屏幕(game_started 发出之前 game_mode 已设好)
+	_switch_to(PokerScreen.new(self) if GameMode.is_poker(Net.game_mode) else TableScreen.new(self))
 
 
 func _back_to_menu(reason: String) -> void:

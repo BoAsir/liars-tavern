@@ -40,11 +40,9 @@ func set_seats(entries: Array) -> void:
 				names[entry["pid"]] = entry["name"]
 
 
-func apply_public(state: Dictionary, animating: bool) -> void:
-	# 演出中只记下视图,影子行与座位表等演出结束后对账时再换
+func apply_public(state: Dictionary) -> void:
+	# 只记下视图:影子行与座位表由调用方在演出结束后用 refresh_from_view 对账(它会报告座位表是否变了)
 	pub = state
-	if not animating:
-		refresh_from_view()
 
 
 func apply_private(state: Dictionary) -> void:

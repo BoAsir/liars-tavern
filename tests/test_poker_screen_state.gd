@@ -14,6 +14,12 @@ func before_each():
 	state = PokerScreenState.new()
 
 
+func _apply(pub: Dictionary) -> void:
+	# 演出结束后收到视图:记下并对账
+	state.apply_public(pub)
+	state.refresh_from_view()
+
+
 func _player(pid: int, status := PokerRules.STATUS_ACTIVE, overrides := {}) -> Dictionary:
 	var p := {"pid": pid, "name": "P%d" % pid, "stack": 2000, "bet": 0, "committed": 0, "status": status, "left": false,
 		"buyins": 1, "net": 0, "shown": []}
@@ -33,7 +39,7 @@ func _pub(pids: Array, overrides := {}) -> Dictionary:
 # —— 视图 ——
 
 func test_view_refresh_fills_rows_seats_and_table_info():
-	state.apply_public(_pub([1, 2, 3], {"board": H.cards("Ah Kd 2c"), "pots": [{"amount": 60, "eligible": [1, 2, 3]}]}), false)
+	_apply(_pub([1, 2, 3], {"board": H.cards("Ah Kd 2c"), "pots": [{"amount": 60, "eligible": [1, 2, 3]}]}))
 	assert_eq(state.seats, [1, 2, 3])
 	assert_eq(state.order, [1, 2, 3])
 	assert_eq(state.row(2)["stack"], 2000)
@@ -46,17 +52,17 @@ func test_view_refresh_fills_rows_seats_and_table_info():
 
 
 func test_view_during_animation_is_kept_but_rows_are_not_overwritten():
-	state.apply_public(_pub([1, 2]), false)
-	state.apply_public(_pub([1, 2], {"players": [_player(1, "active", {"stack": 500}), _player(2)]}), true)
+	_apply(_pub([1, 2]))
+	state.apply_public(_pub([1, 2], {"players": [_player(1, "active", {"stack": 500}), _player(2)]}))
 	assert_eq(state.row(1)["stack"], 2000, "演出中影子行不动")
 	assert_eq(state.pub["players"][0]["stack"], 500, "但最新视图记下了")
-	assert_true(state.refresh_from_view() == false, "座位表没变")
+	assert_false(state.refresh_from_view(), "座位表没变")
 	assert_eq(state.row(1)["stack"], 500)
 
 
 func test_refresh_reports_a_seat_change_for_reseating():
-	state.apply_public(_pub([1, 2]), false)
-	state.apply_public(_pub([1, 2, 3]), true)
+	_apply(_pub([1, 2]))
+	state.apply_public(_pub([1, 2, 3]))
 	assert_true(state.refresh_from_view())
 	assert_eq(state.seats, [1, 2, 3])
 
@@ -65,13 +71,13 @@ func test_bad_view_rows_are_dropped():
 	var pub := _pub([1, 2])
 	pub["players"] = [_player(1), "junk", {"pid": "x"}, _player(2)]
 	pub["seats"] = [1, "junk", 2]
-	state.apply_public(pub, false)
+	_apply(pub)
 	assert_eq(state.order, [1, 2])
 	assert_eq(state.seats, [1, 2])
 
 
 func test_private_view_gives_my_hole_and_best_only_for_the_hand_it_belongs_to():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_private({"hand": 3, "hole": H.cards("Ah Kd"), "best": {"detail": "一对 · A", "cards": H.cards("Ah Ad Kd 9c 2c")}})
 	assert_eq(state.hole(), H.cards("Ah Kd"))
 	assert_eq(state.best_detail(), "一对 · A")
@@ -84,7 +90,7 @@ func test_private_view_gives_my_hole_and_best_only_for_the_hand_it_belongs_to():
 # —— 事件改影子行 ——
 
 func test_blinds_actions_and_collection_move_the_shadow_rows():
-	state.apply_public(_pub([1, 2, 3]), false)
+	_apply(_pub([1, 2, 3]))
 	state.apply_event({"type": "blind", "pid": 2, "kind": "sb", "amount": 10, "bet": 10, "stack": 1990, "all_in": false})
 	state.apply_event({"type": "action", "pid": 3, "action": "fold", "amount": 0, "bet": 0, "stack": 2000, "all_in": false, "timeout": false})
 	state.apply_event({"type": "action", "pid": 1, "action": "raise", "amount": 2000, "bet": 2000, "stack": 0, "all_in": true, "timeout": false})
@@ -101,7 +107,7 @@ func test_blinds_actions_and_collection_move_the_shadow_rows():
 
 
 func test_street_reveal_pot_and_hand_over():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_event({"type": "street", "street": "flop", "cards": H.cards("Ah Kd 2c"), "board": H.cards("Ah Kd 2c")})
 	assert_eq(state.board, H.cards("Ah Kd 2c"))
 	state.apply_event({"type": "reveal", "hands": [{"pid": 2, "cards": H.cards("Ac Ad")}], "reason": "allin"})
@@ -119,7 +125,7 @@ func test_street_reveal_pot_and_hand_over():
 
 
 func test_seat_events_change_status_and_membership():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_event({"type": "turn", "pid": 2})
 	assert_eq(state.current_pid, 2)
 	state.apply_event({"type": "rebuy", "pid": 1, "amount": 2000, "buyins": 2, "stack": 2000})
@@ -144,7 +150,7 @@ func test_seat_events_change_status_and_membership():
 
 
 func test_hand_started_takes_the_new_seat_table_and_marks_the_dealt():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_event({"type": "player_joined", "pid": 7, "name": "迟到"})
 	state.apply_event({"type": "reveal", "hands": [{"pid": 2, "cards": H.cards("Ac Ad")}], "reason": "showdown"})
 	state.apply_event({"type": "hand_started", "hand": 4, "button": 2, "sb": 7, "bb": 1, "seats": [1, 2, 7], "dealt": [7, 1, 2]})
@@ -159,7 +165,7 @@ func test_hand_started_takes_the_new_seat_table_and_marks_the_dealt():
 
 
 func test_unknown_pids_in_events_do_not_crash():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_event({"type": "action", "pid": 99, "action": "call", "amount": 20, "bet": 20, "stack": 1980, "all_in": false})
 	state.apply_event({"type": "rebuy", "pid": 98, "stack": 2000, "buyins": 1, "amount": 2000})
 	state.apply_event({"type": "pot_won", "index": 0, "amount": 10, "winners": [97], "shares": {97: 10}, "hand_name": "", "best": {}, "uncontested": true})
@@ -171,7 +177,7 @@ func test_unknown_pids_in_events_do_not_crash():
 # —— 推导 ——
 
 func test_bottom_mode_shows_bet_controls_only_while_someone_is_acting():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_NONE, "两手之间没人行动")
 	state.apply_event({"type": "turn", "pid": 2})
 	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_BET, "看别人的回合横幅")
@@ -187,9 +193,9 @@ func test_bottom_mode_shows_bet_controls_only_while_someone_is_acting():
 
 
 func test_camera_rule_follows_seats_and_spectating():
-	state.apply_public(_pub([2, 3]), false)
+	_apply(_pub([2, 3]))
 	assert_true(state.uses_overview(ME), "不在座位表里(迟到者)")
-	state.apply_public(_pub([1, 2, 3]), false)
+	_apply(_pub([1, 2, 3]))
 	assert_false(state.uses_overview(ME))
 	for status in [PokerRules.STATUS_BUSTED, PokerRules.STATUS_WAITING, PokerRules.STATUS_AWAY]:
 		state.apply_event({"type": "hand_over", "hand": 3, "stacks": {}, "busted": []})
@@ -200,7 +206,7 @@ func test_camera_rule_follows_seats_and_spectating():
 
 
 func test_gaze_excludes_spectators_and_the_departed():
-	state.apply_public(_pub([1, 2, 3]), false)
+	_apply(_pub([1, 2, 3]))
 	assert_false(state.is_excluded(2))
 	state.apply_event({"type": "spectate", "pid": 2})
 	assert_true(state.is_excluded(2))
@@ -210,15 +216,15 @@ func test_gaze_excludes_spectators_and_the_departed():
 
 
 func test_seat_entries_add_me_at_the_end_when_i_am_a_late_joiner():
-	state.apply_public(_pub([2, 3]), false)
+	_apply(_pub([2, 3]))
 	state.names[ME] = "我"
 	assert_eq(state.seat_entries(ME), [{"pid": 2, "name": "P2"}, {"pid": 3, "name": "P3"}, {"pid": ME, "name": "我"}])
-	state.apply_public(_pub([1, 2, 3]), false)
+	_apply(_pub([1, 2, 3]))
 	assert_eq(state.seat_entries(ME).map(func(e): return e["pid"]), [1, 2, 3])
 
 
 func test_showdown_entries_name_the_hand_only_with_three_or_more_board_cards():
-	state.apply_public(_pub([1, 2]), false)
+	_apply(_pub([1, 2]))
 	state.apply_event({"type": "reveal", "hands": [{"pid": 2, "cards": H.cards("Ac Ad")}, {"pid": 1, "cards": H.cards("7s 2h")}], "reason": "allin"})
 	var entries := state.showdown_entries(false)
 	assert_eq(entries.size(), 2)
@@ -234,7 +240,7 @@ func test_my_status_and_legal_actions_come_from_the_view():
 	assert_eq(state.status_of(ME), "")
 	var pub := _pub([1, 2], {"current_pid": ME, "actions": {"pid": ME, "to_call": 20, "call_amount": 20, "can_check": false,
 		"can_raise": true, "can_allin": true, "min_raise_to": 40, "max_raise_to": 2000}})
-	state.apply_public(pub, false)
+	_apply(pub)
 	assert_eq(state.status_of(ME), PokerRules.STATUS_ACTIVE)
 	assert_eq(state.legal(ME)["min_raise_to"], 40)
 	assert_eq(state.legal(2), {}, "不是他的回合")
@@ -243,7 +249,7 @@ func test_my_status_and_legal_actions_come_from_the_view():
 func test_sync_from_view_takes_the_actor_and_shown_cards_for_a_late_first_frame():
 	var pub := _pub([1, 2], {"current_pid": 2, "street": PokerRules.RIVER, "board": H.cards("Ah Kd 2c 9s 9d"),
 		"players": [_player(1), _player(2, "allin", {"shown": H.cards("Ac Ad")})]})
-	state.apply_public(pub, true)
+	state.apply_public(pub)
 	state.sync_from_view()
 	assert_eq(state.current_pid, 2)
 	assert_eq(state.seats, [1, 2])
