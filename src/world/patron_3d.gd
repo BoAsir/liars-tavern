@@ -66,6 +66,9 @@ const GREY := Color(0.42, 0.42, 0.42)   # 褪色的灰(patron.gdshader 里同值
 const FADE_TIME := 1.4
 const DIE_BODY_ROT := Vector3(0.55, 0.15, -0.5)
 const DIE_HEAD_ROT := Vector3(0.3, 0.3, -0.4)
+# 出局时牌扇扣在大腿上(座位坐标):身子往后仰,挂在胸前的牌会跟着翻上来戳进大头的脸
+const DIE_FAN_POS := Vector3(0, 0.6, -0.1)
+const DIE_FAN_TIME := 0.4
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
@@ -73,6 +76,7 @@ var alive := true
 var body: Node3D
 var head: Node3D
 var fan: Node3D
+var _fan_alive = null   # 出局前牌扇的位置(Transform3D);reset_pose 时放回
 var right_hand: Node3D
 
 var _arm_l: Node3D
@@ -603,6 +607,11 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	_tween_arm(fall, _arm_l, _mirror(HAND_DEAD, -1.0), 0.5, Tween.TRANS_BOUNCE)
 	_tween_arm(fall, _arm_r, HAND_DEAD, 0.5, Tween.TRANS_BOUNCE)
 	_knock_hat_off()
+	_fan_alive = fan.transform
+	var body_final := Transform3D(Basis.from_euler(body_rot), HIP)
+	var lap := Transform3D(Basis(Vector3.BACK, PI), DIE_FAN_POS)   # 平放、牌背朝上
+	fall.tween_property(fan, "transform", body_final.affine_inverse() * lap, DIE_FAN_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	fall.tween_method(_set_fade, 0.0, 1.0, FADE_TIME)
 	if not _look_data.get("tail", {}).is_empty():
 		fall.tween_method(func(v: float): _legs.set_instance_shader_parameter("tail",
@@ -665,6 +674,9 @@ func reset_pose() -> void:
 	right_hand.quaternion = Quaternion.IDENTITY
 	_steady = false
 	body.position = HIP
+	if _fan_alive != null:
+		fan.transform = _fan_alive
+		_fan_alive = null
 	rest_arms(false)
 	_antics.reset()
 
