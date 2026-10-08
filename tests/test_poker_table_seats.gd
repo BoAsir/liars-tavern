@@ -205,3 +205,16 @@ func test_results_rank_by_net_and_sum_to_zero_including_players_who_left():
 		total += row["net"]
 	assert_eq(total, 0, "所有人盈亏之和恒为 0")
 	assert_eq(t.results(), results)
+
+
+func test_results_mid_hand_count_chips_committed_this_hand_so_net_still_sums_to_zero():
+	# results() 是公开接口,后续任务可能在一手进行中拿来预览:已押进本手的筹码也得算进盈亏
+	var t := make_table([1, 2, 3])
+	start_with_button(t, 1)
+	play(t, R.RAISE, 400)
+	assert_eq(t.phase(), PokerTable.Phase.BETTING)
+	var total := 0
+	for row in t.results():
+		total += row["net"]
+	assert_eq(total, 0, "一手进行中盈亏之和也恒为 0")
+	assert_eq(t.results()[0]["stack"], 2000, "没押筹码的人仍是 2000;押了的人按筹码 + 本手已投入计")

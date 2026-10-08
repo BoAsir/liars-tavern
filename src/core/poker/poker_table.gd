@@ -171,10 +171,11 @@ func legal_actions(pid: int) -> Dictionary:
 
 func results() -> Array:
 	# 结算行(含已离开的):盈亏 = 筹码 − 领取次数 × 2000,按盈亏从高到低(同分按座位、离开的先后)
+	# 一手进行中也能调用(预览):已押进本手的筹码算进去,两手之间 committed 为 0,结果不变
 	var rows := []
 	for pid in _seat_order:
 		var p: Dictionary = _players[pid]
-		rows.append(_result_row(pid, p["stack"], p["buyins"], p["left"]))
+		rows.append(_result_row(pid, p["stack"] + p["committed"], p["buyins"], p["left"]))
 	for gone in _departed:
 		rows.append(_result_row(gone["pid"], gone["stack"], gone["buyins"], true))
 	var higher := func(a: int, b: int) -> bool:
