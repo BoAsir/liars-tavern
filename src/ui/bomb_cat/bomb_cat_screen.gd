@@ -128,7 +128,9 @@ func _connect_hud() -> void:
 	hud.draw_pressed.connect(submit_draw)
 	hud.nope_pressed.connect(submit_nope)
 	hud.card_clicked.connect(_on_card_clicked)
-	hud.card_hovered.connect(func(i: int): cards.set_selection(_selected, i))
+	hud.card_hovered.connect(func(i: int):
+		if cards != null:
+			cards.set_selection(_selected, i))
 	hud.target_chosen.connect(choose_target)
 	hud.named_chosen.connect(choose_named)
 	hud.prompt_cancelled.connect(cancel_prompt)
@@ -168,6 +170,8 @@ func _on_private(view: Dictionary) -> void:
 
 
 func _on_events(events: Array) -> void:
+	# 有新的一批事件 = 房主处理过了(自己的意图被接受,或局面变了):回执到了,可以再出手
+	_awaiting_intent = false
 	for ev in events:
 		if ev is Dictionary and ev.get("type") == "noped" and ev.get("pid") == my_pid:
 			_nope_pending = false
@@ -236,6 +240,7 @@ func note_event(ev: Dictionary) -> void:
 
 func set_current(pid: Variant, turns := 1) -> void:
 	_clock.restart_turn()
+	_awaiting_intent = false
 	if hud == null:
 		return
 	var focus := BombCatDirector.TABLE_FOCUS
@@ -485,7 +490,8 @@ func toggle_card(index: int) -> void:
 	else:
 		_selected = {index: true}
 	Sfx.play("ui_click")
-	cards.set_selection(_selected, -1)
+	if cards != null:
+		cards.set_selection(_selected, -1)
 	refresh_actions()
 
 
@@ -659,13 +665,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and not app.is_modal_open():
 		get_viewport().set_input_as_handled()
-		var banter = app.get("banter_view")
-		if banter == null or not banter.is_panel_open():
+		if not _banter_panel_open():
 			director.toggle_camera_mode()
 		return
 	if not state.am_alive() or app.is_modal_open():
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
+		if card_key_index(event.keycode) >= 0 and _banter_panel_open():
+			return   # 快捷语面板开着:数字键归面板(它没用掉的 9 也不拿来选牌)
 		if handle_key(event.keycode):
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -674,6 +681,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and not animating:
 		var index := _pick_card(event.position)
 		cards.set_selection(_selected, index)
+
+
+func _banter_panel_open() -> bool:
+	var banter = app.get("banter_view")
+	return banter != null and is_instance_valid(banter) and banter.is_panel_open()
 
 
 func handle_key(keycode: Key) -> bool:

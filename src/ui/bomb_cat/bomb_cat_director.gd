@@ -20,11 +20,11 @@ const SKIP_PAUSE := 0.22
 const PASS_PAUSE := 0.45
 const PEEK_PAUSE := 0.95
 const SHUFFLE_TAIL := 0.05
-const TRANSFER_TAIL := 0.12
+const TRANSFER_TAIL := 0.05
 const MISS_PAUSE := 0.38
 const GIVE_PAUSE := 0.3
-const DRAW_TAIL := 0.05
-const PRIVATE_WAIT := 0.25            # 自己摸牌 / 转手时最多等私有视图这么久(算在各段预算里)
+const DRAW_TAIL := 0.0
+const PRIVATE_WAIT := 0.1             # 自己摸牌 / 转手 / 偷看时最多等私有视图这么久(通常同一帧就到了;算在各段预算里)
 const BOMB_PUSH := 0.5                # 摸到炸弹:镜头推近
 const BOMB_HOLD := 1.15               # 推近之后:火花、心跳
 const SNIP_TIME := Patron.SNIP_TIME   # 拆弹:手忙脚乱剪线
@@ -43,6 +43,9 @@ const MODE_OVERVIEW := "overview"
 const MODE_CLOSE := "close"
 const MODE_ORBIT := "orbit"
 const EXPLOSION_FLASH := Color(1.0, 0.82, 0.55, 0.8)
+# 导演认得的公共事件(设计稿 §7.3 全部 14 种;测试核对与 BombCatPacing 一一对应)
+const HANDLED_EVENTS := ["round_started", "played", "noped", "window_resolved", "effect", "give_requested", "drew",
+	"bomb_drawn", "defused", "reinserted", "exploded", "player_left", "turn_passed", "match_over"]
 const SHOUTS := {
 	BombCatCard.SKIP: "溜了~", BombCatCard.PASS_TURNS: "甩锅!", BombCatCard.PEEK: "偷看一下…",
 	BombCatCard.SHUFFLE: "洗洗更健康", BombCatCard.BEG: "给我一张嘛",
