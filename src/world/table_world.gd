@@ -6,6 +6,7 @@ extends Node3D
 
 
 signal first_person_changed(on: bool)   # 本机视角换了:德州牌层据此重摆自己的底牌
+signal sfx(sound: String)               # 结算庆祝的音效(礼炮、开场小号、掌声),main 接到 Sfx
 
 
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
@@ -65,6 +66,7 @@ var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
 var _spawned_frame := {} # pid -> 建出这个酒客的帧号:同一帧里物种又变了,直接收走刚建的、不再冒一次烟
 var _menu_preview: Patron = null   # 主菜单上自己选的形象,坐在 0 号椅
 var first_person := false          # 本机牌桌视角(只影响本机):seat_view / rest_view 据此给机位
+var celebration: Celebration = null   # 结算庆祝(胜者跳舞、旁人鼓掌、礼炮彩纸),见 celebration.gd
 
 
 func _init(p_tavern: Tavern) -> void:
@@ -292,7 +294,8 @@ func _place_revolver(pid: int, angle: float) -> void:
 
 
 func revive_all() -> void:
-	# 新一局开始前:倒下的酒客换成新的(带登场动画),活着的复位姿势(如胜者的庆祝),帽子等散落物一并清理
+	# 新一局开始前:收起结算庆祝,倒下的酒客换成新的(带登场动画),活着的复位姿势(如胜者的庆祝),帽子等散落物一并清理
+	stop_celebration()
 	for pid in patrons.keys():
 		var old: Patron = patrons[pid]
 		if old.alive:
@@ -308,6 +311,7 @@ func revive_all() -> void:
 
 
 func clear() -> void:
+	stop_celebration()
 	clear_menu_preview()
 	for pid in patrons:
 		patrons[pid].queue_free()
@@ -323,6 +327,45 @@ func clear() -> void:
 		banter.clear()
 	_clear_debris()
 	_show_empty_chairs(true)
+
+
+# —— 结算庆祝(规格 2026-10-09-winner-celebration)——
+
+func celebrate(winners: Array, seed_value := 0) -> Celebration:
+	# 结算开始:胜者(可以几个人并列)跳舞、活着的其他人鼓掌、出局的人抽手,胜者两侧的桌沿放礼炮。
+	# 纯本地表现;再调用一次就从头再来。seed_value 决定挑哪支舞(各端用同样的对局信息算,就跳同一支)
+	stop_celebration()
+	celebration = Celebration.new()
+	celebration.setup(self, winners, seed_value)
+	celebration.sfx.connect(sfx.emit)
+	add_child(celebration)
+	return celebration
+
+
+func stop_celebration() -> void:
+	# 收起庆祝(回等待厅、离开、新一局、拆台):舞步停下、活着的人坐回去,礼炮与彩纸立刻收走。可以重复调用
+	if celebration != null and is_instance_valid(celebration):
+		celebration.stop()
+		remove_child(celebration)
+	celebration = null
+
+
+func is_celebrating() -> bool:
+	return celebration != null and is_instance_valid(celebration)
+
+
+func winner_orbit(pid: int) -> Dictionary:
+	# 胜者特写环绕(CameraRig.orbit 的参数):从胜者面朝牌桌的一侧开始,绕着胜者的头转
+	var toward_table := -SeatLayout.direction(seat_angles.get(pid, 0.0))
+	return {"center": head_position(pid) + Vector3(0, -0.2, 0), "radius": 1.3, "height": 0.35, "speed": 0.25,
+		"start": atan2(toward_table.x, toward_table.z)}
+
+
+static func orbit_start(orbit: Dictionary) -> Transform3D:
+	# 环绕的起始机位(截图与性能探针用;同 CameraRig.orbit 的起点)
+	var a: float = orbit.get("start", 0.0)
+	var pos: Vector3 = orbit["center"] + Vector3(sin(a) * orbit["radius"], orbit["height"], cos(a) * orbit["radius"])
+	return _look(pos, orbit["center"])
 
 
 func _show_empty_chairs(shown: bool) -> void:

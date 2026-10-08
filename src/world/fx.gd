@@ -1,5 +1,5 @@
 class_name Fx
-# 粒子与瞬时特效:壁炉火星、光束浮尘、枪口焰、硝烟、火花、出局烟尘、番茄汁。
+# 粒子与瞬时特效:壁炉火星、光束浮尘、枪口焰、硝烟、火花、出局烟尘、番茄汁、礼炮口的金色火星。
 
 
 # 枪口焰:枪口抵在太阳穴外 8–14 mm,往前喷的东西几乎全在头里,所以可见的火焰与火花都往侧面、往后喷;
@@ -136,6 +136,26 @@ static func explosion(parent: Node3D, pos: Vector3) -> void:
 	tween.chain().tween_callback(root.queue_free)
 	smoke_puff(parent, pos, 34, Color(0.28, 0.26, 0.25))
 	smoke_puff(parent, pos + Vector3(0, 0.08, 0), 20, Color(0.62, 0.6, 0.58))
+
+
+static func sparkles(parent: Node3D, pos: Vector3, direction: Vector3, amount := 18) -> GPUParticles3D:
+	# 礼炮口的一小撮金色火星(加色):往炮口方向喷开、慢慢往下飘,结束后自行释放
+	var particles := _particles(Vector3.ZERO, amount, 1.1, true)
+	particles.explosiveness = 0.9
+	var pm := _process_material(Vector3.ONE * 0.02, direction, 38.0, Vector2(0.8, 2.4))
+	pm.gravity = Vector3(0, -1.2, 0)
+	pm.damping_min = 1.5
+	pm.damping_max = 3.0
+	pm.scale_min = 0.6
+	pm.scale_max = 1.5
+	pm.color_ramp = _ramp([Color(1.0, 0.95, 0.7), Color(1.0, 0.8, 0.3, 0.9), Color(1.0, 0.65, 0.2, 0.0)])
+	particles.process_material = pm
+	particles.draw_pass_1 = _additive_quad(0.02, 4.0)
+	particles.visibility_aabb = AABB(Vector3(-1.5, -1.5, -1.5), Vector3(3, 3, 3))
+	parent.add_child(particles)
+	particles.global_position = pos
+	_emit_once(particles)
+	return particles
 
 
 static func head_smoke(parent: Node3D, pos: Vector3) -> void:
