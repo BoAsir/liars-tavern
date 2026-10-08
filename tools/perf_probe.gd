@@ -1,11 +1,18 @@
 extends SceneTree
 # 性能探针:在离屏 SubViewport 里按指定分辨率渲染酒馆 + 展台,逐项关闭渲染特性,打印整帧耗时(毫秒)。
 # 需要窗口渲染(不能 --headless);离屏渲染,不会占满屏幕,也不受显示器刷新率限制。
-# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat] [--frames=120] [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>]
-# 不给 --cases 时逐项单独测一遍全部开关
+# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat,menu] [--frames=120]
+#        [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>] [--assert-budget]
+# 不给 --cases 时逐项单独测一遍全部开关。--view 可用逗号给多个机位(机位表见 tools/camera_views.gd)。
+# 每帧都让投影灯的阴影图失效重画(游戏里酒客呼吸、吊灯摆动,阴影图每帧都在重画);
+# 每组打印整帧耗时、CPU 渲染线程耗时与可见 / 阴影 draw call、物体、图元。
+# --assert-budget:按 tools/perf_budget.gd 核对 budget 那一组(游戏实际渲染配置),超预算时退出码为 1。
 
-
+const CameraViews := preload("res://tools/camera_views.gd")
+const PerfBudget := preload("res://tools/perf_budget.gd")
+const SceneCensus := preload("res://tools/scene_census.gd")
 const WARMUP_FRAMES := 60
+const BIAS_NUDGE := 0.00001   # 每帧来回微调投影灯的 shadow_bias,让阴影图失效重画(画面看不出差别)
 
 var opts := {}
 var _viewport: SubViewport
@@ -36,28 +43,48 @@ func _run() -> void:
 	var showcase: Node = load("res://tools/showcase.gd").new()
 	_viewport.add_child(showcase)
 	await showcase.build(_tavern)
-	_place_camera(opts.get("view", "seat"))
-	print("%s / %s  size=%s view=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
-		_viewport.size, opts.get("view", "seat"), _viewport.msaa_3d])
+	var rid := _viewport.get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(rid, true)
+	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
+		_viewport.size, _viewport.msaa_3d])
+	print("census ", SceneCensus.count(_viewport))
 	var toggles := _toggles()
 	var cases: PackedStringArray = opts["cases"].split(",") if opts.has("cases") else PackedStringArray(toggles.keys())
-	var base := await _measure()
-	_report("baseline (all on)", base, base)
-	_shot("baseline")
-	for case in cases:
-		var undos := []
-		for name in case.split("+"):
-			if not toggles.has(name):
-				push_error("unknown toggle %s (known: %s)" % [name, ", ".join(toggles.keys())])
-				quit(1)
-				return
-			undos.append(toggles[name].call())
-		_report(case, await _measure(), base)
-		_shot(case)
-		undos.reverse()
-		for undo in undos:
-			undo.call()
-	_report("baseline again (drift check)", await _measure(), base)
+	if opts.has("assert-budget") and not cases.has("budget"):
+		cases.append("budget")
+	var failures := PackedStringArray()
+	for view in opts.get("view", "seat").split(","):
+		if not CameraViews.place(_tavern.camera_rig, view):
+			push_error("unknown view %s (known: %s)" % [view, ", ".join(CameraViews.NAMES)])
+			quit(1)
+			return
+		print("== view %s" % view)
+		var base := await _measure()
+		_report("baseline (all on)", base, base)
+		_shot("%s-baseline" % view)
+		for case in cases:
+			var undos := []
+			for name in case.split("+"):
+				if not toggles.has(name):
+					push_error("unknown toggle %s (known: %s)" % [name, ", ".join(toggles.keys())])
+					quit(1)
+					return
+				undos.append(toggles[name].call())
+			var m := await _measure()
+			_report(case, m, base)
+			_shot("%s-%s" % [view, case])
+			if case == "budget" and opts.has("assert-budget"):
+				failures.append_array(PerfBudget.violations(view, _budget_stats(m)))
+			undos.reverse()
+			for undo in undos:
+				undo.call()
+		_report("baseline again (drift check)", await _measure(), base)
+	if opts.has("assert-budget"):
+		for message in failures:
+			print("OVER BUDGET: ", message)
+		print("BUDGET %s" % ("FAIL" if failures.size() > 0 else "OK"))
+		quit(1 if failures.size() > 0 else 0)
+		return
 	quit()
 
 
@@ -93,6 +120,9 @@ func _toggles() -> Dictionary:
 		"ssao-low": func(): return _ssao_quality(RenderingServer.ENV_SSAO_QUALITY_LOW),
 		"fog-small": _fog_small,
 		"soft-shadow-hard": func(): return _soft_shadows(RenderingServer.SHADOW_QUALITY_HARD),
+		"patrons-off": func(): return _hide(_viewport.find_children("*", "Patron", true, false)),
+		"revolvers-off": func(): return _hide(_viewport.find_children("*", "Revolver3D", true, false)),
+		"bottles-off": func(): return _hide(_bottles()),
 	}
 
 
@@ -213,23 +243,78 @@ func _plain_materials() -> Callable:
 
 func _measure() -> Dictionary:
 	# Metal 上 viewport_get_measured_render_time_gpu 恒为 0,窗口呈现又会被系统按刷新率节流:
-	# 先走几帧让改动生效,再连续 force_draw(不交换缓冲、不等垂直同步),GPU 排满后吞吐就是每帧 GPU 耗时
+	# 先走几帧让改动生效,再连续 force_draw(不交换缓冲、不等垂直同步),GPU 排满后吞吐就是每帧 GPU 耗时。
+	# force_draw 期间场景不动,阴影图会一直沿用缓存:每帧微调投影灯的参数让它重画,和游戏里一致
 	for i in WARMUP_FRAMES:
 		await process_frame
 	var frames := int(opts.get("frames", "120"))
 	var times := PackedFloat64Array()
+	var cpu := 0.0
+	var rid := _viewport.get_viewport_rid()
+	var lights := _viewport.find_children("*", "Light3D", true, false).filter(func(l): return l.shadow_enabled and l.visible)
+	_nudge(lights, 0)
 	RenderingServer.force_draw(false)
 	var last := Time.get_ticks_usec()
 	for i in frames:
+		_nudge(lights, i + 1)
 		RenderingServer.force_draw(false)
 		var now := Time.get_ticks_usec()
 		times.append((now - last) / 1000.0)
 		last = now
+		cpu += RenderingServer.viewport_get_measured_render_time_cpu(rid)
 	times.sort()
 	var total := 0.0
 	for t in times:
 		total += t
-	return {"avg": total / frames, "p95": times[int(frames * 0.95)]}
+	var info := func(type: RenderingServer.ViewportRenderInfoType, what: RenderingServer.ViewportRenderInfo) -> int:
+		return RenderingServer.viewport_get_render_info(rid, type, what)
+	var visible_dc: int = info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+	var shadow_dc: int = info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+	_nudge(lights, 0)
+	return {
+		"avg": total / frames, "p95": times[int(frames * 0.95)], "cpu": cpu / frames,
+		"visible_dc": visible_dc, "shadow_dc": shadow_dc,
+		"objects": info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME)
+			+ info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME),
+		"primitives": info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME)
+			+ info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME),
+	}
+
+
+func _nudge(lights: Array, frame: int) -> void:
+	# 偶数帧还原、奇数帧加一点:灯参数一变,这盏灯的阴影图就整张重画
+	for light in lights:
+		light.shadow_bias = snappedf(light.shadow_bias, BIAS_NUDGE * 2.0) + (BIAS_NUDGE if frame % 2 == 1 else 0.0)
+
+
+func _budget_stats(m: Dictionary) -> Dictionary:
+	# 探针的测量结果换成 PerfBudget 用的统计键;灯数等清点项来自 SceneCensus
+	var stats := SceneCensus.count(_viewport)
+	stats.merge({
+		"draw_calls": m["visible_dc"] + m["shadow_dc"], "visible_draw_calls": m["visible_dc"],
+		"shadow_draw_calls": m["shadow_dc"], "objects": m["objects"], "primitives": m["primitives"],
+		"frame_ms": m["avg"], "cpu_ms": m["cpu"],
+	}, true)
+	return stats
+
+
+func _hide(nodes: Array) -> Callable:
+	var shown := nodes.filter(func(n: Node3D): return n.visible)
+	for node in shown:
+		node.visible = false
+	return func():
+		for node in shown:
+			node.visible = true
+
+
+func _bottles() -> Array:
+	# 吧台搁板上的酒瓶:合批前是一件件圆柱,合批后是 MultiMesh
+	var out := []
+	for bar in _viewport.find_children("Bar", "Node3D", true, false):
+		for child in bar.get_children():
+			if child is MultiMeshInstance3D or (child is MeshInstance3D and child.mesh is CylinderMesh and child.position.y > 1.5):
+				out.append(child)
+	return out
 
 
 func _shot(label: String) -> void:
@@ -242,18 +327,6 @@ func _shot(label: String) -> void:
 
 
 func _report(label: String, m: Dictionary, base: Dictionary) -> void:
-	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)" % [
-		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"]])
-
-
-func _place_camera(view: String) -> void:
-	var rig := _tavern.camera_rig
-	var top := SeatLayout.TABLE_TOP
-	match view:
-		"menu":
-			rig.snap(Vector3(2.6, 2.1, 2.9), Vector3(-0.4, 0.9, -0.8))
-		"overhead":
-			rig.snap(Vector3(0, 2.6, 1.6), Vector3(0, top, 0))
-		_:
-			rig.snap(Vector3(0.55, 1.92, 2.1), Vector3(0, top, -0.12))
-			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
+	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)  cpu %5.2f ms  dc %4d (vis %4d + shadow %4d)  obj %5d  prims %7d" % [
+		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"], m["cpu"],
+		m["visible_dc"] + m["shadow_dc"], m["visible_dc"], m["shadow_dc"], m["objects"], m["primitives"]])

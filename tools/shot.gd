@@ -4,6 +4,7 @@ extends SceneTree
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
 
 
+const CameraViews := preload("res://tools/camera_views.gd")
 const WARMUP_FRAMES := 45
 
 var opts := {}
@@ -40,30 +41,5 @@ func _run() -> void:
 
 
 func _place_camera(rig: CameraRig, view: String) -> void:
-	var top := SeatLayout.TABLE_TOP
-	match view:
-		"seat":
-			# 与 TableWorld.third_person_view(本机座位)一致的越肩机位
-			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, TableWorld.THIRD_PERSON_BACK),
-				Vector3(0, top, -0.12))
-			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
-		"selfshot":
-			rig.snap(Vector3(-0.35, 1.42, 0.15), Vector3(0, 1.19, 1.37))
-		"gun":
-			rig.snap(Vector3(0.1, 1.42, 0.3), Vector3(1.25, 1.25, 0.0))
-		"menu":
-			rig.snap(Vector3(2.6, 2.1, 2.9), Vector3(-0.4, 0.9, -0.8))
-		"overhead":
-			rig.snap(Vector3(0, 2.6, 1.6), Vector3(0, top, 0))
-		"fireplace":
-			rig.snap(Vector3(0.5, 1.4, -1.5), Vector3(-1.5, 0.8, -4.4))
-		"bar":
-			rig.snap(Vector3(0.5, 1.5, 0.8), Vector3(-4.0, 1.4, -0.6))
-		"window":
-			rig.snap(Vector3(-1.5, 1.5, 1.5), Vector3(4.4, 1.5, -0.9))
-		"closeup":
-			rig.snap(Vector3(0.0, 1.05, 0.55), Vector3(0, top, -0.2))
-		"opponent":
-			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
-		_:
-			push_warning("unknown view " + view)
+	if not CameraViews.place(rig, view):
+		push_warning("unknown view " + view)

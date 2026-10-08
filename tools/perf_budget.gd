@@ -27,5 +27,9 @@ static func violations(view: String, stats: Dictionary) -> PackedStringArray:
 	var limits: Dictionary = LIMITS.get(view, {})
 	for key in limits:
 		if stats.has(key) and stats[key] > limits[key]:
-			out.append("%s 机位 %s = %s,超出上限 %s" % [view, key, str(stats[key]), str(limits[key])])
+			out.append("%s 机位 %s = %s,超出上限 %s" % [view, key, _fmt(stats[key]), _fmt(limits[key])])
 	return out
+
+
+static func _fmt(value: Variant) -> String:
+	return "%.2f" % value if value is float else str(value)
