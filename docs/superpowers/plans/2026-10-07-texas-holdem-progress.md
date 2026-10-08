@@ -5,14 +5,14 @@
 
 ## 分支
 
-- 主开发分支:`feature/texas-holdem`(基于 `feature/liars-tavern-mvp`;本机在 `.claude/worktrees/texas-holdem` 里开发)。
+- 主开发分支:`feature/texas-holdem`(本机在 `.claude/worktrees/texas-holdem` 里开发)。**2026-10-08 起用户要求直接在主分支开发**:不再为审查/修复开子分支,每步直接提交到 `feature/texas-holdem`,然后 `git push origin feature/texas-holdem feature/texas-holdem:main`,`origin/main` 始终等于最新进度(本机主目录的 `main` 检出被别的会话占用,所以不能在本 worktree 直接 checkout main;换机器后可以直接在 main 上做)。
 - 第一批子任务分支(各自从 `cc18285` 分出,已完成、已审查修复,待合并):
   `th/engine`(任务 1 规则引擎)、`th/faces`(任务 2a 牌面)、`th/world`(任务 2b 3D 资产与机位)、
   `th/modes`(任务 3 玩法接入)、`th/gaze`(任务 4 视线抽取,已合并一次,之后又有修复)、`th/rulebook`(任务 5 说明书)。
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 11:55,已暂停;第二批已合并到 feature/texas-holdem 与 main)
+## 状态(2026-10-08 15:40,已暂停;任务 6/7a 审查修复与 7b 开发都已合并到 feature/texas-holdem 与 main)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -24,9 +24,9 @@
 | 4 视线抽取 | ✅ th/gaze 完成 | SeatGaze;已合并到 feature/texas-holdem(cc18285),之后又有一个修复提交(探头不往后探)待合并 |
 | 5 说明书 | ✅ th/rulebook 完成、审查通过、修完 | 两本书页签、hands 牌型表、按书记页、README 写明开房后不能改玩法 |
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
-| 6 网络会话 | ✅ 已写完并合并(c478450),**还没做独立审查** | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;Net 多了 `request_sit_in()`;lan_smoke 通过。接手时先按计划任务 6 的审查要点做一次审查 |
+| 6 网络会话 | ✅ 已写完、已独立审查修复(th/net-fix,已合并) | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;`request_sit_in()`。审查修复见下节「任务 6 审查修复」 |
 | 7a HUD 控件 | ✅ 已写完、已审查修复(th/hud-fix),展台截图收尾完成 | BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护;新回合按 hand/street/current_pid 或合法动作变化判定,牌桌要对每个公共视图都调 `update`)、PokerHud、CardStrip、PokerNameplate(两行各自按文字宽度给足)、PokerPrompts、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测;主题给 HSlider 铜色轨道。`tools/poker_showcase.gd` + `tools/shot.gd` 已能摆出全部 8 种底部状态(bet/wait/showdown/bust/spectate/waiting/away/settlement)与观战机位,1280×720 与 1280×960 都核对过规格 §6.1 预算、铭牌不相撞 |
-| 7b 控制器与演出 | ⬜ 未开始 | 分支 th/screen(从 feature/texas-holdem 当前提交分出);按计划任务 7 的控制器部分做:poker_screen.gd、poker_director.gd、main.gd 接线(选屏、拆台调用、PokerFaces 清理)、SeatGaze 接法、迟到者第一帧、机位规则、bot 入口;test_poker_screen、test_poker_director_pacing |
+| 7b 控制器与演出 | ✅ 已写完并合并(th/screen),**独立审查没做完** | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。暂停时审查阶段刚开始,审查员只来得及加流程测试;接手时按计划任务 7 的审查要点(规格 §4.3–4.6、§5.5、§6.2–6.5、§7)再过一遍 |
 | 8 bot 与冒烟 | ⬜ 未开始 | |
 | 9 联调与截图验收 | ⬜ 未开始 | |
 | 10 审查 | ⬜ 未开始 | |
@@ -49,12 +49,13 @@
 
 ## 接手须知(当前)
 
-1. 任务 7a 的独立审查已做完并修复(th/hud-fix);任务 6 的独立审查仍待做(对照规格 §4.2–4.6 与计划里的测试清单)。
-2. 7a 展台截图(窗口模式;不写 `--hud` 时座位机位默认 bet、观战机位默认 spectate):
-   `$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase`;
-   4:3 在 `-s` 前加引擎参数 `--resolution 1280x960`。改 HUD 后重拍并按规格 §6.1 预算核对。
-3. 开 7b(th/screen),然后任务 8(bot、`tools/poker_smoke.sh`、README)、任务 9 联调截图、任务 10 审查。
-4. 每一步:全量测试 + `tools/lan_smoke.sh` 回归,提交并推送,更新本文。
+1. 当前合并后的状态:869 个测试全过,`tools/lan_smoke.sh` 通过;`origin/main` = `origin/feature/texas-holdem`。
+2. 先补任务 7b 的独立审查(对照规格 §4.3–4.6、§5.5、§6.2–6.5、§7 与计划任务 7 的测试清单),修掉问题;顺手跑一次 `tools/shot.gd --poker-showcase` 看合并后镜头与 HUD 是否还对。
+3. 然后任务 8:DebugFlags 加德州 bot(`--mode=holdem|short_deck`、`--hands=N`、日志标记 HAND_STARTED / DEALT / SESSION_OVER / net_sum),`tools/poker_smoke.sh`(1 房主 + 若干 bot 跑完 N 手、盈亏总和为 0、无脚本错误),README 写德州玩法;任务 9 联调与 8 人截图验收;任务 10 多视角审查。
+4. 每一步:全量测试 + `tools/lan_smoke.sh` 回归,提交,`git push origin feature/texas-holdem feature/texas-holdem:main`,更新本文。
+5. 已知债务:`network_manager.gd` 749 行(上限 800),任务 8 若再长就把视线转发或德州意图入口抽成 RefCounted;7a 展台截图(窗口模式;不写 `--hud` 时座位机位默认 bet、观战机位默认 spectate):
+   `$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase`;4:3 在 `-s` 前加引擎参数 `--resolution 1280x960`。
+6. 旧的子任务分支 `th/*`(含 th/net-fix、th/hud-fix、th/screen)都已合并,只留作记录;worktree 可以 `git worktree remove` 清掉。
 
 ## 第二批怎么开(原记录)
 
