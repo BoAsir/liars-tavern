@@ -140,3 +140,92 @@ func test_player_rows_stay_compact_with_long_names_and_kick_buttons():
 		var row: Control = _themed(lobby._player_row(player, 0))
 		assert_lte(row.get_combined_minimum_size().y, LobbyScreen.ROW_MAX_HEIGHT, player["name"])
 		assert_lte(row.get_combined_minimum_size().x, LobbyScreen.PANEL_WIDTH, "长昵称不撑宽面板")
+
+
+# —— 自选形象(子项目② §3.2)——
+
+class SpeciesApp:
+	extends StubApp
+	# 记下提示条;本机设置写到临时文件
+	var toasts: Array = []
+	var settings_path := ""
+	var species := Species.UNASSIGNED
+
+	func toast(text: String, _color := Color.WHITE) -> void:
+		toasts.append(text)
+
+	func is_rules_open() -> bool:
+		return false
+
+
+func _species_app() -> SpeciesApp:
+	var app: SpeciesApp = autofree(SpeciesApp.new())
+	app.settings_path = OS.get_temp_dir().path_join("liars_tavern_lobby_species_gut_%d.cfg" % OS.get_process_id())
+	DirAccess.remove_absolute(app.settings_path)
+	return app
+
+
+func _roster(my_species: Variant, other_species: Variant) -> Array:
+	# 离线 peer 的 my_pid 就是 1:别人用另一个 pid
+	return [{"pid": Net.my_pid() + 1, "name": "阿杰", "ready": true, "is_host": true, "species": other_species},
+		{"pid": Net.my_pid(), "name": "我", "ready": false, "is_host": false, "species": my_species}]
+
+
+func test_rows_show_species_chips_and_only_mine_is_a_button():
+	var lobby: Control = autofree(LobbyScreen.new(_species_app()))
+	var roster := _roster(5, 7)
+	var other: Control = _themed(lobby._player_row(roster[0], 0))
+	var mine: Control = _themed(lobby._player_row(roster[1], 1))
+	var other_chip: SpeciesChip = other.find_children("*", "SpeciesChip", true, false)[0]
+	var my_chip: SpeciesChip = mine.find_children("*", "SpeciesChip", true, false)[0]
+	assert_eq(other_chip.species, 7)
+	assert_eq(other_chip.focus_mode, Control.FOCUS_NONE, "别人的头像只是展示")
+	assert_eq(my_chip.species, 5)
+	assert_eq(my_chip.focus_mode, Control.FOCUS_ALL, "自己的头像点开挑选面板")
+	assert_eq(my_chip.tooltip_text, "换形象:羊驼 · 披毯客")
+
+
+func test_unassigned_or_junk_species_shows_picking():
+	var lobby: Control = autofree(LobbyScreen.new(_species_app()))
+	for junk in [-1, 99, "fox", null]:
+		var row: Control = _themed(lobby._player_row({"pid": 9, "name": "新来的", "ready": false, "is_host": false,
+			"species": junk}, 0))
+		var chip: SpeciesChip = row.find_children("*", "SpeciesChip", true, false)[0]
+		assert_eq(chip.tooltip_text, "挑选中…", str(junk))
+
+
+func test_granted_request_is_saved_as_the_local_preference():
+	var app := _species_app()
+	var lobby: Control = autofree(LobbyScreen.new(app))
+	lobby._pending = 3
+	lobby._pending_deadline = Time.get_ticks_msec() + 1000
+	lobby._settle_species_request(_roster(3, 7))
+	assert_eq(lobby._pending, Species.UNASSIGNED)
+	assert_eq(Settings.get_species(app.settings_path), 3, "房主确认之后才写本机设置")
+	assert_eq(app.species, 3)
+	assert_eq(app.toasts, [])
+	DirAccess.remove_absolute(app.settings_path)
+
+
+func test_request_lost_to_someone_else_says_who_took_it():
+	var app := _species_app()
+	var lobby: Control = autofree(LobbyScreen.new(app))
+	lobby._pending = 1
+	lobby._pending_deadline = Time.get_ticks_msec() + 1000
+	lobby._settle_species_request(_roster(0, 1))
+	assert_eq(app.toasts, ["「熊」刚被 阿杰 选走了"])
+	assert_eq(Settings.get_species(app.settings_path), Species.UNASSIGNED, "本机偏好不被改写")
+	assert_eq(lobby._pending, Species.UNASSIGNED)
+
+
+func test_unrelated_roster_keeps_the_request_until_it_times_out():
+	var app := _species_app()
+	var lobby: Control = autofree(LobbyScreen.new(app))
+	lobby._pending = 4
+	lobby._pending_deadline = Time.get_ticks_msec() + 1000
+	lobby._settle_species_request(_roster(0, 7))
+	assert_eq(lobby._pending, 4, "别人准备了之类的名单:继续等")
+	lobby._pending_deadline = Time.get_ticks_msec() - 1
+	lobby._settle_species_request(_roster(0, 7))
+	assert_eq(lobby._pending, Species.UNASSIGNED, "超时静默放弃")
+	assert_eq(app.toasts, [])

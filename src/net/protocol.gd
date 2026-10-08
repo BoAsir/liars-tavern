@@ -3,7 +3,8 @@ class_name Protocol
 
 
 # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了);
-# v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent)
+# v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent);
+#     等待厅自选形象(新增 rpc_lobby_species 意图;lobby_state、game_started 每位玩家带 species 下标)
 const VERSION := 5
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份

@@ -7,6 +7,8 @@ class_name RulebookContent
 
 
 const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys", "hands"]
+# 两本书的「操作」章都有这条:自选形象(子项目② §3.7)
+const SPECIES_NOTE := "主菜单名号旁的头像处挑选你的动物形象;同桌不撞脸,先选先得,被占时房主给你一个空着的;等待厅里点自己的头像还能换。"
 # 翻开说明书的快捷键。放在纯数据模块里,HUD 等引用它时不会把 Rulebook 依赖的自动加载单例拖进来
 const HOTKEY := KEY_F1
 
@@ -184,6 +186,7 @@ static func _controls() -> Dictionary:
 				{"action": "离开 / 合上", "mouse": "", "keys": ["Esc"]},
 			]},
 			{"type": "note", "text": "看说明书时对局不会暂停,回合计时照常进行;轮到你时屏幕上方会有提示。"},
+			{"type": "note", "text": SPECIES_NOTE},
 		],
 	}
 

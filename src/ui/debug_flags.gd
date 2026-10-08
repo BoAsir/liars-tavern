@@ -2,6 +2,8 @@ class_name DebugFlags
 extends Node
 # 命令行调试开关(写在 -- 之后),用于联机冒烟测试与截图检查:
 #   --name=甲            自动填写昵称
+#   --species=物种id     本次运行想要的形象(fox/bear/…/crocodile),只覆盖本次、不写设置;
+#                        每次名单更新与开局时打印 [debug] species {pid: id}(冒烟测试比对各进程)
 #   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
 #   --port=端口          房主优先绑定的游戏端口(并行测试互不串房)
 #   --room=房名          房主的房间名
@@ -49,6 +51,25 @@ static func parse_user_args(args: PackedStringArray = OS.get_cmdline_user_args()
 	return out
 
 
+static func species_override(args: PackedStringArray = OS.get_cmdline_user_args()) -> int:
+	# --species=<id> 的物种下标;没给或 id 不认识时返回 UNASSIGNED(后者告警),沿用设置里的形象
+	var value: String = parse_user_args(args).get("species", "")
+	if value == "":
+		return Species.UNASSIGNED
+	var index := Species.index_of(value)
+	if index == Species.UNASSIGNED:
+		push_warning("--species=%s 不是已知形象(可选:%s),沿用设置里的形象" % [value, ", ".join(Species.IDS)])
+	return index
+
+
+static func species_line(entries: Array) -> String:
+	# entries:[{pid, species}](名单或座位表,按座位顺序)→「[debug] species {1: crocodile, 2034: fox}」;没有形象写「-」
+	var parts := entries.map(func(p: Dictionary) -> String:
+		var index := Species.sanitize(p.get("species"))
+		return "%s: %s" % [p.get("pid"), Species.IDS[index] if index != Species.UNASSIGNED else "-"])
+	return "[debug] species {%s}" % ", ".join(parts)
+
+
 func _ready() -> void:
 	if opts.is_empty():
 		set_process(false)
@@ -77,12 +98,12 @@ func _ready() -> void:
 	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
 	if opts.has("autohost"):
 		var room: String = opts.get("room", "%s 的酒馆" % player_name)
-		var err := Net.host_game(player_name, room, int(opts.get("port", "0")))
+		var err := Net.host_game(player_name, room, int(opts.get("port", "0")), GameMode.DEFAULT, _species())
 		print("[debug] host_game -> ", error_string(err))
 		if err != OK:
 			_fail("host_failed")
 	elif opts.has("autojoin"):
-		Net.join_game(player_name, opts["autojoin"])
+		Net.join_game(player_name, opts["autojoin"], _species())
 	elif opts.has("discover"):
 		Discovery.rooms_updated.connect(_join_discovered.bind(player_name))
 
@@ -94,8 +115,13 @@ func _join_discovered(rooms: Array, player_name: String) -> void:
 	for room in rooms:
 		if room["open"] and (wanted == "true" or room["room"] == wanted):
 			print("[debug] discovered ", room["room"], " at ", room["ip"], ":", room["port"])
-			Net.join_game(player_name, Protocol.format_address(room["ip"], room["port"]))
+			Net.join_game(player_name, Protocol.format_address(room["ip"], room["port"]), _species())
 			return
+
+
+func _species() -> int:
+	# 本机想要的形象:main 已经按设置解析好,--species 覆盖本次运行
+	return Species.sanitize(app.get("species"))
 
 
 func _process(delta: float) -> void:
@@ -173,6 +199,9 @@ func _on_joined() -> void:
 
 
 func _on_lobby(players: Array) -> void:
+	# 对局中的名单更新(有人散场离开、德州有人入座)不打印:冒烟测试比对的最后一条要是开局时的座位表
+	if not Net.in_game:
+		print(species_line(players))
 	if not Net.is_host or not opts.has("autohost"):
 		return
 	var want := int(opts["autohost"]) if opts["autohost"] != "true" else 2
@@ -191,7 +220,8 @@ func _on_events(events: Array) -> void:
 			_match_finished = true
 
 
-func _on_game_started(_seats: Array) -> void:
+func _on_game_started(seats: Array) -> void:
+	print(species_line(seats))
 	# 截图与退出按演出进度触发:事件批到达时前面的动画可能还要播好几秒
 	await get_tree().process_frame
 	var screen: Node = app.current_screen()

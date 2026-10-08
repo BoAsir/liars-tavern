@@ -2,6 +2,8 @@ extends Control
 # 等待厅:右侧面板(房名、玩法与人数、房主地址、玩家列表、准备/开局/踢人/离开),
 # 3D 场景中已加入的玩家以酒客形象围着本玩法的桌子落座(德州桌更大),头顶单行铭牌显示名字与准备状态。
 # 房主的局域网广播发不出去时,面板里用红字提示大家改用 IP 直连。
+# 名单每行有房主分配的形象头像;点自己那一行的头像弹出挑选面板(贴在面板左边),被占的格子写占用者名字。
+# 换形象发给房主,收到下一份名单时结算:拿到了存进本机设置,被别人抢先了提示一句。
 
 
 const PANEL_WIDTH := 440.0
@@ -25,6 +27,10 @@ const PLATE_PADDING := Vector2(10, 5)
 const PLATE_GAP := 4
 const PLATE_CHECK := "✓"
 const PLATE_CHECK_ROOM := 22.0   # 给「✓」与间隔留的宽度
+# 名单行里的形象头像:行高上限 36 减去上下内边距
+const ROW_CHIP_SIZE := 28.0
+const PICK_LOCK_MS := 300        # 点选后这么久不能再点(房主那边每个对端还有 0.25 秒冷却)
+const PENDING_TIMEOUT_MS := 1500 # 换形象请求等这么久还没结果(冷却中被拒、名单丢了)就静默放弃
 
 var app: Node
 var _title: Label
@@ -40,6 +46,13 @@ var _start_button: Button = null
 var _is_ready := false
 var _known := {}   # pid -> 名字:上一份名单;为空表示还没有基准
 var _table_mode := ""   # 桌子已按哪个玩法摆好;Net.game_mode 后来变了(名单 meta 晚到)就再摆一次
+var _panel: PanelContainer
+var _picker: SpeciesPicker
+var _my_chip: SpeciesChip = null      # 自己那一行的头像(每次刷新名单都重建)
+var _my_species := Species.UNASSIGNED
+var _pending := Species.UNASSIGNED    # 已发给房主、还没结算的换形象请求
+var _pending_deadline := 0
+var _pick_locked_until := 0
 
 
 func _init(p_app: Node) -> void:
@@ -114,6 +127,11 @@ func _build() -> void:
 	_status = UiTheme.label("", 15, UiTheme.PARCHMENT_DIM)
 	box.add_child(_status)
 	box.add_child(_build_buttons())
+	# 挑选面板铺满屏幕当遮罩、面板贴在侧栏左边:不进侧栏,德州 8 人时面板也不会超过 672 像素
+	_picker = SpeciesPicker.new()
+	_picker.picked.connect(_request_species)
+	_picker.closed.connect(func(): _focus_my_chip.call_deferred())
+	add_child(_picker)
 
 
 func _build_panel() -> VBoxContainer:
@@ -123,6 +141,7 @@ func _build_panel() -> VBoxContainer:
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_END
 	panel.add_theme_stylebox_override("panel", UiTheme.screen_panel(0.86, Vector2(28, 22)))
 	column.add_child(panel)
+	_panel = panel
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
@@ -186,7 +205,10 @@ func _refresh(players: Array) -> void:
 	_mode_label.text = GameMode.summary(Net.game_mode)
 	_address.text = _address_text()
 	_announce_changes(players)
-	app.world.arrange(players, Net.my_pid(), true, false)
+	_settle_species_request(players)
+	# 等待厅里还没分到形象的人(握手后形象请求还在路上)先不建酒客,名单显示「挑选中…」
+	app.world.arrange(players, Net.my_pid(), true, false, true)
+	_my_chip = null
 	for child in _list.get_children():
 		_list.remove_child(child)   # 立刻移出:下面要按新名单量列表高度
 		child.queue_free()
@@ -202,6 +224,9 @@ func _refresh(players: Array) -> void:
 		_status.text += " · 等待全员准备"
 	if _start_button != null:
 		_start_button.disabled = not Net.can_start()
+	if _picker.is_open():
+		# 面板开着时别人换了形象:灰掉的格子跟着变
+		_picker.update_taken(SpeciesPicker.taken_map(players, Net.my_pid()))
 
 
 func _sync_table_mode() -> void:
@@ -276,7 +301,7 @@ func _announce_changes(players: Array) -> void:
 	_known = changes["now"]
 
 
-func _player_row(player: Dictionary, index: int) -> Control:
+func _player_row(player: Dictionary, _index: int) -> Control:
 	var panel := PanelContainer.new()
 	var mine: bool = player["pid"] == Net.my_pid()
 	var style := UiTheme.panel_box(Color(0.13, 0.09, 0.06, 0.9), Color(UiTheme.BRASS, 0.7 if mine else 0.3), 1, 8)
@@ -286,12 +311,11 @@ func _player_row(player: Dictionary, index: int) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
-	var species := _species_of(player["pid"], index)
 	var name_label := UiTheme.label(player["name"] + ("(你)" if mine else ""), 19, UiTheme.PARCHMENT,
 		UiTheme.display_font())
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS   # 长昵称不撑宽面板
-	row.add_child(UiTheme.label(species["label"], 15, species["fur"].lightened(0.3)))
+	row.add_child(_species_chip(player, mine))
 	row.add_child(name_label)
 	if player["is_host"]:
 		row.add_child(UiTheme.label("房主", 15, UiTheme.BRASS))
@@ -321,10 +345,63 @@ static func row_button(text: String) -> Button:
 	return button
 
 
-func _species_of(pid: int, index: int) -> Dictionary:
-	# 以 3D 酒客为准:老玩家保留登场时的形象,名单下标会随别人离开而错位
-	var patron: Patron = app.world.patrons.get(pid)
-	return PatronParts.species(patron.species_index if patron != null else index)
+func _species_chip(player: Dictionary, mine: bool) -> SpeciesChip:
+	# 房主分配的形象(不可信数据,非法值当「挑选中…」);自己那一行的头像是按钮,点开挑选面板
+	var chip := SpeciesChip.new(Species.sanitize(player.get("species")), ROW_CHIP_SIZE, mine)
+	if mine:
+		chip.tooltip_prefix = "换形象:"
+		chip.pressed.connect(_open_picker)
+		_my_chip = chip
+		_my_species = chip.species
+	return chip
+
+
+# —— 换形象 ——
+
+func _open_picker() -> void:
+	if Time.get_ticks_msec() < _pick_locked_until or _my_chip == null:
+		return
+	Sfx.play("ui_click")
+	var panel := _panel.get_global_rect()
+	var chip := _my_chip.get_global_rect()
+	_picker.open(_my_species, SpeciesPicker.taken_map(Net.lobby_players, Net.my_pid()),
+		Rect2(panel.position.x, chip.position.y, panel.size.x, chip.size.y), false)
+
+
+func _request_species(index: int) -> void:
+	# 先记下挂起的请求再发:房主自己换形象时名单在 request_species 里就同步刷新了
+	if index == _my_species:
+		return
+	Sfx.play("ui_click")
+	_pick_locked_until = Time.get_ticks_msec() + PICK_LOCK_MS
+	_pending = index
+	_pending_deadline = Time.get_ticks_msec() + PENDING_TIMEOUT_MS
+	Net.request_species(index)
+
+
+func _settle_species_request(players: Array) -> void:
+	# 收到名单时结算挂起的请求:拿到了 → 存进本机设置(之后再开房、加入都用它);
+	# 被别人抢先 → 提示;都不是(与请求无关的名单、冷却中被拒)→ 等下一份,超时静默放弃
+	if _pending == Species.UNASSIGNED:
+		return
+	var outcome := SpeciesPicker.resolve_request(players, Net.my_pid(), _pending)
+	match outcome["result"]:
+		"granted":
+			app.set("species", _pending)
+			var path = app.get("settings_path")
+			Settings.set_value(Settings.KEY_SPECIES, Species.IDS[_pending], path if path is String else Settings.PATH)
+			_pending = Species.UNASSIGNED
+		"taken":
+			app.toast("「%s」刚被 %s 选走了" % [Species.LABELS[_pending], outcome["by"]], UiTheme.MUTED)
+			_pending = Species.UNASSIGNED
+		_:
+			if Time.get_ticks_msec() > _pending_deadline:
+				_pending = Species.UNASSIGNED
+
+
+func _focus_my_chip() -> void:
+	if is_instance_valid(_my_chip) and _my_chip.is_inside_tree() and not app.is_rules_open():
+		_my_chip.grab_focus()
 
 
 func _track_nameplate(player: Dictionary) -> void:

@@ -32,6 +32,7 @@ const NAMEPLATE_HEIGHT := 1.62   # 德州铭牌挂点高出座位原点:高过�
 const REVEAL_LIAR_WEIGHT_FRONT := 0.35
 const REVEAL_LIAR_WEIGHT_SIDE := 0.2
 const EMPTY_CHAIRS := 4        # 主菜单(没有酒客时)牌桌旁摆的空椅子
+const LOCAL_SPECIES := -2      # arrange 的物种计划里表示「不带 species 键」:按本地第一个空着的分配(离线工具与测试)
 
 var tavern: Tavern
 var cards: CardTable
@@ -45,6 +46,8 @@ var poker_root: Node3D   # 德州的 3D 节点都挂在这里(规格 §5.1),clea
 var _show_self := true
 var _empty_chairs: Array[MeshInstance3D] = []
 var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
+var _spawned_frame := {} # pid -> 建出这个酒客的帧号:同一帧里物种又变了,直接收走刚建的、不再冒一次烟
+var _menu_preview: Patron = null   # 主菜单上自己选的形象,坐在 0 号椅
 
 
 func _init(p_tavern: Tavern) -> void:
@@ -83,12 +86,17 @@ func is_poker_table() -> bool:
 	return table_radius > SeatLayout.TABLE_RADIUS
 
 
-func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: bool) -> void:
-	# players: [{"pid", ...}] 按座位顺序;新玩家弹出登场,离开的玩家消失
+func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: bool, wait_for_species := false) -> void:
+	# players: [{"pid", "species"?, ...}] 按座位顺序;新玩家弹出登场,离开的玩家消失。
+	# 物种用房主分配的 species(子项目② §3.5),各端一致;没有形象(-1 或非法值)时:
+	# wait_for_species(等待厅)→ 先不建,等房主分配;否则(对局)→ 按座位顺序本地补第一个空着的并告警。
+	# 不带 species 键(离线工具与测试)→ 本地第一个空着的
+	clear_menu_preview()
 	my_pid = p_my_pid
 	_show_self = show_self
 	_show_empty_chairs(false)
 	var order := players.map(func(p): return p["pid"])
+	var plan := species_plan(players, wait_for_species)
 	var my_index := maxi(order.find(my_pid), 0)
 	for pid in patrons.keys():
 		if not order.has(pid):
@@ -106,7 +114,7 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 		seat_angles[pid] = angle
 		var visible_patron: bool = show_self or pid != my_pid
 		if visible_patron:
-			_place_patron(pid, angle)
+			_place_patron(pid, angle, plan[pid])
 		elif patrons.has(pid):
 			patrons[pid].queue_free()
 			patrons.erase(pid)
@@ -114,18 +122,69 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 			_place_revolver(pid, angle)
 
 
-func _place_patron(pid: int, angle: float) -> void:
+static func species_plan(players: Array, wait_for_species: bool) -> Dictionary:
+	# pid -> 物种下标:房主分配的合法值照用;没有形象的在等待厅里是 UNASSIGNED(先不建),
+	# 在对局里按座位顺序补第一个空着的(只看这份名单,不看本地已有的角色:各端结果一致);不带键的是 LOCAL_SPECIES
+	var plan := {}
+	var taken := []
+	for p in players:
+		var assigned := Species.sanitize(p.get("species"))
+		if assigned != Species.UNASSIGNED:
+			taken.append(assigned)
+	for p in players:
+		if not p.has("species"):
+			plan[p["pid"]] = LOCAL_SPECIES
+			continue
+		var index := Species.sanitize(p["species"])
+		if index == Species.UNASSIGNED and not wait_for_species:
+			index = Species.first_free(taken)
+			taken.append(index)
+			push_warning("座位 %s 没有房主分配的形象(%s),本地补成 %s" % [p["pid"], str(p["species"]), Species.IDS[index]])
+		plan[p["pid"]] = index
+	return plan
+
+
+func _place_patron(pid: int, angle: float, species := LOCAL_SPECIES) -> void:
+	# species:LOCAL_SPECIES = 已有就沿用、新来的取本地第一个没人用的(之后一直沿用,换座、复活都不变);
+	# UNASSIGNED = 还没分到形象,已有就留着、没有先不建;合法值 = 用它,和现有角色不同就原地换人
 	var xform := seat_transform(angle)
 	if patrons.has(pid):
-		_slide_patron(pid, angle)
+		if species < 0 or patrons[pid].species_index == species:
+			_slide_patron(pid, angle)
+		else:
+			_swap_patron(pid, species, xform)
 		return
-	# 物种跟人走:新来的取第一个没人用的物种,之后一直沿用(换座、复活都不变)
-	var used := patrons.values().map(func(p: Patron) -> int: return p.species_index)
-	var patron := Patron.new(PatronParts.first_free_species(used))
+	if species == Species.UNASSIGNED:
+		return
+	if species == LOCAL_SPECIES:
+		var used := patrons.values().map(func(p: Patron) -> int: return p.species_index)
+		species = Species.first_free(used)
+	var patron := Patron.new(species)
 	patron.transform = xform
 	add_child(patron)
 	patron.appear()
 	patrons[pid] = patron
+	_spawned_frame[pid] = Engine.get_process_frames()
+
+
+func _swap_patron(pid: int, species: int, xform: Transform3D) -> void:
+	# 等待厅换形象:在座位上建新的并登场,旧的冒烟缩小离场,烟雾盖住交接。
+	# 同一帧里又变了(连着几份名单)只换最后一次:刚建的直接收走
+	var old: Patron = patrons[pid]
+	if _slides.has(pid) and _slides[pid].is_valid():
+		_slides[pid].kill()
+	_slides.erase(pid)
+	var fresh := Patron.new(species)
+	fresh.transform = xform
+	fresh.visible = old.visible
+	add_child(fresh)
+	if _spawned_frame.get(pid, -1) == Engine.get_process_frames():
+		old.queue_free()
+	else:
+		old.vanish()
+	fresh.appear()
+	patrons[pid] = fresh
+	_spawned_frame[pid] = Engine.get_process_frames()
 
 
 func _slide_patron(pid: int, angle: float) -> void:
@@ -167,11 +226,42 @@ func set_patron_visible(pid: int, shown: bool) -> void:
 		patrons[pid].visible = shown
 
 
-func species_of(pid: int) -> Dictionary:
-	# 该玩家角色的物种外观(等待厅名单据此显示动物,与 3D 角色一致);还没有角色时返回 {}
+func species_index_of(pid: int) -> int:
+	# 该玩家角色的物种下标;还没有角色时返回 UNASSIGNED
 	if not patrons.has(pid):
-		return {}
-	return PatronParts.species(patrons[pid].species_index)
+		return Species.UNASSIGNED
+	return patrons[pid].species_index
+
+
+# —— 主菜单形象预览 ——
+
+func show_menu_preview(species: int) -> void:
+	# 自己选的形象坐在 0 号椅上(0 号空椅子藏起来),换形象时原地冒烟换人;桌上有真人酒客(等待厅、牌桌)时不摆
+	species = Species.sanitize(species)
+	if species == Species.UNASSIGNED or not patrons.is_empty():
+		clear_menu_preview()
+		return
+	if is_instance_valid(_menu_preview) and _menu_preview.species_index == species:
+		return
+	var fresh := Patron.new(species)
+	fresh.transform = seat_transform(0.0)
+	add_child(fresh)
+	if is_instance_valid(_menu_preview):
+		_menu_preview.vanish()
+	fresh.appear()
+	fresh.set_expression("smug")
+	_menu_preview = fresh
+	if not _empty_chairs.is_empty():
+		_empty_chairs[0].visible = false
+
+
+func clear_menu_preview() -> void:
+	# arrange 与 clear 会自动收走;0 号空椅子在空桌上回来
+	if is_instance_valid(_menu_preview):
+		_menu_preview.queue_free()
+	_menu_preview = null
+	if not _empty_chairs.is_empty() and patrons.is_empty():
+		_empty_chairs[0].visible = _empty_chairs[1].visible if _empty_chairs.size() > 1 else true
 
 
 func _place_revolver(pid: int, angle: float) -> void:
@@ -199,6 +289,7 @@ func revive_all() -> void:
 
 
 func clear() -> void:
+	clear_menu_preview()
 	for pid in patrons:
 		patrons[pid].queue_free()
 	for pid in revolvers:
@@ -207,6 +298,7 @@ func clear() -> void:
 	revolvers = {}
 	seat_angles = {}
 	_slides = {}
+	_spawned_frame = {}
 	cards.clear_all()
 	_clear_debris()
 	_show_empty_chairs(true)

@@ -4,6 +4,10 @@ class_name Species
 
 const IDS := ["fox", "bear", "pig", "cat", "turtle", "alpaca", "monkey", "crocodile"]
 const LABELS := ["狐狸", "熊", "猪", "猫", "乌龟", "羊驼", "猴子", "鳄鱼"]
+# 角色设定(挑选面板与提示里和物种名一起显示)
+const ROLES := ["老千绅士", "酒馆老板", "铁路司炉", "独行枪手", "老淘金客", "披毯客", "酒馆跑堂", "亡命徒"]
+# 头像回退图上的单字(头像还没烘好或无头时显示)
+const GLYPHS := ["狐", "熊", "猪", "猫", "龟", "驼", "猴", "鳄"]
 const UNASSIGNED := -1
 
 
@@ -18,6 +22,11 @@ static func is_valid(value: Variant) -> bool:
 
 static func sanitize(value: Variant) -> int:
 	return value if is_valid(value) else UNASSIGNED
+
+
+static func title(index: int) -> String:
+	# 「狐狸 · 老千绅士」:提示与挑选面板用
+	return "%s · %s" % [LABELS[index], ROLES[index]] if is_valid(index) else "还没有形象"
 
 
 static func index_of(id: String) -> int:

@@ -219,6 +219,7 @@ static func _controls() -> Dictionary:
 				{"action": "离开牌桌 / 合上", "mouse": "", "keys": ["Esc"]},
 			]},
 			{"type": "note", "text": "能免费过牌时按 F 不会弃牌,只提示「可以免费过牌」,点「弃牌」按钮也要再确认一次。看说明书时牌局不会暂停,计时照常进行。"},
+			{"type": "note", "text": RulebookContent.SPECIES_NOTE},
 		],
 	}
 

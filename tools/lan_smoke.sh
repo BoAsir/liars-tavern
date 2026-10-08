@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 无头联机冒烟:1 个房主 + 2 个 bot 客户端(一个走局域网发现,一个直连 127.0.0.1)跑完整局。
-# 通过条件:三个进程都以 0 退出、都收到 MATCH_OVER、都收到另外两人的视线与脖子同步、日志里没有脚本错误。
+# 通过条件:三个进程都以 0 退出、都收到 MATCH_OVER、都收到另外两人的视线与脖子同步、日志里没有脚本错误;
+# 三人都要鳄鱼(--species=crocodile):三个日志最后一条 [debug] species 完全一致,房主是 crocodile,
+# 另外两人各不相同且不是 crocodile(先到先得,被占时房主给空着的)。
 set -u
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -14,7 +16,7 @@ run_capped() {
 	perl -e 'alarm shift; exec @ARGV' "$CAP_SECONDS" "$@"
 }
 
-COMMON=(--headless --path "$ROOT" -- --bot --fast="$SPEED" --quit-after-match)
+COMMON=(--headless --path "$ROOT" -- --bot --fast="$SPEED" --quit-after-match --species=crocodile)
 # 每次运行用独立的游戏端口与房名:同机并行跑多份冒烟时,直连与发现都只会进自己的房间
 PORT="${PORT:-$((47830 + RANDOM % 150))}"
 ROOM="冒烟$$"
@@ -43,5 +45,29 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT"; do
 		echo "ok   $name — $(grep -m1 MATCH_OVER "$log") · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log")"
 	fi
 done
+# 形象:三端最后一条形象表(开局时的座位表)必须完全一致
+species_lines=()
+for name in host discover direct; do
+	species_lines+=("$(grep '\[debug\] species' "$LOG_DIR/$name.log" | tail -1)")
+done
+if [ -z "${species_lines[0]}" ] || [ "${species_lines[0]}" != "${species_lines[1]}" ] || [ "${species_lines[0]}" != "${species_lines[2]}" ]; then
+	echo "FAIL species — 三端的形象表不一致:"
+	printf '  %s\n' "${species_lines[@]}"
+	status=1
+else
+	# 「[debug] species {1: crocodile, 123: fox, 456: bear}」→ 每行一个「pid id」
+	entries=$(echo "${species_lines[0]}" | sed -e 's/.*{//' -e 's/}.*//' | tr ',' '\n' | sed -e 's/^ *//' -e 's/: / /')
+	host_species=$(echo "$entries" | awk '$1 == 1 {print $2}')
+	others=$(echo "$entries" | awk '$1 != 1 {print $2}')
+	other_count=$(echo "$others" | grep -c . || true)
+	unique_count=$(echo "$others" | sort -u | grep -c . || true)
+	if [ "$host_species" != "crocodile" ] || [ "$other_count" -ne 2 ] || [ "$unique_count" -ne 2 ] \
+		|| echo "$others" | grep -qx -e 'crocodile' -e '-'; then
+		echo "FAIL species — 分配不对:${species_lines[0]}"
+		status=1
+	else
+		echo "ok   species — ${species_lines[0]}"
+	fi
+fi
 [ "$status" -eq 0 ] && echo "联机冒烟通过(日志:$LOG_DIR)"
 exit "$status"

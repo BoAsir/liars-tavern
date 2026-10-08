@@ -20,14 +20,16 @@ signal gaze_updated(pid: int, point: Vector3, neck: Vector3, active: bool)   # �
 
 const HOST_ID := LobbyModel.HOST_ID
 const DISCONNECT_GRACE := 1.0
+const SPECIES_COOLDOWN_MS := 250   # 房主端:每个对端换形象的冷却,冷却内的请求按「被拒」处理
 
 # —— 只读状态(UI 读取) ——
 var player_name := ""
+var player_species := Species.UNASSIGNED   # 本机想要的形象(建房/加入时带上;等待厅换成功后跟着更新)
 var is_host := false
 var in_game := false
 var lobby_players: Array = []
 var lobby_meta := {}       # {"room", "host", "addresses", "port", "mode"}
-var seats: Array = []      # 本局座位顺序 [{"pid", "name"}]
+var seats: Array = []      # 本局座位顺序 [{"pid", "name", "species"}]
 var last_public := {}
 var last_private := {}
 var game_mode := GameMode.DEFAULT   # 房主:开房时选的玩法;客户端:来自等待厅 meta 或开局 info
@@ -44,6 +46,8 @@ var _turn_timer: Timer = null
 var _hand_timer: Timer = null      # 仅房主(德州):一手之间的间隔,到点开下一手
 var _join_timer: Timer = null
 var _anim_left := 0.0              # 仅房主:客户端还要演多久(按 Pacing 预算估),随时间递减
+var _species_asked_at := {}        # 仅房主:peer_id -> 上次换形象请求的时刻(毫秒),冷却用
+var _species_wanted := Species.UNASSIGNED   # 仅客户端:等待房主确认的换形象请求
 
 
 func _ready() -> void:
@@ -69,8 +73,9 @@ func my_pid() -> int:
 
 # —— 建房 / 加入 / 离开 ——
 
-func host_game(pname: String, room_name: String, preferred_port := 0, mode := GameMode.DEFAULT) -> Error:
-	# 玩法开房时选定,开房后不能改(想换玩法就重开房间)
+func host_game(pname: String, room_name: String, preferred_port := 0, mode := GameMode.DEFAULT,
+		species := Species.UNASSIGNED) -> Error:
+	# 玩法开房时选定,开房后不能改(想换玩法就重开房间);species 是本机想要的形象(房主当场拿到)
 	if not GameMode.is_valid(mode):
 		push_error("开房失败:未知玩法 %s" % mode)
 		return ERR_INVALID_PARAMETER
@@ -80,7 +85,7 @@ func host_game(pname: String, room_name: String, preferred_port := 0, mode := Ga
 		return created["error"]
 	multiplayer.multiplayer_peer = created["peer"]
 	(multiplayer as SceneMultiplayer).server_relay = false
-	_open_room(pname, room_name, created["port"], mode)
+	_open_room(pname, room_name, created["port"], mode, species)
 	# 游戏端口号的 TCP 上顺带提供更新文件(ENet 走 UDP,互不占用)
 	Updater.start_serving(_port)
 	Discovery.start_broadcast(_room_announcement)
@@ -89,7 +94,7 @@ func host_game(pname: String, room_name: String, preferred_port := 0, mode := Ga
 	return OK
 
 
-func _open_room(pname: String, room_name: String, port: int, mode: String) -> void:
+func _open_room(pname: String, room_name: String, port: int, mode: String, species := Species.UNASSIGNED) -> void:
 	# 房主一侧的房间状态,不碰网络:离线测试据此搭出房主
 	_port = port
 	game_mode = mode
@@ -98,11 +103,13 @@ func _open_room(pname: String, room_name: String, port: int, mode: String) -> vo
 	_room_id = "%08x%08x" % [randi(), randi()]
 	is_host = true
 	_session_active = true
+	player_species = Species.sanitize(species)
 	_lobby = LobbyModel.new()
-	_lobby.add_host(player_name)
+	_lobby.add_host(player_name, player_species)
 
 
-func join_game(pname: String, address_text: String) -> void:
+func join_game(pname: String, address_text: String, species := Species.UNASSIGNED) -> void:
+	# species:本机想要的形象,握手通过后单独发给房主(rpc_lobby_species),握手消息本身不变
 	var addr := Protocol.parse_address(address_text)
 	if not addr["ok"]:
 		join_failed.emit(addr["error"])
@@ -115,6 +122,7 @@ func join_game(pname: String, address_text: String) -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	player_name = Protocol.sanitize_name(pname)
+	player_species = Species.sanitize(species)
 	_session_active = true
 	_joining = true
 	_join_timer.start(Protocol.JOIN_TIMEOUT)
@@ -134,6 +142,8 @@ func leave() -> void:
 	_hand_timer.stop()
 	_join_timer.stop()
 	_anim_left = 0.0
+	_species_asked_at = {}
+	_species_wanted = Species.UNASSIGNED
 	var peer := multiplayer.multiplayer_peer
 	if peer is ENetMultiplayerPeer:
 		peer.close()
@@ -254,6 +264,7 @@ func _on_peer_disconnected(id: int) -> void:
 		var events := _session.on_disconnect(id)
 		if not events.is_empty():
 			_after_action(events)
+	_species_asked_at.erase(id)
 	if _lobby.remove(id):
 		_broadcast_lobby()
 
@@ -318,6 +329,9 @@ func rpc_join_accepted(info: Dictionary) -> void:
 	if not _joining:
 		return
 	_take_mode(info.get("mode"))
+	# 握手通过后再报想要的形象(规格 ② §3.4):握手消息的签名与编号不变,旧版本照样收到「版本不匹配」。
+	# 对局中入座的人也报:他要等下一手才登场,房主在那之前给他分好
+	_send_to(HOST_ID, "rpc_lobby_species", [player_species])
 	var late = info.get("in_game", false)
 	if late is bool and late:
 		_awaiting_game = true
@@ -368,19 +382,68 @@ func rpc_kicked() -> void:
 		end_session("你被房主请出了房间")
 
 
+func request_species(index: int) -> void:
+	# 等待厅换形象:房主直接改名单(变了就广播,没变也在本机刷新一次,界面据此结算);客人发给房主,
+	# 结果看随后的名单(被拒时房主也会单独回一份)
+	if not _session_active or _joining or in_game:
+		return
+	if is_host:
+		if _lobby.request_species(HOST_ID, index):
+			player_species = _lobby.species_of(HOST_ID)
+			_broadcast_lobby()
+		else:
+			_apply_lobby(_lobby.view(), _lobby_meta())
+	else:
+		_species_wanted = index
+		_send_to(HOST_ID, "rpc_lobby_species", [index])
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_lobby_species(index: int) -> void:
+	# 方法名排在 rpc_join_* 之后:握手消息的 RPC 编号不变。处理放在可离线测试的函数里
+	_handle_species_request(multiplayer.get_remote_sender_id(), index)
+
+
+func _handle_species_request(id: int, index: int) -> void:
+	# 来自不可信的对端:只认等待厅成员;参数类型由 RPC 签名把关,越界下标交给 LobbyModel 当「没有偏好」处理。
+	# 开局后只收对局中入座者的第一次(还没有形象、酒客要等下一手才登场),换形象只在等待厅里
+	if not is_host or not _session_active or _lobby == null or not _lobby.has(id):
+		return
+	if in_game and _lobby.species_of(id) != Species.UNASSIGNED:
+		return
+	if not _species_cooling_down(id) and _lobby.request_species(id, index):
+		_broadcast_lobby()
+	else:
+		# 被拒(被占、没变、冷却中)也回一份名单:请求者据此结算
+		_send_to(id, "rpc_lobby_state", [_lobby.view(), _lobby_meta()])
+
+
+func _species_cooling_down(id: int) -> bool:
+	var now := Time.get_ticks_msec()
+	var last: int = _species_asked_at.get(id, -SPECIES_COOLDOWN_MS)
+	if now - last < SPECIES_COOLDOWN_MS:
+		return true
+	_species_asked_at[id] = now
+	return false
+
+
 func can_start() -> bool:
 	return is_host and not in_game and _lobby != null and _lobby.can_start()
 
 
-func _broadcast_lobby() -> void:
-	var players := _lobby.view()
-	var meta := {
+func _lobby_meta() -> Dictionary:
+	return {
 		"room": _room_name,
 		"host": player_name,
 		"addresses": Lan.local_private_ipv4s(),
 		"port": _port,
 		"mode": game_mode,
 	}
+
+
+func _broadcast_lobby() -> void:
+	var players := _lobby.view()
+	var meta := _lobby_meta()
 	_apply_lobby(players, meta)
 	_send_to_members("rpc_lobby_state", [players, meta])
 
@@ -394,7 +457,34 @@ func _apply_lobby(players: Array, meta: Dictionary) -> void:
 	_take_mode(meta.get("mode"))
 	lobby_players = players
 	lobby_meta = meta
+	_take_granted_species(players)
 	lobby_updated.emit(players)
+
+
+func _take_granted_species(players: Array) -> void:
+	# 客户端:房主批下了等着的换形象请求,它就是之后再加入时报的形象
+	if _species_wanted == Species.UNASSIGNED or is_host:
+		return
+	for p in players:
+		if p is Dictionary and p.get("pid") == my_pid() and Species.sanitize(p.get("species")) == _species_wanted:
+			player_species = _species_wanted
+			_species_wanted = Species.UNASSIGNED
+			return
+
+
+func species_of(pid: int) -> int:
+	# 某位玩家的形象(房主分配):先查本局座位表,再查等待厅名单(对局中入座者的形象随名单下发);
+	# 都没有或数据不对时返回 UNASSIGNED,由 TableWorld 在对局里按座位顺序本地补齐
+	for list in [seats, lobby_players]:
+		for p in list:
+			if p is Dictionary and p.get("pid") == pid and Species.is_valid(p.get("species")):
+				return p["species"]
+	return Species.UNASSIGNED
+
+
+func patron_entries(pids: Array) -> Array:
+	# 喂给 TableWorld.arrange 的 [{pid, species}](德州牌桌按 hand_started / 公共视图的 seats 排座时用)
+	return pids.map(func(pid) -> Dictionary: return {"pid": pid, "species": species_of(pid)})
 
 
 func _disconnect_peer_later(id: int) -> void:
@@ -434,6 +524,8 @@ func start_game() -> void:
 	in_game = true
 	last_public = {}
 	last_private = {}
+	# 形象请求没到的人在这里兜底分配:座位表带上房主分配的形象,各端只渲染它(名单不另发,回等待厅时再广播)
+	_lobby.assign_unassigned()
 	var order := _lobby.seat_order()
 	seats = _seat_entries(order, _lobby.names())
 	_session = PokerSession.new(game_mode) if GameMode.is_poker(game_mode) else LiarsSession.new()
@@ -448,10 +540,12 @@ func start_game() -> void:
 
 
 func _seat_entries(order: Array, names := {}) -> Array:
-	# 座位表 [{pid, name}]:开局时名字来自等待厅,之后(中途加入的引导)来自会话
+	# 座位表 [{pid, name, species}]:开局时名字来自等待厅,之后(中途加入的引导)来自会话;形象来自等待厅名单
+	# (已离开名单的人是 UNASSIGNED,TableWorld 在对局里本地补齐)
 	var entries := []
 	for pid in order:
-		entries.append({"pid": pid, "name": names[pid] if names.has(pid) else _session.name_of(pid)})
+		entries.append({"pid": pid, "name": names[pid] if names.has(pid) else _session.name_of(pid),
+			"species": _lobby.species_of(pid)})
 	return entries
 
 
@@ -644,6 +738,9 @@ func _schedule_hand_timer() -> void:
 
 func _on_hand_timer() -> void:
 	if in_game and _session != null and _session.next_hand_ready():
+		# 对局中入座者在下一手登场:形象请求还没到的先兜底分好,名单随之下发
+		if _lobby.assign_unassigned():
+			_broadcast_lobby()
 		_after_action(_session.start_next_hand())
 
 
@@ -665,8 +762,8 @@ func rpc_game_events(events: Array) -> void:
 
 
 # —— 视线同步:不可靠有序、走独立通道,丢包由 GazeSync 的心跳与超时兜底 ——
-# 方法名刻意排在 rpc_join_* 之后:RPC 按方法名排序编号,握手消息的编号不变,
-# 旧版本仍能收到"版本不匹配"的明确拒绝。对局中「本场成员」= 已完成握手的等待厅成员(含中途加入者)
+# 方法名刻意排在 rpc_join_* 之后(rpc_lobby_species、rpc_poker_intent 同理):RPC 按方法名排序编号,
+# 握手消息的编号不变,旧版本仍能收到"版本不匹配"的明确拒绝。对局中「本场成员」= 已完成握手的等待厅成员(含中途加入者)
 
 func send_gaze(point: Vector3, neck: Vector3, active: bool) -> void:
 	if not in_game or multiplayer.multiplayer_peer == null:

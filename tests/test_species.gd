@@ -44,3 +44,13 @@ func test_patron_species_table_follows_the_catalog_order():
 	for i in Species.count():
 		assert_eq(PatronParts.species(i)["id"], Species.IDS[i])
 		assert_eq(PatronParts.species(i)["label"], Species.LABELS[i])
+
+
+func test_roles_and_glyphs_cover_every_species():
+	assert_eq(Species.ROLES.size(), Species.count())
+	assert_eq(Species.GLYPHS.size(), Species.count())
+	for glyph: String in Species.GLYPHS:
+		assert_eq(glyph.length(), 1, glyph)
+	assert_eq(Species.title(0), "狐狸 · 老千绅士")
+	assert_eq(Species.title(7), "鳄鱼 · 亡命徒")
+	assert_eq(Species.title(Species.UNASSIGNED), "还没有形象")

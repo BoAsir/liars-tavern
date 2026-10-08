@@ -1,7 +1,8 @@
 extends Control
-# 主菜单:昵称 / 开设房间(选玩法)/ 局域网房间列表(自动发现)/ IP 直连。
+# 主菜单:形象与昵称 / 开设房间(选玩法)/ 局域网房间列表(自动发现)/ IP 直连。
 # 左侧木牌面板,右侧是环绕镜头下的酒馆。面板在可滚动的侧栏里:1280x720 逻辑分辨率下整块放得下,
 # 窗口再矮也只是滚动,底部的 IP 直连、状态行与页脚不会被裁掉。
+# 名号旁的头像点开挑选面板(弹出在侧栏右边,不加侧栏的高度);选中的形象坐在桌边 0 号椅上预览。
 
 
 const RoomRow := preload("res://src/ui/main_menu/room_row.gd")
@@ -11,9 +12,14 @@ const SIDE_MARGIN := 48
 const EDGE_MARGIN := 24
 const ROW_GAP := 6
 const ROOM_LIST_HEIGHT := 80.0   # 正好露出一个房间行,更多房间在列表内滚动
+# 名号旁的头像:和昵称输入框一样高(面板在 1280×720 下已经差不多满了,这一行不能再长高)
+const SPECIES_CHIP_SIZE := 42.0
 
 var app: Node
 var _name_edit: LineEdit
+var _species_chip: SpeciesChip
+var _picker: SpeciesPicker
+var _species := Species.UNASSIGNED   # 本机想要的形象:来自 main(设置或 --species),在这里换了就存进设置
 var _room_edit: LineEdit
 var _ip_edit: LineEdit
 var _room_box: VBoxContainer
@@ -36,7 +42,9 @@ func _init(p_app: Node) -> void:
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_species = Species.sanitize(app.get("species"))
 	_build()
+	_show_preview()
 	Discovery.rooms_updated.connect(_refresh_rooms)
 	Net.join_failed.connect(_on_join_failed)
 	# 传 self:旧菜单迟到的 stop_listening 不会关掉这里开的监听
@@ -94,6 +102,10 @@ func _build() -> void:
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_status)
 	_build_footer(box)
+	# 挑选面板压在侧栏之上、铺满屏幕当遮罩:不在滚动侧栏里,展开不会把侧栏撑高
+	_picker = SpeciesPicker.new()
+	_picker.picked.connect(_select_species)
+	add_child(_picker)
 
 
 func _play_intro() -> void:
@@ -117,11 +129,20 @@ func _build_title(box: VBoxContainer) -> void:
 
 func _build_identity(box: VBoxContainer) -> void:
 	box.add_child(_section("你的名号"))
+	var identity := HBoxContainer.new()
+	identity.add_theme_constant_override("separation", 10)
+	box.add_child(identity)
+	_species_chip = SpeciesChip.new(_species, SPECIES_CHIP_SIZE)
+	_species_chip.tooltip_prefix = "挑选形象:"
+	_species_chip.pressed.connect(_open_picker)
+	identity.add_child(_species_chip)
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "输入昵称(最多 %d 字)" % Protocol.MAX_NAME_LENGTH
 	_name_edit.max_length = Protocol.MAX_NAME_LENGTH
 	_name_edit.text = Settings.get_string(Settings.KEY_NAME)
-	box.add_child(_name_edit)
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_edit.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	identity.add_child(_name_edit)
 	box.add_child(_mode_section())
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -143,6 +164,39 @@ func _mode_section() -> Control:
 	var row := _section("开一桌")
 	row.add_child(ModePicker.build(_mode, _select_mode))
 	return row
+
+
+# —— 形象 ——
+
+func _open_picker() -> void:
+	Sfx.play("ui_click")
+	var panel := _panel.get_global_rect()
+	var chip := _species_chip.get_global_rect()
+	# 面板贴在侧栏右边,和头像这一行对齐;主菜单上没有别人,格子都可选
+	_picker.open(_species, {}, Rect2(panel.position.x, chip.position.y, panel.size.x, chip.size.y), true, _species_chip)
+
+
+func _select_species(index: int) -> void:
+	if index == _species:
+		return
+	Sfx.play("ui_click")
+	_species = index
+	app.set("species", index)
+	Settings.set_value(Settings.KEY_SPECIES, Species.IDS[index], _settings_path())
+	_species_chip.set_species(index)
+	_show_preview()
+
+
+func _show_preview() -> void:
+	# 桌边 0 号椅上的 3D 预览(冒烟换人);不进树的测试占位 app 没有角色层
+	var world = app.get("world")
+	if world != null:
+		world.show_menu_preview(_species)
+
+
+func _settings_path() -> String:
+	var path = app.get("settings_path")
+	return path if path is String else Settings.PATH
 
 
 func _select_mode(mode: String) -> void:
@@ -264,7 +318,7 @@ func _on_host_pressed() -> void:
 	if room_name == "":
 		room_name = default_room_name(pname, _mode)
 	Discovery.stop_listening(self)
-	var err := Net.host_game(pname, room_name, 0, _mode)
+	var err := Net.host_game(pname, room_name, 0, _mode, _species)
 	if err != OK:
 		_show_status("开设房间失败:端口 %d-%d 都被占用(%s)" % [
 			Protocol.GAME_PORT, Protocol.GAME_PORT + Protocol.GAME_PORT_ATTEMPTS - 1, error_string(err)], UiTheme.LIE)
@@ -294,7 +348,7 @@ func _join(address: String) -> void:
 	_set_busy(true)
 	_last_join = address
 	_show_status("正在连接 %s …" % address, UiTheme.PARCHMENT_DIM)
-	Net.join_game(pname, address)
+	Net.join_game(pname, address, _species)
 
 
 func _on_join_failed(reason: String) -> void:

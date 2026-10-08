@@ -95,6 +95,14 @@ func test_controls_list_the_rulebook_hotkey():
 	assert_has(keys, OS.get_keycode_string(RulebookContent.HOTKEY))
 
 
+func test_both_books_explain_how_to_pick_a_species():
+	for book in [RulebookContent.BOOK_LIARS, RulebookContent.BOOK_POKER]:
+		var notes: Array = RulebookContent.find("controls", book)["blocks"].filter(func(b: Dictionary) -> bool:
+			return b["type"] == "note").map(func(b: Dictionary) -> String: return b["text"])
+		assert_has(notes, RulebookContent.SPECIES_NOTE, book)
+	assert_string_contains(RulebookContent.SPECIES_NOTE, "先选先得")
+
+
 func _block(section_id: String, type: String) -> Dictionary:
 	for block in RulebookContent.find(section_id).get("blocks", []):
 		if block["type"] == type:
