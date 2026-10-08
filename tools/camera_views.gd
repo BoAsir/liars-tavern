@@ -5,15 +5,40 @@ extends RefCounted
 const NAMES := ["seat", "selfshot", "gun", "menu", "overhead", "fireplace", "bar", "window", "closeup", "opponent",
 	"lineup_front", "lineup_back", "lineup_heads", "lineup_left", "lineup_right",
 	"focus0", "focus90", "focus180", "focus270", "focus120", "focus240", "door", "corner", "corner_front"]
+# 第一人称机位(要展台的牌桌,shot.gd / perf_probe.gd 另行处理,不进 NAMES):名字 -> 脖子偏移(座位坐标,模拟按住 WASD 探头)
+const FIRST_PERSON := {"fp": Vector3.ZERO, "fp_peek": Vector3(0.45, 0, -0.35), "fp_lean": Vector3(0, 0, -0.6),
+	"poker_fp": Vector3.ZERO, "poker_fp_peek": Vector3(-0.4, 0, -0.3)}
 # 特写机位(复刻 TableWorld.focus_view:镜头在桌心斜上方、偏向座位左侧,看向座位上的头):名字 -> 座位角(度)
 const FOCUS := {"focus0": 0.0, "focus90": 90.0, "focus180": 180.0, "focus270": 270.0, "focus120": 120.0, "focus240": 240.0}
+
+
+static func place_first_person(rig: CameraRig, world: TableWorld, pid: int, view: String) -> void:
+	# 第一人称(同 SeatCamera.enter):本机视角换成第一人称(手牌重摆)、头只投影不渲染、镜头跟着眼睛走,
+	# 脖子按 FIRST_PERSON[view] 探出去;镜头先直接摆到眼睛上(性能探针不跑 _process)
+	world.set_first_person(true)
+	var me: Patron = world.patrons[pid]
+	me.set_neck_target(FIRST_PERSON[view])
+	me.set_head_hidden(true)
+	rig.camera.fov = TableWorld.FIRST_PERSON_FOV
+	rig.fill_light.light_energy = TableWorld.FIRST_PERSON_FILL
+	rig.global_transform = world.first_person_view(pid)
+	rig.follow(func() -> Transform3D: return world.first_person_view(pid), 0.0)
+
+
+static func leave_first_person(world: TableWorld, pid: int) -> void:
+	# 拍完第一人称换回越肩(手牌、头、脖子复原);机位由接下来的 place / snap 摆
+	if world == null or not world.first_person:
+		return
+	world.set_first_person(false)
+	world.patrons[pid].set_head_hidden(false)
+	world.patrons[pid].set_neck_target(Vector3.ZERO)
 
 
 static func place(rig: CameraRig, view: String) -> bool:
 	# 摆好机位返回 true;不认识的机位返回 false
 	var top := SeatLayout.TABLE_TOP
 	rig.fill_light.light_energy = 0.0
-	rig.camera.fov = 66.0
+	rig.camera.fov = CameraRig.DEFAULT_FOV
 	match view:
 		"seat":
 			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT,

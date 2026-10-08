@@ -2,7 +2,8 @@ extends SceneTree
 # 视觉检查:搭建酒馆并按指定机位截图(需要窗口渲染,不能 --headless)。
 # 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase | --poker-showcase] [--stats]
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具;--scene=menu 时是主菜单状态(空牌桌与空椅子)。
-# 骗子酒馆机位表见 tools/camera_views.gd。
+# 骗子酒馆机位表见 tools/camera_views.gd。--showcase 时另有第一人称 fp / fp_peek(按住 WASD 探头)/ fp_lean(往前探),
+# --poker-showcase 时有 poker_fp / poker_fp_peek(CameraViews.FIRST_PERSON)。
 # --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
 # --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
@@ -99,10 +100,20 @@ func _run() -> void:
 	for index in views.size():
 		var view: String = views[index]
 		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
-		if view.begins_with("poker_"):
+		if CameraViews.FIRST_PERSON.has(view):
+			var fp_world: TableWorld = _poker_table(tavern) if view.begins_with("poker_") else _showcase.world
+			if view.begins_with("poker_"):
+				_place_poker_camera(tavern, "poker_seat")
+			CameraViews.place_first_person(tavern.camera_rig, fp_world, POKER_ME, view)
+			_stage_hud(tavern, view, hud_state)
+		elif view.begins_with("poker_"):
+			if _poker_world != null:
+				CameraViews.leave_first_person(_poker_world, POKER_ME)
 			_place_poker_camera(tavern, view)
 			_stage_hud(tavern, view, hud_state)
 		else:
+			if _showcase != null:
+				CameraViews.leave_first_person(_showcase.world, 1)
 			_place_camera(tavern.camera_rig, view)
 		for i in WARMUP_FRAMES:
 			await process_frame
