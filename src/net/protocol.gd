@@ -35,6 +35,8 @@ const MAX_NAME_LENGTH := 12
 const MAX_ROOM_NAME_LENGTH := 20
 # 加入请求里的原始昵称超过这个长度直接拒绝(正常客户端只发清洗过的短昵称)
 const MAX_RAW_NAME_LENGTH := 256
+# 昵称黑名单:不能含有这些字
+const NAME_BLACKLIST_CHARS := ["笑", "晓", "马", "飞", "火", "狐", "楚", "储"]
 # 清洗文本时最多看原文开头 max_length 的这么多倍:耗时与原文长度无关
 const SANITIZE_SCAN_FACTOR := 4
 
@@ -109,6 +111,23 @@ static func format_address(ip: String, port: int) -> String:
 
 static func sanitize_name(raw: String) -> String:
 	return sanitize_text(raw, MAX_NAME_LENGTH)
+
+
+static func contains_blacklist_chars(name: String) -> bool:
+	# 检查昵称是否含有黑名单字符
+	for ch in NAME_BLACKLIST_CHARS:
+		if name.find(ch) != -1:
+			return true
+	return false
+
+
+static func validate_name(name: String) -> Dictionary:
+	# 返回 {"ok": true} 或 {"ok": false, "error": "错误信息"}
+	if name == "":
+		return {"ok": false, "error": "昵称不能为空"}
+	if contains_blacklist_chars(name):
+		return {"ok": false, "error": "昵称不能含有敏感字"}
+	return {"ok": true}
 
 
 static func sanitize_text(raw: String, max_length: int) -> String:
