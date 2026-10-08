@@ -56,6 +56,12 @@ const WOOD_PRESETS := {
 		"scale": 4.0, "ring_frequency": 6.0, "grain_axis": 1, "across_axis": 0,
 		"roughness_base": 0.45, "varnish": 0.6,
 	},
+	"turned": {
+		# 车削件(桌柱、桌腿):深色、纤维沿 Y(顺着长度走),不分木板
+		"color_dark": Color(0.045, 0.026, 0.016), "color_light": Color(0.15, 0.085, 0.045),
+		"scale": 1.0, "ring_frequency": 9.0, "grain_axis": 1, "across_axis": 0,
+		"roughness_base": 0.6, "varnish": 0.45, "wear": 0.35,
+	},
 	"log": {
 		"color_dark": Color(0.07, 0.04, 0.02), "color_light": Color(0.22, 0.12, 0.06),
 		"scale": 2.0, "ring_frequency": 3.0, "grain_axis": 1, "across_axis": 0,
@@ -63,7 +69,29 @@ const WOOD_PRESETS := {
 	},
 }
 
+# 道具顶点色板(MeshForge 写进顶点,prop 着色器读):名字 -> [sRGB 颜色, 粗糙度, 金属度, glow(自发光, 透光)]。
+# albedo 封顶 0.8(自发光的灯泡除外);改用 AgX 时只需重调这一张表
+const PALETTE := {
+	"steel": [Color(0.36, 0.38, 0.42), 0.36, 0.6, Vector2.ZERO],   # 比 V3 亮一档:暗屋里反射不到什么,金属度高就读成一团黑
+	"steel_dark": [Color(0.05, 0.05, 0.055), 0.8, 0.3, Vector2.ZERO],   # 膛口、槽底、弹膛孔
+	"brass": [Color(0.78, 0.56, 0.24), 0.28, 1.0, Vector2.ZERO],
+	"iron": [Color(0.12, 0.12, 0.13), 0.55, 0.8, Vector2.ZERO],
+	"wax": [Color(0.78, 0.72, 0.60), 0.55, 0.0, Vector2(0.0, 0.35)],
+	"wick": [Color(0.05, 0.04, 0.03), 0.9, 0.0, Vector2.ZERO],
+	"enamel_green": [Color(0.17, 0.32, 0.22), 0.35, 0.0, Vector2.ZERO],
+	"enamel_cream": [Color(0.80, 0.75, 0.62), 0.6, 0.0, Vector2(0.12, 0.0)],
+	"bulb": [Color(1.0, 0.9, 0.7), 0.3, 0.0, Vector2(1.0, 0.0)],
+}
+
 static var _cache := {}
+
+
+static func paint_prop(f: MeshForge, entry: String) -> MeshForge:
+	# 按色板设 MeshForge 的绘制状态(颜色、粗糙度、金属度、glow)
+	var p: Array = PALETTE[entry]
+	f.paint(p[0], p[1], p[2])
+	f.glow = p[3]
+	return f
 
 
 static func wood(preset: String, part_space := false) -> ShaderMaterial:
