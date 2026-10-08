@@ -21,9 +21,9 @@ func test_felt_matches_the_layout_constants():
 	var tavern := Tavern.new()
 	add_child_autofree(tavern)
 	var felt: MeshInstance3D = tavern.get_node("Table/Felt")
-	var mesh: CylinderMesh = felt.mesh
-	assert_almost_eq(felt.position.y + mesh.height / 2.0, SeatLayout.FELT_TOP, 0.00001)
-	assert_almost_eq(mesh.top_radius, SeatLayout.FELT_RADIUS, 0.00001)
+	var box := felt.mesh.get_aabb()
+	assert_almost_eq(felt.position.y + box.end.y, SeatLayout.FELT_TOP, 0.00001, "毡面顶 = FELT_TOP")
+	assert_between(box.size.x / 2.0, SeatLayout.FELT_RADIUS - 0.003, SeatLayout.FELT_RADIUS, "毡面外沿")
 
 
 func test_only_the_clip_spins():

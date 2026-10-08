@@ -13,12 +13,14 @@ const LEAF_OFFSET := 0.0012   # 两片叶片在牌法线方向(立架局部 Z)�
 static func base(f: MeshForge) -> void:
 	# s0 = 深色木:ogee 线脚的车削主体(r ≤ 0.030)+ 矮裙边;s1 = prop:黄铜嵌线与轴承帽
 	f.surface(&"wood")
+	f.part_space = true
 	f.lathe(PackedVector2Array([Vector2(0.0, FELT), Vector2(SKIRT_RADIUS, FELT), Vector2(SKIRT_RADIUS, FELT + 0.0014),
 		Vector2(SKIRT_RADIUS - 0.0015, FELT + 0.0019), Vector2(0.031, FELT + 0.0019), Vector2(0.030, FELT + 0.0035),
 		Vector2(0.0285, FELT + 0.0055), Vector2(0.025, FELT + 0.0072), Vector2(0.0215, FELT + 0.0092),
 		Vector2(0.0205, FELT + 0.0118), Vector2(0.0175, FELT + 0.0142), Vector2(0.0125, FELT + 0.0158),
 		Vector2(0.0105, FELT + 0.0172), Vector2(0.0098, BODY_TOP), Vector2(0.0, BODY_TOP)]),
 		48, PackedInt32Array([1, 2, 4, 13]))
+	f.part_space = false
 	f.surface(&"metal")
 	WorldMaterials.paint_prop(f, "brass")
 	f.lathe(PackedVector2Array([Vector2(0.0365, FELT + 0.0019), Vector2(0.0372, FELT + 0.0025), Vector2(0.0395, FELT + 0.0025),

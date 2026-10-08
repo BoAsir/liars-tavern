@@ -60,7 +60,7 @@ func _build_stand() -> void:
 	# 车削底座固定在桌面上(网格内部抬到毡面),只有立轴、叉形夹与目标牌转
 	_stand = MeshKit.pivot(self, Vector3(0, SeatLayout.TABLE_TOP, 0), "TargetStand")
 	MeshKit.add(_stand, MeshForge.cached("prop:stand_base", StandModel.base,
-		{&"wood": WorldMaterials.wood("dark"), &"metal": WorldMaterials.prop()}), null).name = "StandBase"
+		{&"wood": WorldMaterials.wood("turned", true), &"metal": WorldMaterials.prop()}), null).name = "StandBase"
 	_spinner = MeshKit.pivot(_stand, Vector3.ZERO, "Spinner")
 	MeshKit.add(_spinner, MeshForge.cached("prop:stand_clip", func(f): StandModel.clip(f, STAND_HEIGHT),
 		{&"metal": WorldMaterials.prop()}), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_OFF).name = "Clip"

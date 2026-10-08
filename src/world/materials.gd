@@ -72,11 +72,11 @@ const WOOD_PRESETS := {
 # 道具顶点色板(MeshForge 写进顶点,prop 着色器读):名字 -> [sRGB 颜色, 粗糙度, 金属度, glow(自发光, 透光)]。
 # albedo 封顶 0.8(自发光的灯泡除外);改用 AgX 时只需重调这一张表
 const PALETTE := {
-	"steel": [Color(0.36, 0.38, 0.42), 0.36, 0.6, Vector2.ZERO],   # 比 V3 亮一档:暗屋里反射不到什么,金属度高就读成一团黑
+	"steel": [Color(0.31, 0.32, 0.36), 0.38, 0.62, Vector2.ZERO],   # 比 V3 亮一档:暗屋里反射不到什么,金属度高就读成一团黑
 	"steel_dark": [Color(0.05, 0.05, 0.055), 0.8, 0.3, Vector2.ZERO],   # 膛口、槽底、弹膛孔
 	"brass": [Color(0.78, 0.56, 0.24), 0.28, 1.0, Vector2.ZERO],
 	"iron": [Color(0.12, 0.12, 0.13), 0.55, 0.8, Vector2.ZERO],
-	"wax": [Color(0.78, 0.72, 0.60), 0.55, 0.0, Vector2(0.0, 0.35)],
+	"wax": [Color(0.64, 0.58, 0.47), 0.55, 0.0, Vector2(0.0, 0.18)],   # 比 V3 暗、透光弱:烛光就在蜡烛顶上,原值削顶
 	"wick": [Color(0.05, 0.04, 0.03), 0.9, 0.0, Vector2.ZERO],
 	"enamel_green": [Color(0.17, 0.32, 0.22), 0.35, 0.0, Vector2.ZERO],
 	"enamel_cream": [Color(0.80, 0.75, 0.62), 0.6, 0.0, Vector2(0.12, 0.0)],
@@ -143,6 +143,15 @@ static func felt() -> ShaderMaterial:
 	return _cached("felt", func():
 		var mat := ShaderMaterial.new()
 		mat.shader = FELT_SHADER
+		return mat)
+
+
+static func felt_sized(felt_radius: float) -> ShaderMaterial:
+	# 放大的牌桌(德州):边缘压暗跟着毡面半径走(骗子酒馆桌的 felt() 是 0.82 的毡面配 0.8);刺绣圆环不变
+	return _cached("felt:%.3f" % felt_radius, func():
+		var mat := ShaderMaterial.new()
+		mat.shader = FELT_SHADER
+		mat.set_shader_parameter("radius", felt_radius - 0.02)
 		return mat)
 
 
