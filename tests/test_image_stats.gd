@@ -42,3 +42,10 @@ func test_diff_ratio_counts_pixels_beyond_tolerance():
 
 func test_diff_ratio_of_different_sizes_is_total():
 	assert_eq(ImageStats.diff_ratio(_image(Color.RED), _image(Color.RED, Vector2i(5, 5))), 1.0)
+
+
+func test_washed_ratio_counts_pixels_above_a_luma_threshold():
+	var img := _image(Color(0.5, 0.5, 0.5))
+	img.set_pixel(0, 0, Color(0.9, 0.9, 0.9))       # 亮度 0.9:发白
+	img.set_pixel(1, 0, Color(1.0, 0.3, 0.3))       # 红通道顶满但亮度低:不算发白
+	assert_almost_eq(ImageStats.washed_ratio(img, Rect2i(0, 0, 10, 10)), 0.01, 0.0001)

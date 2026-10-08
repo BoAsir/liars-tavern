@@ -42,20 +42,34 @@ static func first_free_species(used: Array) -> int:
 # —— 调色板:部件键 → [sRGB 颜色, 粗糙度, 金属度] ——
 
 const NOSE := Color(0.05, 0.04, 0.04)
-const EYE_WHITE := Color(0.97, 0.96, 0.93)
+# 去过曝:近白的底色在烛光 + ACES 下会削顶发白(猪脸曾有六七成像素发白)。所有酒客颜色按最大通道等比压到
+# ALBEDO_CAP 以下(保持色相);眼白同档;爪子在桌上离烛光最近,再压暗一档
+const ALBEDO_CAP := 0.65
+const EYE_WHITE := Color(0.65, 0.64, 0.62)
+const PAW_SHADE := 0.8
 const PUPIL := Color(0.03, 0.03, 0.04)
+const HIGHLIGHT := Color(0.95, 0.95, 0.95)   # 瞳孔上的高光点(不自发光,面积小,不受上限约束)
 const BRASS := Color(0.78, 0.56, 0.24)   # = WorldMaterials.brass()
 const LAPEL_DARKEN := 0.35   # 翻领用压暗的外套色:浅色强调色做翻领会在胸前拼出一个突兀的「A」字
 
 
 static func palette(spec: Dictionary) -> Dictionary:
+	var fur := capped(spec["fur"])
+	var coat := capped(spec["coat"])
+	var dark := capped(spec["dark"])
 	return {
-		"fur": [spec["fur"], 0.75, 0.0], "muzzle": [spec["muzzle"], 0.8, 0.0], "dark": [spec["dark"], 0.6, 0.0],
-		"coat": [spec["coat"], 0.85, 0.0], "accent": [spec["accent"], 0.5, 0.0],
+		"fur": [fur, 0.75, 0.0], "muzzle": [capped(spec["muzzle"]), 0.8, 0.0], "dark": [dark, 0.6, 0.0],
+		"coat": [coat, 0.85, 0.0], "accent": [capped(spec["accent"]), 0.5, 0.0], "paw": [fur * PAW_SHADE, 0.75, 0.0],
 		"nose": [NOSE, 0.15, 0.0], "white": [EYE_WHITE, 0.25, 0.0], "pupil": [PUPIL, 0.1, 0.0],
-		"hat": [spec["dark"].darkened(0.4), 0.7, 0.0], "lapel": [spec["coat"].darkened(LAPEL_DARKEN), 0.8, 0.0],
+		"hat": [dark.darkened(0.4), 0.7, 0.0], "lapel": [coat.darkened(LAPEL_DARKEN), 0.8, 0.0],
 		"brass": [BRASS, 0.32, 1.0],
 	}
+
+
+static func capped(c: Color) -> Color:
+	# 按最大通道等比缩放到 ALBEDO_CAP 以下,色相不变
+	var peak := maxf(c.r, maxf(c.g, c.b))
+	return c if peak <= ALBEDO_CAP else Color(c.r * ALBEDO_CAP / peak, c.g * ALBEDO_CAP / peak, c.b * ALBEDO_CAP / peak, c.a)
 
 
 static func _paint(f: MeshForge, pal: Dictionary, key: String) -> void:
@@ -193,6 +207,8 @@ static func eye_white_recipe(f: MeshForge) -> void:
 static func pupil_recipe(f: MeshForge) -> void:
 	f.paint(PUPIL, 0.1)
 	f.sphere(0.021, 12)
+	f.paint(HIGHLIGHT, 0.08)
+	f.sphere(0.006, 6, _xf(Vector3(0.007, 0.008, -0.016)))
 
 
 static func marks_recipe(f: MeshForge) -> void:
@@ -217,7 +233,7 @@ static func arm_recipe(f: MeshForge, pal: Dictionary) -> void:
 
 
 static func paw_recipe(f: MeshForge, pal: Dictionary, radius: float, scale: Vector3) -> void:
-	_paint(f, pal, "fur")
+	_paint(f, pal, "paw")
 	f.sphere(radius, 16, _xf(Vector3.ZERO, Vector3.ZERO, scale))
 
 

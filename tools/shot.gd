@@ -2,7 +2,7 @@ extends SceneTree
 # 视觉检查:搭建酒馆并按指定机位截图(需要窗口渲染,不能 --headless)。
 # 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase] [--stats]
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
-# --stats 时每个机位打印全帧削顶比例、每张酒客脸的削顶比例、墙面灰泥区域的亮度标准差。
+# --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
 
@@ -11,6 +11,7 @@ const CameraViews := preload("res://tools/camera_views.gd")
 const ImageStats := preload("res://tools/image_stats.gd")
 const WARMUP_FRAMES := 45
 const FACE_RADIUS := 0.17   # 酒客头的半径(米),--stats 按它在画面上框出脸
+const PAW_RADIUS := 0.06    # 爪子的半径(米)
 # --stats 的灰泥取样区域(按画面比例):只有能看到大片墙面的机位才有
 const PLASTER_RECTS := {
 	"seat": Rect2(0.55, 0.02, 0.2, 0.12),
@@ -63,20 +64,26 @@ func _print_stats(view: String, image: Image) -> void:
 	print("STATS %s frame_clip=%.3f" % [view, ImageStats.clipped_ratio(image, Rect2i(Vector2i.ZERO, size))])
 	var camera := root.get_camera_3d()
 	for patron in root.find_children("*", "Patron", true, false):
-		var head: Vector3 = patron.head_position()
-		if camera.is_position_behind(head):
-			continue
-		var center := camera.unproject_position(head)
-		var edge := camera.unproject_position(head + camera.global_basis.x * FACE_RADIUS)
-		var r := center.distance_to(edge)
-		var rect := Rect2i(Rect2(center - Vector2(r, r), Vector2(r, r) * 2.0))
-		if not rect.intersects(Rect2i(Vector2i.ZERO, size)):
-			continue
-		print("STATS %s face %s clip=%.3f" % [view, PatronParts.species(patron.species_index)["id"], ImageStats.clipped_ratio(image, rect)])
+		var id: String = PatronParts.species(patron.species_index)["id"]
+		_print_region(view, "face " + id, image, camera, patron.head_position(), FACE_RADIUS)
+		for hand: Node3D in [patron.find_child("ArmL", true, false).get_node("Hand"), patron.right_hand]:
+			_print_region(view, "paw " + id, image, camera, hand.global_position, PAW_RADIUS)
 	if PLASTER_RECTS.has(view):
 		var rel: Rect2 = PLASTER_RECTS[view]
 		var rect := Rect2i(Rect2(rel.position * Vector2(size), rel.size * Vector2(size)))
 		print("STATS %s plaster_stddev=%.1f" % [view, ImageStats.luma_stddev(image, rect)])
+
+
+func _print_region(view: String, label: String, image: Image, camera: Camera3D, center_3d: Vector3, radius: float) -> void:
+	# 按球心与半径在画面上框出一块(脸、爪),打印发白与削顶比例
+	if camera.is_position_behind(center_3d):
+		return
+	var center := camera.unproject_position(center_3d)
+	var r := center.distance_to(camera.unproject_position(center_3d + camera.global_basis.x * radius))
+	var rect := Rect2i(Rect2(center - Vector2(r, r), Vector2(r, r) * 2.0))
+	if rect.intersection(Rect2i(Vector2i.ZERO, image.get_size())).get_area() < 16:
+		return
+	print("STATS %s %s washed=%.3f clip=%.3f" % [view, label, ImageStats.washed_ratio(image, rect), ImageStats.clipped_ratio(image, rect)])
 
 
 func _place_camera(rig: CameraRig, view: String) -> void:

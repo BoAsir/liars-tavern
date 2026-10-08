@@ -17,6 +17,20 @@ static func clipped_ratio(img: Image, rect: Rect2i, threshold := 0.98) -> float:
 	return float(clipped) / area.get_area()
 
 
+static func washed_ratio(img: Image, rect: Rect2i, threshold := 0.85) -> float:
+	# 区域内亮度(Rec.709 系数)≥ threshold 的像素占比:「发白」,比单通道削顶更接近人眼看到的过曝
+	var area := rect.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+	if area.get_area() <= 0:
+		return 0.0
+	var washed := 0
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var c := img.get_pixel(x, y)
+			if 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b >= threshold:
+				washed += 1
+	return float(washed) / area.get_area()
+
+
 static func luma_stddev(img: Image, rect: Rect2i) -> float:
 	# 区域内亮度(Rec.709 系数)的标准差,单位 0–255
 	var area := rect.intersection(Rect2i(Vector2i.ZERO, img.get_size()))

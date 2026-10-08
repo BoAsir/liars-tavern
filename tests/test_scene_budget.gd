@@ -99,7 +99,7 @@ func test_each_patron_is_merged_per_animation_pivot():
 	for patron: Patron in _tavern.find_children("*", "Patron", true, false):
 		var meshes := patron.find_children("*", "MeshInstance3D", true, false).filter(func(m: MeshInstance3D):
 			return m.is_visible_in_tree() and not patron.fan.is_ancestor_of(m) and not _under_revolver(m))
-		assert_lte(meshes.size(), 19, "每名酒客可见网格(含椅子,不含手牌与左轮)")
+		assert_lte(meshes.size(), 17, "每名酒客可见网格(含椅子,不含手牌与左轮)")
 		var materials := {}
 		for m: MeshInstance3D in meshes:
 			if m.name == "Chair":
@@ -108,7 +108,7 @@ func test_each_patron_is_merged_per_animation_pivot():
 				var mat := m.get_active_material(s)
 				if mat != null:
 					materials[mat] = true
-		assert_lte(materials.size(), 2, "每名酒客材质(不含椅子):酒客共享材质 + 眼睛高光")
+		assert_lte(materials.size(), 1, "每名酒客材质(不含椅子):只有酒客共享材质")
 		for pivot in ["Body", "Body/Neck", "Body/Head", "Body/ArmL", "Body/ArmR", "Body/ArmR/Hand", "Body/Fan"]:
 			assert_not_null(patron.get_node_or_null(pivot), "动画枢轴 %s 还在" % pivot)
 

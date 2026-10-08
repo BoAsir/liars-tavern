@@ -89,6 +89,7 @@ func _build_environment() -> void:
 	environment.ssao_enabled = true
 	environment.ssao_radius = 0.9
 	environment.ssao_intensity = 1.8
+	environment.ssao_light_affect = 0.35   # 环境光遮蔽也压暗直射光:墙角、椅脚、压在桌上的手臂才有接触暗部
 	# 不开 SSIL(屏幕空间间接光):实测内部 1080p 下约 3 毫秒/帧,开关前后画面几乎看不出差别
 	environment.volumetric_fog_enabled = true
 	environment.volumetric_fog_density = 0.05
@@ -202,7 +203,7 @@ func _build_lamp() -> void:
 	shade_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	MeshKit.add(_lamp_pivot, shade_mesh, shade_mat, Vector3(0, shade_y, 0))
 	MeshKit.add(_lamp_pivot, MeshKit.torus(0.355, 0.37, 48), WorldMaterials.brass(), Vector3(0, shade_y - 0.1, 0))
-	MeshKit.add(_lamp_pivot, MeshKit.sphere(0.055), WorldMaterials.emissive(Color(1.0, 0.82, 0.55), 9.0),
+	MeshKit.add(_lamp_pivot, MeshKit.sphere(0.055), WorldMaterials.emissive(Color(1.0, 0.82, 0.55), 4.0),
 		Vector3(0, shade_y - 0.06, 0))
 	var spot := SpotLight3D.new()
 	spot.position = Vector3(0, shade_y - 0.05, 0)
@@ -251,7 +252,7 @@ func _flame(parent: Node3D, size: Vector2, pos: Vector3, intensity: float, seed:
 
 
 func _candle(parent: Node3D, offset: Vector3, height: float, seed: float) -> void:
-	var wax := WorldMaterials.emissive(Color(0.9, 0.84, 0.72), 0.03)
+	var wax := WorldMaterials.emissive(Color(0.72, 0.672, 0.576), 0.03)   # 蜡色压到 0.72 以下,烛光下不再泛白
 	MeshKit.add(parent, MeshKit.cylinder(0.016, 0.018, height, 16), wax, offset + Vector3(0, 0.012 + height / 2.0, 0))
 	MeshKit.add(parent, MeshKit.sphere(0.012, 10), wax, offset + Vector3(0.012, 0.012 + height * 0.8, 0),
 		Vector3.ZERO, Vector3(0.6, 1.4, 0.6))

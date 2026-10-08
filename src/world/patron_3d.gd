@@ -134,7 +134,6 @@ func _build_head(spec: Dictionary) -> void:
 		_add_part(pivot, white, "EyeMesh")
 		var pupil := _add_part(pivot, pupil_mesh, "Pupil")
 		pupil.position = Vector3(0, 0, -0.03)
-		MeshKit.add(pupil, MeshKit.sphere(0.006, 6), WorldMaterials.emissive(Color.WHITE, 2.0), Vector3(0.007, 0.008, -0.016))
 		var marks := _add_part(pivot, marks_mesh, "MarksMesh")
 		marks.position = Vector3(0, 0, -0.036)
 		marks.visible = false
