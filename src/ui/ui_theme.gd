@@ -16,6 +16,7 @@ const LIE := Color(0.95, 0.3, 0.22)
 const MUTED := Color(0.55, 0.5, 0.45)
 
 const SCROLLBAR_WIDTH := 6.0
+const SLIDER_TRACK_HEIGHT := 6.0
 
 const FONT_TITLE_NAMES := ["Xingkai SC", "STXingkai", "Weibei SC", "STKaiti", "KaiTi", "Kaiti SC", "serif"]
 const FONT_DISPLAY_NAMES := ["Weibei SC", "STKaiti", "Kaiti SC", "KaiTi", "Songti SC", "SimSun", "serif"]
@@ -132,6 +133,10 @@ static func _input_styles() -> void:
 	_theme.set_color("font_placeholder_color", "LineEdit", Color(PARCHMENT, 0.35))
 	_theme.set_color("caret_color", "LineEdit", BRASS_BRIGHT)
 	_theme.set_color("selection_color", "LineEdit", Color(BRASS, 0.35))
+	# 滑条:默认主题的轨道是深灰,在深色面板上看不见范围与当前位置;轨道淡铜、已选部分铜色,都要有高度
+	_theme.set_stylebox("slider", "HSlider", _slider_part(Color(BRASS, 0.3)))
+	_theme.set_stylebox("grabber_area", "HSlider", _slider_part(BRASS))
+	_theme.set_stylebox("grabber_area_highlight", "HSlider", _slider_part(BRASS_BRIGHT))
 
 
 static func panel_box(bg: Color, border: Color, border_width: int, radius: int) -> StyleBoxFlat:
@@ -190,6 +195,13 @@ static func flat(color: Color, radius: int) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = color
 	box.set_corner_radius_all(radius)
+	return box
+
+
+static func _slider_part(color: Color) -> StyleBoxFlat:
+	var box := flat(color, 3)
+	box.content_margin_top = SLIDER_TRACK_HEIGHT / 2.0
+	box.content_margin_bottom = SLIDER_TRACK_HEIGHT / 2.0
 	return box
 
 

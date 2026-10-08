@@ -66,8 +66,6 @@ func on_turn_timeout() -> Dictionary:
 
 
 func public_view(turn_time_left: float) -> Dictionary:
-	if _table == null:
-		return {"mode": _mode}
 	return PokerViews.public_view(_table, _names, _mode, turn_time_left)
 
 
@@ -142,12 +140,15 @@ func name_of(pid: int) -> String:
 
 
 func _named(events: Array) -> Array:
-	# player_joined 与 session_over 里的名字由会话补(引擎不知道名字)
-	for ev in events:
+	# player_joined 与 session_over 里的名字由会话补(引擎不知道名字);引擎的字典不就地改,补了名字的是新字典
+	return events.map(func(ev: Dictionary) -> Dictionary:
 		match ev.get("type", ""):
 			"player_joined":
-				ev["name"] = name_of(ev["pid"])
+				return ev.merged({"name": name_of(ev["pid"])}, true)
 			"session_over":
-				for row in ev["results"]:
-					row["name"] = name_of(row["pid"])
-	return events
+				return ev.merged({"results": ev["results"].map(_named_row)}, true)
+		return ev)
+
+
+func _named_row(row: Dictionary) -> Dictionary:
+	return row.merged({"name": name_of(row["pid"])}, true)

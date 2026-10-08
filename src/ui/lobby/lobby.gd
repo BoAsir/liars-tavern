@@ -66,7 +66,8 @@ func _ready() -> void:
 	if Net.is_host:
 		Discovery.broadcast_health_changed.connect(_on_broadcast_health)
 	_on_broadcast_health(Discovery.is_broadcast_healthy())
-	# 从结算回来:收走桌上的牌与左轮,倒下的酒客重新登场
+	# 从结算回来:收走桌上的牌与左轮,倒下的酒客重新登场;德州的筹码、公共牌等也拆掉(规格 §5.1)
+	app.world.clear_poker()
 	app.world.cards.clear_all()
 	app.world.revive_all()
 	app.labels.clear()
@@ -236,11 +237,12 @@ func _sync_table_mode() -> void:
 
 
 func _apply_table_mode() -> void:
-	# 桌子按玩法摆(德州桌更大、不摆烛台与立牌),已落座的酒客跟着桌沿挪,镜头换到等待厅机位。
-	# 规格 §3.2 还要德州等待厅「在后台开始生成德州牌面」:PokerFaces 在牌面任务的分支里,这里还没有,
-	# 联调时在这里补一句 PokerFaces 的后台生成(is_poker(_table_mode) 时)
+	# 桌子按玩法摆(德州桌更大、不摆烛台与立牌),已落座的酒客跟着桌沿挪,镜头换到等待厅机位;
+	# 德州等待厅在后台开始生成德州牌面(规格 §3.2、§5.2),进牌桌时多半已经生成完
 	_table_mode = Net.game_mode
 	app.apply_table_mode(_table_mode)
+	if GameMode.is_poker(_table_mode) and is_inside_tree():
+		PokerFaces.build(self)
 	app.tavern.camera_rig.move_to(app.world.lobby_view(), CAMERA_MOVE_TIME)
 
 

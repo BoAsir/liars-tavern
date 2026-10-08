@@ -7,7 +7,9 @@ extends SceneTree
 # --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
 # --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
-# 文件名带状态,同一机位可以拍几种底部区域。
+# 文件名带状态,同一机位可以拍几种底部区域。没写 --hud 时展台的德州机位也带 HUD:座位机位 bet,观战机位 spectate。
+# 全套:--views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview
+#       --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase(4:3 再加 --resolution 1280x960)
 # --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
@@ -100,6 +102,8 @@ func _run() -> void:
 	for index in views.size():
 		var view: String = views[index]
 		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
+		if hud_state == "" and _poker != null:
+			hud_state = PokerShowcase.SPECTATE_STATE if view == "poker_overview" else PokerShowcase.BET_STATE
 		if CameraViews.FIRST_PERSON.has(view):
 			var fp_world: TableWorld = _poker_table(tavern) if view.begins_with("poker_") else _showcase.world
 			if view.begins_with("poker_"):

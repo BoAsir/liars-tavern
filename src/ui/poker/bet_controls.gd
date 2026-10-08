@@ -5,6 +5,9 @@ extends PanelContainer
 # 只发信号,不直接调用 Net / Sfx(截图工具能离线摆出整套 HUD);快捷键由牌桌的 _unhandled_input 转给 handle_key。
 # 所有控件 focus_mode = FOCUS_NONE:焦点留在按钮或滑条上会吃掉空格 / 回车 / 方向键。
 # 不是自己的回合时只留回合横幅那一行(「等待 X 行动…」+ 对方的倒计时),其余行收起。
+# 与牌桌(PokerScreen)的约定:每个公共视图都调 update(pub, my_pid),包括 actions 为空或轮到别人的;
+# 「新回合」= 视图里的 hand / street / current_pid 变了,或自己的合法动作集合变了——新回合金额回到最小加注,
+# 同一回合里的刷新(倒计时、旁人再领)保留已调好的金额。合并视图也不会漏掉新一条街。
 
 
 signal action_chosen(action: String, amount: int)   # 与 Net.submit_poker_action 同形
@@ -32,7 +35,7 @@ const REASON_NOT_REOPENED := "不完整加注不重开"
 const LEGAL_INTS := ["to_call", "call_amount", "min_raise_to", "max_raise_to"]
 const LEGAL_BOOLS := ["can_check", "can_raise", "can_allin"]
 
-var _situation := {"legal": {}, "current_bet": 0, "pot": 0, "opponents_live": 0}
+var _situation := {"legal": {}, "current_bet": 0, "pot": 0, "opponents_live": 0, "turn": [null, null, null]}
 var _presets: Array = []
 var _amount := 0
 var _my_turn := false
@@ -69,7 +72,15 @@ static func situation(pub: Dictionary, my_pid: int) -> Dictionary:
 		if p.get("pid") != my_pid and p.get("status") == PokerRules.STATUS_ACTIVE and not PokerNameplate.has_left(p):
 			live += 1
 	var current_bet: int = pub["current_bet"] if pub.get("current_bet") is int else 0
-	return {"legal": legal, "current_bet": current_bet, "pot": pot, "opponents_live": live}
+	return {"legal": legal, "current_bet": current_bet, "pot": pot, "opponents_live": live, "turn": turn_key(pub)}
+
+
+static func turn_key(pub: Dictionary) -> Array:
+	# 回合身份:第几手、哪条街、轮到谁;类型不对当空
+	var hand: Variant = pub.get("hand")
+	var street: Variant = pub.get("street")
+	var current: Variant = pub.get("current_pid")
+	return [hand if hand is int else null, street if street is String else null, current if current is int else null]
 
 
 static func raise_target(fraction: float, pot: int, current_bet: int, to_call: int) -> float:
@@ -280,7 +291,7 @@ func _shrink_padding(button: Button, padding: Vector2) -> void:
 
 func update(pub: Dictionary, my_pid: int) -> void:
 	var fresh := situation(pub, my_pid)
-	var new_turn: bool = fresh["legal"] != _situation["legal"]
+	var new_turn: bool = fresh["turn"] != _situation["turn"] or fresh["legal"] != _situation["legal"]
 	_situation = fresh
 	_presets = preset_amounts(fresh)
 	_apply_turn(not _presets.is_empty())

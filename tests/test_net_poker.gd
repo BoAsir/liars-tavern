@@ -80,14 +80,22 @@ func _next_hand() -> Dictionary:
 
 
 func _bust_host() -> void:
-	# 下一手:按钮房主(先说话)、房主只有 20 拿 72 全下,10 拿 AA 跟注,11 弃牌 → 房主输光
-	_table().button_pid = GUESTS[1]
-	_table().rigged = {"holes": {HOST: H.cards("7c 2d"), 10: H.cards("Ah Ad")}, "board": H.cards("8c 6h 4d Jc 3s"), "stacks": {HOST: 20}}
+	_bust(HOST)
+
+
+func _bust(loser: int) -> void:
+	# 下一手:按钮 loser(先说话)、只有 20 拿 72 全下,下家拿 AA 跟注,第三人弃牌 → loser 输光
+	var order := [HOST, GUESTS[0], GUESTS[1]]
+	var i := order.find(loser)
+	var winner: int = order[(i + 1) % order.size()]
+	var folder: int = order[(i + 2) % order.size()]
+	_table().button_pid = folder   # 按钮下一手移到他的下家:loser
+	_table().rigged = {"holes": {loser: H.cards("7c 2d"), winner: H.cards("Ah Ad")}, "board": H.cards("8c 6h 4d Jc 3s"), "stacks": {loser: 20}}
 	_next_hand()
-	for step in [[HOST, R.ALLIN], [10, R.CALL], [11, R.FOLD]]:
+	for step in [[loser, R.ALLIN], [winner, R.CALL], [folder, R.FOLD]]:
 		assert_eq(_current(), step[0])
 		_act(step[0], step[1])
-	assert_eq(_status(HOST), R.STATUS_BUSTED)
+	assert_eq(_status(loser), R.STATUS_BUSTED)
 	_assert_live()
 
 
@@ -224,6 +232,33 @@ func test_last_undecided_player_choosing_to_spectate_restores_the_plain_gap():
 	assert_eq(_sorted(_next_hand()["dealt"]), GUESTS)
 
 
+func test_rebuy_three_seconds_into_the_decision_time_keeps_the_shorter_remaining_gap():
+	# 规格 §8:三人局一人输光后 3 秒再领 → 他在下一手的 dealt 里,下一手按演完后 HAND_GAP 开
+	_start()
+	_fold_out()
+	_bust_host()
+	var before: float = net._hand_timer.time_left
+	net._process(3.0)
+	assert_almost_eq(net._anim_left, before - PokerPacing.BUST_DECISION - 3.0, EPS, "演出预算已过 3 秒")
+	net.request_rebuy()
+	assert_lt(net._hand_timer.time_left, before - 3.0, "剩下的间隔比原计划短")
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS)
+	assert_has(_next_hand()["dealt"], HOST)
+
+
+func test_busted_player_disconnecting_during_the_decision_gap_brings_the_hand_forward():
+	_start()
+	_fold_out()
+	_bust(10)
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.BUST_DECISION, EPS)
+	net._on_peer_disconnected(10)
+	assert_false(net._lobby.has(10))
+	assert_eq(_events.back()["type"], "player_left")
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "输光者走了就不用再等他选")
+	_assert_live()
+	assert_eq(_sorted(_next_hand()["dealt"]), [HOST, 11])
+
+
 # —— 旁人再领 ——
 
 func test_rebuy_during_someone_elses_turn_only_adds_the_rebuy_budget():
@@ -328,6 +363,22 @@ func test_late_joiner_is_seated_in_the_documented_order_and_dealt_next_hand():
 	net.sent = []
 	net._relay_gaze(HOST, Vector3.ZERO, Vector3.ZERO, true)
 	assert_eq(net.sent.map(func(entry: Array) -> int: return entry[0]), [10, 11, 50], "视线转发对象里有他,不含房主自己")
+
+
+func test_late_joiner_the_session_refuses_is_denied_and_never_told_the_game_started():
+	# 名单放行、会话拒收(同一 peer id 本手里刚离开,引擎要等这一手结束才移出他):
+	# 不能发 rpc_game_started 让他以为入了座,要按拒绝处理并撤掉名单项
+	_start()
+	net._on_peer_disconnected(10)
+	assert_false(net._lobby.has(10))
+	assert_true(net._session.has_turn(), "牌局照常")
+	net.sent = []
+	net._handle_join_request(10, "回来", Protocol.VERSION)
+	assert_eq(_methods_sent_to(10), ["rpc_join_denied"])
+	assert_false(net._lobby.has(10), "会话拒收就不留在名单里")
+	assert_eq(net._session.viewers().count(10), 0)
+	assert_eq(_table().seat_order().count(10), 1, "本手里离开的他还在桌上定格,没被重复入座")
+	_assert_live()
 
 
 func test_late_joiners_are_refused_while_the_session_is_ending():

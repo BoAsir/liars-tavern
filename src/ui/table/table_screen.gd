@@ -44,6 +44,8 @@ func _ready() -> void:
 	my_pid = Net.my_pid()
 	world = app.world
 	cards = world.cards
+	# 从德州房间出来再进骗子酒馆:桌子、烛台、立牌、左轮都按本玩法复原(规格 §5.1)
+	app.apply_table_mode(Net.game_mode)
 	for seat in Net.seats:
 		names[seat["pid"]] = seat["name"]
 		_shots[seat["pid"]] = 0

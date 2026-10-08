@@ -2,7 +2,8 @@ class_name PokerNameplate
 extends PanelContainer
 # 德州铭牌(规格 §6.3,≤ 150×64):两行——名字(超长省略号)+ D/小盲/大盲徽记;筹码 + 状态。
 # 行动者铜色高亮;弃牌、观战、已离开的人变暗。挂点由牌桌用 TableWorld.nameplate_anchor 给 WorldLabels。
-# 文案只写数字与状态,不出现花色符号。
+# 文案只写数字与状态,不出现花色符号。两行各自按文字宽度给足最小宽度(带省略号的 Label 最小宽度只剩「…」),
+# 整体宽度由较长的那行决定,再夹到 150;名字短、第二行长时第二行不会被截成「2,65」。
 
 
 const MAX_SIZE := Vector2(150, 64)
@@ -89,7 +90,7 @@ func _init(display_name: String) -> void:
 	_badge = UiTheme.label("", BADGE_FONT, UiTheme.BRASS_BRIGHT, UiTheme.body_font())
 	_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(_badge)
-	_info = UiTheme.label("", INFO_FONT, UiTheme.PARCHMENT_DIM)
+	_info = UiTheme.label("", INFO_FONT, UiTheme.PARCHMENT_DIM, UiTheme.body_font())
 	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(_info)
 
@@ -100,6 +101,8 @@ func set_info(player: Dictionary, badge: String, active: bool) -> void:
 	var stack: Variant = player.get("stack", 0)
 	var status := status_text(player)
 	_info.text = ChipText.format(stack if stack is int else 0) + (" · " + status if status != "" else "")
+	var info_width := ceilf(UiTheme.body_font().get_string_size(_info.text, HORIZONTAL_ALIGNMENT_LEFT, -1, INFO_FONT).x)
+	_info.custom_minimum_size.x = minf(info_width, MAX_SIZE.x - 2.0 * PADDING.x)
 	_style.border_color = UiTheme.BRASS_BRIGHT if active else Color(UiTheme.BRASS, 0.45)
 	_style.set_border_width_all(2 if active else 1)
 	_style.bg_color = ACTIVE_BG if active else UiTheme.PANEL_SOFT
