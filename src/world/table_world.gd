@@ -1,17 +1,30 @@
 class_name TableWorld
 extends Node3D
-# 牌桌上的角色层:按座位摆放酒客与左轮,提供座位几何查询。卡牌交给 CardTable。
+# 牌桌上的角色层:按座位摆放酒客与左轮,提供座位几何与机位查询。卡牌交给 CardTable;
+# 德州的 3D 节点(筹码、公共牌架与牌、亮牌、弃牌堆、庄家按钮)都挂在 poker_root 下,拆台时一起清空。
 # 等待厅与对局共用:都显示全部玩家(含自己);对局中镜头在自己角色身后越肩(第三人称)。
 
 
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
 const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
-const THIRD_PERSON_BACK := 2.1
+# 越肩机位(规格 §5.5):座位外 0.85 米、右移 0.55、高 1.92;骗子酒馆桌(座位半径 1.25)正好是原来的 2.1 米
+const THIRD_PERSON_BEHIND := 0.85
 const THIRD_PERSON_HEIGHT := 1.92
 const THIRD_PERSON_SIDE := 0.55
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
+# 观战与等待厅机位 [位置, 看向]:骗子酒馆的数值不变;德州桌放大后另用一组(规格 §5.5),
+# 都让最远的头与 1.60 米高的帽子避开吊灯罩(见 test_poker_view_layout)
+const OVERVIEW_LIARS := [Vector3(0, 2.3, 2.7), Vector3(0, SeatLayout.TABLE_TOP, -0.25)]
+const OVERVIEW_POKER := [Vector3(0, 2.0, 2.6), Vector3(0, SeatLayout.TABLE_TOP, 0.0)]
+const LOBBY_LIARS := [Vector3(LOBBY_SHIFT, 2.6, 2.5), Vector3(LOBBY_SHIFT, 0.75, -0.1)]
+const LOBBY_POKER := [Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1)]
+# 结算环绕(CameraRig.orbit 的参数):德州的椅背在 2.11 米,环绕要更远更高,镜头高约 2 米
+const ORBIT_LIARS := {"center": Vector3(0, 0.95, 0), "radius": 2.4, "height": 0.9, "speed": 0.18}
+const ORBIT_POKER := {"center": Vector3(0, 0.95, 0), "radius": 3.1, "height": 1.05, "speed": 0.15}
+const SEAT_MOVE := 0.6           # 换座位、桌子放大时酒客沿圆弧滑到新座位的时长(秒)
+const NAMEPLATE_HEIGHT := 1.62   # 德州铭牌挂点高出座位原点:高过最高的帽子(规格 §6.3)
 # 翻牌机位朝出牌者偏转的权重(0 = 只看翻牌行,1 = 只看出牌者头部)
 const REVEAL_LIAR_WEIGHT_FRONT := 0.35
 const REVEAL_LIAR_WEIGHT_SIDE := 0.2
@@ -24,11 +37,17 @@ var seat_angles := {}  # pid -> float
 var my_pid := 0
 var table_radius := SeatLayout.TABLE_RADIUS   # 当前桌面半径:德州时放大
 var seat_radius := SeatLayout.SEAT_RADIUS     # 座位到桌心的距离 = 桌面半径 + SEAT_GAP
+var poker_root: Node3D   # 德州的 3D 节点都挂在这里(规格 §5.1),clear_poker 一次清空
 var _show_self := true
+var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
 
 
 func _init(p_tavern: Tavern) -> void:
 	tavern = p_tavern
+	# 在 _init 里建:德州牌桌可能在本节点进树之前就要往里挂东西
+	poker_root = Node3D.new()
+	poker_root.name = "PokerRoot"
+	add_child(poker_root)
 
 
 func _ready() -> void:
@@ -43,9 +62,14 @@ func configure_table(radius: float) -> void:
 	# 座位跟着桌沿走,已落座的酒客滑到新位置
 	table_radius = radius
 	seat_radius = SeatLayout.seat_radius_for(radius)
-	tavern.set_table_radius(radius)
+	if tavern != null:   # 单元测试里只有角色层,没有酒馆
+		tavern.set_table_radius(radius)
 	for pid in patrons:
 		_place_patron(pid, seat_angles.get(pid, 0.0))
+
+
+func is_poker_table() -> bool:
+	return table_radius > SeatLayout.TABLE_RADIUS
 
 
 func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: bool) -> void:
@@ -58,6 +82,7 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 		if not order.has(pid):
 			patrons[pid].vanish()
 			patrons.erase(pid)
+			_slides.erase(pid)
 	for pid in revolvers.keys():
 		if not order.has(pid) or not with_revolvers:
 			revolvers[pid].queue_free()
@@ -80,8 +105,7 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 func _place_patron(pid: int, angle: float) -> void:
 	var xform := seat_transform(angle)
 	if patrons.has(pid):
-		var tween := create_tween()
-		tween.tween_property(patrons[pid], "transform", xform, 0.6).set_trans(Tween.TRANS_CUBIC)
+		_slide_patron(pid, angle)
 		return
 	# 物种跟人走:新来的取第一个没人用的物种,之后一直沿用(换座、复活都不变)
 	var used := patrons.values().map(func(p: Patron) -> int: return p.species_index)
@@ -90,6 +114,45 @@ func _place_patron(pid: int, angle: float) -> void:
 	add_child(patron)
 	patron.appear()
 	patrons[pid] = patron
+
+
+func _slide_patron(pid: int, angle: float) -> void:
+	# 沿圆弧滑到新座位:按角度(走短的一侧)与半径插值,走弦线会穿过桌沿。
+	# 补间挂在酒客身上:酒客离场释放时一起停下;上一段没走完就从当前位置接着走
+	var patron: Patron = patrons[pid]
+	if _slides.has(pid) and _slides[pid].is_valid():
+		_slides[pid].kill()
+	var from_angle := angle_of(patron.position)
+	var from_radius := Vector2(patron.position.x, patron.position.z).length()
+	var to_radius := seat_radius
+	var tween := patron.create_tween()
+	tween.tween_method(func(t: float) -> void:
+		_put_on_circle(patron, lerp_angle(from_angle, angle, t), lerpf(from_radius, to_radius, t)),
+		0.0, 1.0, SEAT_MOVE).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_slides[pid] = tween
+
+
+static func _put_on_circle(patron: Node3D, angle: float, radius: float) -> void:
+	# 与 seat_transform 同一朝向(面向桌心);只改位置与转角,不动缩放(登场动画还在放大时也照常)
+	patron.position = SeatLayout.seat_position(angle, radius)
+	patron.rotation = Vector3(0.0, -angle, 0.0)
+
+
+func remove_patron(pid: int) -> void:
+	# 离桌(德州 player_left):酒客播离场动画后释放;座位角度留到下一次 arrange,
+	# 筹码、铭牌在这之前仍按这个座位摆
+	if not patrons.has(pid):
+		return
+	_slides.erase(pid)
+	patrons[pid].vanish()
+	patrons.erase(pid)
+
+
+func set_patron_visible(pid: int, shown: bool) -> void:
+	# 本机观战:观战机位在本机座位后上方,自己的酒客会挡镜头,只在本机藏起来(别人照样看得到)。
+	# 不用 arrange 的 show_self:它会释放并重建酒客,可能换成别的动物
+	if patrons.has(pid):
+		patrons[pid].visible = shown
 
 
 func species_of(pid: int) -> Dictionary:
@@ -131,8 +194,26 @@ func clear() -> void:
 	patrons = {}
 	revolvers = {}
 	seat_angles = {}
+	_slides = {}
 	cards.clear_all()
 	_clear_debris()
+
+
+func clear_poker() -> void:
+	# 拆台(规格 §5.1):德州的 3D 节点全部释放,酒客牌扇里不归 CardTable 管的牌(德州手牌)也收走。
+	# 先摘下再释放:同一帧里就看不到了,挂在它们身上的补间与协程随之停下;可以重复调用
+	for child in poker_root.get_children():
+		poker_root.remove_child(child)
+		child.queue_free()
+	var liars_cards := cards.my_cards.duplicate()
+	for pid in cards.held:
+		liars_cards.append_array(cards.held[pid])
+	for pid in patrons:
+		var fan: Node3D = patrons[pid].fan
+		for child in fan.get_children():
+			if child is Card3D and not liars_cards.has(child):
+				fan.remove_child(child)
+				child.queue_free()
 
 
 func _clear_debris() -> void:
@@ -143,6 +224,26 @@ func _clear_debris() -> void:
 
 
 # —— 几何查询 ——
+
+static func angle_of(pos: Vector3) -> float:
+	# 桌面上一点绕桌心的角度(SeatLayout 的约定:0 = +Z,俯视顺时针增大),取值 [0, TAU)
+	return wrapf(atan2(-pos.x, pos.z), 0.0, TAU)
+
+
+func seat_angle_now(pid: int) -> float:
+	# 此刻的座位角度:酒客还在沿圆弧滑动时取他当前所在的角度(筹码堆、按钮、铭牌跟着他走);
+	# 没有酒客(已离场、本机观战者与迟到者不建)时取座位角度
+	if patrons.has(pid):
+		return angle_of(patrons[pid].position)
+	return seat_angles.get(pid, 0.0)
+
+
+func nameplate_anchor(pid: int) -> Vector3:
+	# 德州铭牌挂点(全局坐标):座位原点上方 NAMEPLATE_HEIGHT;跟着滑动中的酒客走,
+	# 不随登场 / 离场的缩放动画升降;离场或没建酒客时按座位算
+	var base: Vector3 = patrons[pid].position if patrons.has(pid) else seat_transform(seat_angles.get(pid, 0.0)).origin
+	return to_global(base + Vector3.UP * NAMEPLATE_HEIGHT)
+
 
 func seat_transform(angle: float) -> Transform3D:
 	var pos := SeatLayout.seat_position(angle, seat_radius)
@@ -167,7 +268,8 @@ func third_person_view(pid: int) -> Transform3D:
 	# 越过右肩看向桌心:自己的角色在画面左下,牌扇在其右侧,对手与桌面在画面中央
 	var angle: float = seat_angles.get(pid, 0.0)
 	var dir := SeatLayout.direction(angle)
-	var pos := dir * THIRD_PERSON_BACK + seat_right(pid) * THIRD_PERSON_SIDE + Vector3(0, THIRD_PERSON_HEIGHT, 0)
+	var pos := dir * (seat_radius + THIRD_PERSON_BEHIND) + seat_right(pid) * THIRD_PERSON_SIDE \
+		+ Vector3(0, THIRD_PERSON_HEIGHT, 0)
 	var target := -dir * 0.12 + Vector3(0, SeatLayout.TABLE_TOP, 0)
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
@@ -190,15 +292,34 @@ func head_position(pid: int) -> Vector3:
 
 func overview_view() -> Transform3D:
 	# 观战机位:从自己座位后上方俯看整桌,越过自己(倒下的)角色的头顶;
-	# 高度压在吊灯罩之下,否则对面玩家的脸会被灯罩挡住
-	var pos := Vector3(0, 2.3, 2.7)
-	return Transform3D(Basis.looking_at(Vector3(0, SeatLayout.TABLE_TOP, -0.25) - pos, Vector3.UP), pos)
+	# 高度压在吊灯罩之下,否则对面玩家的脸会被灯罩挡住。德州桌更大:更低、更靠后,看向桌心
+	var view: Array = OVERVIEW_POKER if is_poker_table() else OVERVIEW_LIARS
+	return _look(view[0], view[1])
 
 
 func lobby_view() -> Transform3D:
 	# 等待厅机位:整体右移,牌桌落在画面左侧,右侧留给等待厅面板;抬高以免自己的角色挡住桌面
-	var pos := Vector3(LOBBY_SHIFT, 2.6, 2.5)
-	return Transform3D(Basis.looking_at(Vector3(LOBBY_SHIFT, 0.75, -0.1) - pos, Vector3.UP), pos)
+	var view: Array = LOBBY_POKER if is_poker_table() else LOBBY_LIARS
+	return _look(view[0], view[1])
+
+
+func table_orbit() -> Dictionary:
+	# 结算时的环绕机位 {"center", "radius", "height", "speed"}(CameraRig.orbit 的参数)
+	return (ORBIT_POKER if is_poker_table() else ORBIT_LIARS).duplicate()
+
+
+static func uses_overview(in_seats: bool, status: String) -> bool:
+	# 德州用哪个常驻机位(规格 §5.5):不在当前座位表里(迟到者)或在观战 → 观战机位;
+	# 其余(输光还没选、刚再领等下一手、离座)都留在自己座位的越肩
+	return not in_seats or status == PokerRules.STATUS_SPECTATING
+
+
+func rest_view(pid: int, in_seats: bool, status: String) -> Transform3D:
+	return overview_view() if uses_overview(in_seats, status) else third_person_view(pid)
+
+
+static func _look(pos: Vector3, target: Vector3) -> Transform3D:
+	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
 
 func reveal_view(liar_pid: int) -> Transform3D:

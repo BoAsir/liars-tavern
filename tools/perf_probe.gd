@@ -1,16 +1,20 @@
 extends SceneTree
 # 性能探针:在离屏 SubViewport 里按指定分辨率渲染酒馆 + 展台,逐项关闭渲染特性,打印整帧耗时(毫秒)。
 # 需要窗口渲染(不能 --headless);离屏渲染,不会占满屏幕,也不受显示器刷新率限制。
-# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat] [--frames=120] [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>]
-# 不给 --cases 时逐项单独测一遍全部开关
+# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat] [--frames=120] [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>] [--showcase=liars|poker]
+# 不给 --cases 时逐项单独测一遍全部开关。--showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、
+# 7 个底池,约 900 枚筹码),机位取自 TableWorld;德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(规格 §8)。
+# 每行另打印该配置下一帧的绘制调用数(draw calls)。
 
 
 const WARMUP_FRAMES := 60
+const SHOWCASES := {"liars": "res://tools/showcase.gd", "poker": "res://tools/poker_showcase.gd"}
 
 var opts := {}
 var _viewport: SubViewport
 var _tavern: Tavern
 var _post_fx: PostFx
+var _world: TableWorld = null   # 德州展台的牌桌:机位从它取
 
 
 func _initialize() -> void:
@@ -33,9 +37,17 @@ func _run() -> void:
 	_viewport.add_child(_tavern)
 	_post_fx = PostFx.new()
 	_viewport.add_child(_post_fx)
-	var showcase: Node = load("res://tools/showcase.gd").new()
+	var kind: String = opts.get("showcase", "liars")
+	if not SHOWCASES.has(kind):
+		push_error("unknown showcase %s (known: %s)" % [kind, ", ".join(SHOWCASES.keys())])
+		quit(1)
+		return
+	var showcase: Node = load(SHOWCASES[kind]).new()
+	if kind == "poker":
+		showcase.set("worst_case", true)
 	_viewport.add_child(showcase)
 	await showcase.build(_tavern)
+	_world = showcase.get("world") if kind == "poker" else null
 	_place_camera(opts.get("view", "seat"))
 	print("%s / %s  size=%s view=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
 		_viewport.size, opts.get("view", "seat"), _viewport.msaa_3d])
@@ -242,13 +254,20 @@ func _shot(label: String) -> void:
 
 
 func _report(label: String, m: Dictionary, base: Dictionary) -> void:
-	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)" % [
-		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"]])
+	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)  draw calls %d" % [
+		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"],
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
 
 
 func _place_camera(view: String) -> void:
 	var rig := _tavern.camera_rig
 	var top := SeatLayout.TABLE_TOP
+	if _world != null:
+		# 德州展台:本机座位 = 1 号的越肩或观战机位
+		var xform := _world.overview_view() if view == "overview" else _world.third_person_view(1)
+		rig.snap(xform.origin, xform.origin - xform.basis.z)
+		rig.fill_light.light_energy = 0.0 if view == "overview" else TableWorld.SEAT_FILL_LIGHT
+		return
 	match view:
 		"menu":
 			rig.snap(Vector3(2.6, 2.1, 2.9), Vector3(-0.4, 0.9, -0.8))
