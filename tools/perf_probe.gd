@@ -16,6 +16,9 @@ const SceneCensus := preload("res://tools/scene_census.gd")
 const WARMUP_FRAMES := 60
 const BIAS_NUDGE := 0.00001   # 每帧来回微调投影灯的 shadow_bias,让阴影图失效重画(画面看不出差别)
 const SHOWCASES := {"liars": "res://tools/showcase.gd", "poker": "res://tools/poker_showcase.gd"}
+# ④ 建的顶层节点(room-off / decor-off 用;同 tests/test_tavern_build.gd)
+const ROOM_NODES := ["Room", "Fireplace", "Bar", "Window", "WindowView", "Door", "DoorView", "Decor_", "WallProps_", "Clock",
+	"Pendulum", "Piano", "PianoBench", "CoatRack", "Barrel", "Crate", "Clutter", "Rugs", "Sconce", "Decals", "SmokeLayer", "HearthHaze"]
 
 var opts := {}
 var _viewport: SubViewport
@@ -61,6 +64,7 @@ func _run() -> void:
 	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
 		_viewport.size, _viewport.msaa_3d])
 	print("census ", SceneCensus.count(_viewport))
+	print("texture memory %.1f MB" % (RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576.0))
 	var toggles := _toggles()
 	var cases: PackedStringArray = opts["cases"].split(",") if opts.has("cases") else PackedStringArray(toggles.keys())
 	if opts.has("assert-budget") and not cases.has("budget"):
@@ -136,7 +140,35 @@ func _toggles() -> Dictionary:
 		"patrons-off": func(): return _hide(_viewport.find_children("*", "Patron", true, false)),
 		"revolvers-off": func(): return _hide(_viewport.find_children("*", "Revolver3D", true, false)),
 		"bottles-off": func(): return _hide(_bottles()),
+		# ④ 房间子预算:只隐藏 ④ 建的网格、MultiMesh、贴花与雾,灯一律不动
+		"room-off": func(): return _hide(_room_visuals(false)),
+		"decor-off": func(): return _hide(_room_visuals(true)),
 	}
+
+
+func _room_visuals(decor_only: bool) -> Array:
+	# ④ 建的可视节点:decor_only 时只取墙饰、地毯与外景(decor 材质的网格)
+	var out := []
+	for node in _tavern.find_children("*", "", true, false):
+		var visual: bool = node is GeometryInstance3D or node is Decal or node is FogVolume
+		if not visual or node is Light3D or node is GPUParticles3D:
+			continue
+		if node is GeometryInstance3D and node.material_override is ShaderMaterial \
+				and node.material_override.shader == WorldMaterials.FLAME_SHADER:
+			continue   # 火焰片不是 ④ 新建的
+		if decor_only:
+			var mesh: Mesh = node.mesh if node is MeshInstance3D else null
+			if mesh != null and mesh.get_surface_count() > 0 and mesh.surface_get_material(0) == WorldMaterials.decor():
+				out.append(node)
+			continue
+		var top: Node = node
+		while top.get_parent() != _tavern:
+			top = top.get_parent()
+		for prefix in ROOM_NODES:
+			if String(top.name).begins_with(prefix) and not (top.name == &"Bar" and node is MultiMeshInstance3D and String(node.name).begins_with("Bottles")):
+				out.append(node)
+				break
+	return out
 
 
 func _budget() -> Callable:
