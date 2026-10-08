@@ -4,7 +4,7 @@ extends Control
 # 角标、中央花色与冠饰全部来自 PokerFaceArt 的多边形。多边形本身不抗锯齿,靠视口的 2D MSAA。
 
 
-const CORNER_RADIUS := 18          # 与 CardFaces 的圆角同比例
+const CORNER_RADIUS := 27          # 与 CardFaces 的圆角同比例(38/360 ≈ 27/256)
 const PAPER_INSET := 3.0
 const FRAME_INSET := 5.0           # 金边贴着纸边走,给超大角标让出地方(角标离金边还有 5 像素)
 const FRAME_WIDTH := 2

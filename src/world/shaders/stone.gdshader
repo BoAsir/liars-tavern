@@ -2,11 +2,14 @@
 // 双尺度污渍、颗粒、压条上方的手印带、顶部烟熏、壁灯上方的熏痕、露砖斑块与细裂缝。
 // 噪声取自 SurfaceNoise 烘焙的可平铺贴图;凹凸只取解析形状。COLOR.rgb(sRGB)乘到底色上(MeshForge 网格的炉膛熏黑)。
 shader_type spatial;
-render_mode diffuse_burley;
 
 #include "res://src/world/shaders/noise.gdshaderinc"
 #include "res://src/world/shaders/surface.gdshaderinc"
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_NO_RIM
+#define TOON_SHADOW_TINT vec3(0.86, 0.82, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 color_a : source_color = vec3(0.32, 0.28, 0.24);
 uniform vec3 color_b : source_color = vec3(0.20, 0.17, 0.15);
@@ -52,20 +55,23 @@ void fragment() {
 		vec2 q = vec2(p.x / cell.x + mod(row, 2.0) * 0.5, p.y / cell.y);
 		vec2 id = floor(q);
 		vec2 f = fract(q);
-		vec2 jitter = (vec2(n_hi(p * 7.0), n_hi(p * 7.0 + 3.0)) - 0.5) * 0.06;
+		vec2 jitter = (vec2(n_hi(p * 4.0), n_hi(p * 4.0 + 3.0)) - 0.5) * 0.03;
 		vec2 e = min(f + jitter, 1.0 - f - jitter);
 		float edge = min(e.x * cell.x, e.y * cell.y);
-		mortar = 1.0 - smoothstep(0.004, 0.012, edge);
-		col *= 0.75 + 0.5 * hash12(id + 5.0 + row * 0.37);
-		col *= 0.9 + 0.2 * n_lo(p * 6.0 + id);
-		// 灰缝凹 6 mm;灰缝窄到一两个像素时凹凸淡出(导数凹凸在细线上会出虚线)
+		// 卡通石块:灰缝粗一点、石块之间色差小,边缘压暗一圈 + 圆鼓的凹凸(像一块块软软的枕头)
+		mortar = 1.0 - smoothstep(0.007, 0.016, edge);
+		float pillow = smoothstep(0.0, 0.05, edge);
+		col *= 0.88 + 0.24 * hash12(id + 5.0 + row * 0.37);
+		col *= 0.95 + 0.1 * n_lo(p * 2.0 + id);
+		col *= mix(0.8, 1.0, pillow);
+		// 灰缝凹 6 mm、石块边缘圆鼓;窄到一两个像素时凹凸淡出(导数凹凸在细线上会出虚线)
 		float fwp = max(fwidth(p.x), fwidth(p.y));
-		height = -0.006 * mortar * (1.0 - smoothstep(0.002, 0.006, fwp));
+		height = (-0.006 * mortar - 0.008 * (1.0 - pillow)) * (1.0 - smoothstep(0.002, 0.006, fwp));
 	} else {
 		float y = world_pos.y;
 		// 手印带:压条上方 0.35 m 暗一些
 		float hands = (1.0 - smoothstep(0.0, 0.35, y - rail_y)) * step(rail_y, y);
-		col *= 1.0 - 0.2 * hands * (0.5 + n_lo(p * 4.0 + 3.0));
+		col *= 1.0 - 0.06 * hands * (0.5 + n_lo(p * 4.0 + 3.0));
 		// 顶部烟熏:离天花板 1.3 m 内
 		float topsoot = top_soot * smoothstep(ceiling_y - 1.3, ceiling_y, y) * (0.6 + 0.6 * stain2);
 		col *= 1.0 - clamp(topsoot, 0.0, 0.85);
@@ -76,7 +82,7 @@ void fragment() {
 			float side = length(vec2(dot(d.xz, vec2(world_normal.z, -world_normal.x)), 0.0));
 			float r = mix(0.10, 0.32, up);
 			float h = (1.0 - smoothstep(r * 0.4, r, side)) * step(-0.05, d.y) * (1.0 - smoothstep(0.35, 0.8, d.y));
-			col *= 1.0 - 0.45 * h * (0.7 + 0.3 * stain);
+			col *= 1.0 - 0.18 * h * (0.7 + 0.3 * stain);
 		}
 		// 露砖:压条以上 0.35 m 到天花板以下 0.6 m 的带里,用减法收边(带外不出)
 		if (brick_amount > 0.0) {
@@ -95,7 +101,7 @@ void fragment() {
 			vec2 bf = fract(bq);
 			vec2 be = min(bf, 1.0 - bf) * vec2(0.22, 0.075);
 			float bmortar = 1.0 - smoothstep(0.003, 0.008, min(be.x, be.y));
-			vec3 brick = brick_color * (0.7 + 0.45 * hash12(bid + 3.0)) * (0.85 + 0.3 * speck);
+			vec3 brick = brick_color * (0.85 + 0.25 * hash12(bid + 3.0)) * (0.95 + 0.1 * speck);
 			brick = mix(brick, mortar_color * 1.4, bmortar);
 			col = mix(col, brick, open);
 			col *= 1.0 + lip * 0.12;
@@ -112,10 +118,10 @@ void fragment() {
 		}
 	}
 	col *= vp_srgb_to_linear(COLOR.rgb);
-	col *= 0.85 + speck * 0.3;
+	col *= 0.96 + speck * 0.08;   // 卡通降噪:颗粒只留一点
 	col = mix(col, mortar_color, mortar);
 	float soot_mask = soot * (1.0 - smoothstep(0.0, soot_height, world_pos.y)) * (0.6 + 0.4 * stain);
-	col = mix(col, vec3(0.02), clamp(soot_mask, 0.0, 1.0));
+	col = mix(col, vec3(0.07, 0.045, 0.035), clamp(soot_mask, 0.0, 1.0));   // 熏黑也带暖棕色相
 	ALBEDO = col;
 	ROUGHNESS = 0.9 - speck * 0.1;
 	SPECULAR = 0.25;

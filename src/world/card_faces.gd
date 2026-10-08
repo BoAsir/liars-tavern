@@ -8,24 +8,27 @@ class_name CardFaces
 const SIZE := Vector2i(360, 520)
 const FOIL_SIZE := Vector2i(180, 260)
 const BACK := -1
-const CORNER_RADIUS := 26
+const CORNER_RADIUS := 38   # 动森式:圆角加大(26 → 38,Card3D.CORNER 同比例)
 const FONT_WEIGHT_BOLD := 700
 const LAYERS := [BACK, Card.QUEEN, Card.KING, Card.ACE, Card.JOKER]   # 数组纹理的层序:0 = 牌背
 const FALLBACK_SIZE := 8
 
+# 明快配色(动森式):柔红、天蓝、薄荷绿、淡紫,在奶油纸上仍然一眼分得清
 const ACCENTS := {
-	Card.QUEEN: Color(0.62, 0.11, 0.13),
-	Card.KING: Color(0.12, 0.2, 0.44),
-	Card.ACE: Color(0.08, 0.22, 0.14),
-	Card.JOKER: Color(0.42, 0.13, 0.5),
+	Card.QUEEN: Color(0.80, 0.25, 0.30),
+	Card.KING: Color(0.22, 0.42, 0.78),
+	Card.ACE: Color(0.12, 0.54, 0.42),
+	Card.JOKER: Color(0.55, 0.30, 0.72),
 }
-const PAPER := Color(0.94, 0.9, 0.8)
-const PAPER_EDGE := Color(0.8, 0.72, 0.56)
-const CREAM := Color(0.9, 0.84, 0.68)        # 奶油外边(牌背在绿毡上要靠它和桌面分开)
-const CUT_LINE := Color(0.3, 0.2, 0.12)      # 外沿 1 px 深色切线
-const INK := Color(0.16, 0.11, 0.08)
-const GOLD := Color(0.8, 0.6, 0.26)
-const BACK_RED := Color(0.34, 0.05, 0.06)
+const PAPER := Color(0.98, 0.95, 0.86)
+const PAPER_EDGE := Color(0.88, 0.78, 0.6)
+const CREAM := Color(0.96, 0.9, 0.74)        # 奶油外边(牌背在毡面上要靠它和桌面分开)
+const CUT_LINE := Color(0.5, 0.36, 0.24)     # 外沿 1 px 切线:暖棕,不是黑
+const INK := Color(0.28, 0.2, 0.16)
+const GOLD := Color(0.92, 0.72, 0.34)        # 奶黄烫金
+const BACK_RED := Color(0.76, 0.3, 0.32)     # 柔红牌背
+const BACK_BADGE := Color(0.5, 0.15, 0.18)   # 牌背中心徽章底色与弹膛孔(深一档的红,不是近黑)
+const BACK_HOLE := Color(0.36, 0.1, 0.12)
 
 static var _textures := {}
 static var _face_array: Texture2DArray = null
@@ -345,7 +348,7 @@ class CardPainter:
 		_rounded(_card_rect(12), CardFaces.BACK_RED, CardFaces.CORNER_RADIUS - 12)
 		var inner := _card_rect(26)
 		var spacing := 22.0
-		var line_color := Color(CardFaces.GOLD, 0.22)
+		var line_color := Color(CardFaces.GOLD, 0.3)
 		var span := inner.size.x + inner.size.y
 		var t := -span
 		while t < span:
@@ -359,12 +362,12 @@ class CardPainter:
 			_scroll(corner)
 		# 中心转轮徽章:孔数 = 膛数,第一个孔在 12 点
 		var center := size / 2.0
-		draw_circle(center, 86.0, _ink(Color(0.12, 0.02, 0.03)))
+		draw_circle(center, 86.0, _ink(CardFaces.BACK_BADGE))
 		draw_arc(center, 86.0, 0.0, TAU, 96, _ink(CardFaces.GOLD), 4.0, true)
 		draw_arc(center, 74.0, 0.0, TAU, 96, _ink(Color(CardFaces.GOLD, 0.5)), 1.5, true)
 		for p in CardFaces.chamber_points(center, 44.0):
 			draw_circle(p, 15.0, _ink(CardFaces.GOLD))
-			draw_circle(p, 10.0, _ink(Color(0.08, 0.01, 0.02)))
+			draw_circle(p, 10.0, _ink(CardFaces.BACK_HOLE))
 		draw_circle(center, 9.0, _ink(CardFaces.GOLD))
 
 	func _scroll(corner: int) -> void:

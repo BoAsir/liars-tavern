@@ -7,10 +7,14 @@
 // 4 布料:色调 × 织纹,边缘一点绒光
 // 5 余烬:炭黑底,细胞边线上滚动的橙红辉光
 shader_type spatial;
-render_mode diffuse_burley, cull_disabled;
+render_mode cull_disabled;
 
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
 #include "res://src/world/shaders/surface.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_RIM 0.12
+#define TOON_SHADOW_TINT vec3(0.86, 0.82, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform sampler2D atlas : source_color, filter_linear_mipmap_anisotropic;
 uniform vec4 rug_sizes[2];
@@ -31,11 +35,11 @@ float luma(vec3 c) {
 }
 
 // —— 纳瓦霍地毯 ——
-// 甘纳多配色(sRGB,用前转线性)
-const vec3 RUG_RED = vec3(0.29, 0.08, 0.055);
-const vec3 RUG_CHAR = vec3(0.07, 0.06, 0.055);
-const vec3 RUG_CREAM = vec3(0.56, 0.49, 0.37);
-const vec3 RUG_TAUPE = vec3(0.30, 0.25, 0.20);
+// 粉彩甘纳多配色(sRGB,用前转线性;动森式:珊瑚红、深靛、奶油、青绿,最暗的也带色相)
+const vec3 RUG_RED = vec3(0.80, 0.40, 0.34);
+const vec3 RUG_CHAR = vec3(0.26, 0.26, 0.42);
+const vec3 RUG_CREAM = vec3(0.95, 0.88, 0.72);
+const vec3 RUG_TAUPE = vec3(0.40, 0.68, 0.64);
 
 vec3 rug_color(vec2 uv, vec2 size, float fringe) {
 	// uv:地毯局部米制坐标,原点在左下角(x 宽,y 长,不含流苏)
@@ -61,7 +65,7 @@ vec3 rug_color(vec2 uv, vec2 size, float fringe) {
 	} else {
 		// 红底上隔 0.36 m 一道暗色细纹,打散大块平涂
 		float band = abs(fract((q.y - 0.18) / 0.36) - 0.5) * 0.36;
-		col = band < 0.012 ? RUG_RED * 0.62 : RUG_RED;
+		col = band < 0.012 ? RUG_RED * 0.82 : RUG_RED;
 		// 中间沿长轴排 3 个阶梯菱形
 		vec2 c = size * 0.5;
 		float span = (size.y - 0.36) / 3.0;
@@ -114,17 +118,18 @@ void fragment() {
 		float edge = min(d.x, d.y);
 		float smoke = n_lo(UV * 3.0 + 11.0) * 0.7 + n_lo(UV * 9.0) * 0.3;
 		float vignette = smoothstep(0.0, 0.45, edge);
-		albedo = vec3(0.02, 0.022, 0.025);
-		metal = 0.85;
-		rough = 0.12 + 0.25 * smoke + (1.0 - vignette) * 0.2;
+		// 卡通:深青玻璃色的镜面(不是近黑的金属),缎面
+		albedo = vec3(0.07, 0.12, 0.13);
+		metal = 0.4;
+		rough = 0.3 + 0.2 * smoke + (1.0 - vignette) * 0.15;
 		float gold = 1.0 - smoothstep(0.0075, 0.0075 + max(max(fwidth(UV.x), fwidth(UV.y)), 0.001), abs(edge - 0.04 - 0.0075));
-		albedo = mix(albedo * (0.6 + 0.4 * vignette), vec3(0.62, 0.45, 0.2), gold);
-		rough = mix(rough, 0.3, gold);
-		metal = mix(metal, 1.0, gold);
+		albedo = mix(albedo * (0.75 + 0.25 * vignette), vec3(0.62, 0.45, 0.2), gold);
+		rough = mix(rough, 0.45, gold);
+		metal = mix(metal, 0.65, gold);
 		float warm = (1.0 - smoothstep(0.0, mirror_size.y, UV.y)) * vignette * (0.6 + 0.4 * smoke);
 		// 假反光:几道斜向的柔和亮带,读得出是镜面
 		float streak = smoothstep(0.35, 0.0, abs(fract((UV.x + UV.y * 0.7) / 1.3) - 0.5)) * 0.5 + 0.5;
-		emission = vec3(0.10, 0.055, 0.025) * warm * 0.55 * streak * (1.0 - gold);
+		emission = vec3(0.10, 0.07, 0.04) * warm * 0.7 * streak * (1.0 - gold);
 	} else if (mode == 3) {
 		int id = int(param + 0.5);
 		vec4 rs = rug_sizes[id];
@@ -141,13 +146,13 @@ void fragment() {
 		} else {
 			albedo = rug_color(uv, size, fringe);
 		}
-		albedo *= 0.88 + 0.24 * weave;
-		albedo = vp_srgb_to_linear(clamp(albedo, vec3(0.06), vec3(0.62)));
+		albedo *= 0.95 + 0.1 * weave;   // 卡通降噪:织纹只留一点
+		albedo = vp_srgb_to_linear(clamp(albedo, vec3(0.06), vec3(0.85)));
 		rough = 0.95;
 		spec = 0.3;
 	} else if (mode == 4) {
 		float weave = n_hi(vec2(world_pos.x + world_pos.z, world_pos.y) * 60.0);
-		albedo = tint * ao * (0.85 + 0.3 * weave);
+		albedo = tint * ao * (0.94 + 0.12 * weave);
 		rough = 0.9;
 		float sheen = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0) * 0.35;
 		albedo += tint * sheen;

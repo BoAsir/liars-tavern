@@ -60,8 +60,8 @@ static func wall_box(f: MeshForge, wall: String, u0: float, u1: float, y0: float
 
 
 static func wall_extrude(f: MeshForge, wall: String, u0: float, u1: float, profile: Array) -> void:
-	# 沿墙挤出线脚:profile 在墙坐标 (z 离墙, y 离地) 里
-	f.extrude_x(PackedVector2Array(profile), absf(u1 - u0), wall_frame(wall, (u0 + u1) / 2.0))
+	# 沿墙挤出线脚:profile 在墙坐标 (z 离墙, y 离地) 里;弧线部分平滑着色(卡通的圆润线脚)
+	RoomKit.extrude_smooth(f, PackedVector2Array(profile), absf(u1 - u0), wall_frame(wall, (u0 + u1) / 2.0))
 
 
 static func _wainscot_recipe(wall: String, u_min: float, u_max: float, top := RoomLayout.WAINSCOT_TOP) -> Callable:
@@ -142,8 +142,13 @@ static func chair_rail_profile() -> Array:
 	for k in range(1, 6):
 		var a := -PI / 2.0 + k * (PI / 2.0) / 5.0
 		pts.append(Vector2(0.015, 1.095) + Vector2(cos(a), sin(a)) * 0.02)
-	pts.append_array([Vector2(RAIL_DEPTH, 1.10), Vector2(RAIL_DEPTH, 1.118), Vector2(RAIL_DEPTH - 0.01, RoomLayout.RAIL_TOP),
-		Vector2(0.0, RoomLayout.RAIL_TOP)])
+	# 盖板前缘:半径 1.5 cm 的圆鼻(卡通的圆润压条)
+	pts.append(Vector2(RAIL_DEPTH, 1.10))
+	var nose := Vector2(RAIL_DEPTH - 0.015, RoomLayout.RAIL_TOP - 0.015)
+	for k in range(0, 5):
+		var a := PI / 2.0 * k / 4.0
+		pts.append(nose + Vector2(cos(a), sin(a)) * 0.015)
+	pts.append(Vector2(0.0, RoomLayout.RAIL_TOP))
 	return pts
 
 
@@ -233,7 +238,7 @@ static func _timber_recipe(f: MeshForge) -> void:
 	var beam_y := Tavern.ROOM_HEIGHT - RoomLayout.BEAM_SIZE.y / 2.0
 	for i in RoomLayout.BEAM_Z.size():
 		f.seed = 10.0 + i
-		f.extrude_x(chamfer_rect(RoomLayout.BEAM_SIZE.x, RoomLayout.BEAM_SIZE.y, 0.015), span,
+		RoomKit.extrude_smooth(f, RoomKit.round_rect(RoomLayout.BEAM_SIZE.x, RoomLayout.BEAM_SIZE.y, 0.05), span,
 			Transform3D(Basis.IDENTITY, Vector3(0, beam_y, RoomLayout.BEAM_Z[i])))
 	# 角柱:竖直挤出(局部 X 转到世界 Y,木纹顺着柱长)
 	var up := Basis(Vector3(0, 1, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1))
@@ -242,7 +247,7 @@ static func _timber_recipe(f: MeshForge) -> void:
 	for sx in [-1, 1]:
 		for sz in [-1, 1]:
 			f.seed = 20.0 + k
-			f.extrude_x(chamfer_rect(RoomLayout.CORNER_POST, RoomLayout.CORNER_POST, 0.012), Tavern.ROOM_HEIGHT,
+			RoomKit.extrude_smooth(f, RoomKit.round_rect(RoomLayout.CORNER_POST, RoomLayout.CORNER_POST, 0.045), Tavern.ROOM_HEIGHT,
 				Transform3D(up, Vector3(sx * post_c, Tavern.ROOM_HEIGHT / 2.0, sz * post_c)))
 			k += 1
 	# 梁端:落地墙柱 + 斜撑,或托架
@@ -256,7 +261,7 @@ static func _timber_recipe(f: MeshForge) -> void:
 		if RoomLayout.beam_support(wall, z) == RoomLayout.POST:
 			var depth := RoomLayout.WALL_POST.y
 			var px := side * (INNER - depth / 2.0)
-			f.extrude_x(chamfer_rect(RoomLayout.WALL_POST.x, depth, 0.01), post_h,
+			RoomKit.extrude_smooth(f, RoomKit.round_rect(RoomLayout.WALL_POST.x, depth, 0.035), post_h,
 				Transform3D(up, Vector3(px, post_h / 2.0, z)))
 			# 斜撑:在梁的竖直面内从柱上 y 2.70 斜到梁底,伸到 |x| = 3.86
 			var a := Vector3(side * (INNER - depth), 2.70, z)
@@ -264,7 +269,7 @@ static func _timber_recipe(f: MeshForge) -> void:
 			var d := (b - a)
 			var dir := d.normalized()
 			var basis := Basis(dir, Vector3(0, 0, 1).cross(dir).normalized(), Vector3(0, 0, 1))
-			f.extrude_x(chamfer_rect(0.09, 0.09, 0.008), d.length() + 0.08, Transform3D(basis, (a + b) / 2.0))
+			RoomKit.extrude_smooth(f, RoomKit.round_rect(0.1, 0.1, 0.035), d.length() + 0.08, Transform3D(basis, (a + b) / 2.0))
 		else:
 			var profile := [Vector2(0.0, 2.86), Vector2(0.05, 2.86)]
 			var c := Vector2(0.30, 2.86)
@@ -272,13 +277,13 @@ static func _timber_recipe(f: MeshForge) -> void:
 				var ang := PI - j * (PI / 2.0) / 8.0
 				profile.append(c + Vector2(cos(ang), sin(ang)) * Vector2(0.25, 0.24))
 			profile.append_array([Vector2(0.30, post_h), Vector2(0.0, post_h)])
-			f.extrude_x(PackedVector2Array(profile), 0.16, wall_frame(wall, z))
+			RoomKit.extrude_smooth(f, PackedVector2Array(profile), 0.16, wall_frame(wall, z))
 	f.part_space = false
 	# 梁端铁箍(顶点 PBR)
 	f.surface(&"iron")
-	f.paint(Color(0.10, 0.10, 0.11), 0.5, 0.75)
+	RoomKit.paint(f, RoomKit.IRON)
 	for z in RoomLayout.BEAM_Z:
 		for sx in [-1, 1]:
 			var x: float = sx * (INNER - 0.38)
-			f.box(Vector3(0.05, RoomLayout.BEAM_SIZE.y + 0.012, RoomLayout.BEAM_SIZE.x + 0.012),
+			RoomKit.extrude_smooth(f, RoomKit.round_rect(RoomLayout.BEAM_SIZE.x + 0.016, RoomLayout.BEAM_SIZE.y + 0.016, 0.058), 0.05,
 				MeshForge.xf(Vector3(x, beam_y, z)))
