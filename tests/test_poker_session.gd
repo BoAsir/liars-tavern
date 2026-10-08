@@ -62,7 +62,21 @@ func test_start_seats_everyone_and_deals_the_first_hand():
 	assert_eq(session.seats_with_patrons(), [1, 2, 3])
 	assert_eq(session.name_of(3), "丙")
 	assert_eq(session.public_view(0.0)["mode"], GameMode.HOLDEM)
-	assert_eq(PokerSession.new(GameMode.SHORT_DECK).public_view(0.0).get("mode"), GameMode.SHORT_DECK)
+	var short_deck := PokerSession.new(GameMode.SHORT_DECK)
+	short_deck.start([1, 2, 3], NAMES, RandomNumberGenerator.new())
+	assert_eq(short_deck.public_view(0.0)["mode"], GameMode.SHORT_DECK)
+
+
+func test_naming_events_leaves_the_engine_dictionaries_untouched():
+	# 引擎的事件字典不就地改:补了名字的是新字典(编码规范:不变性)
+	_start()
+	var joined := {"type": "player_joined", "pid": 4}
+	var over := {"type": "session_over", "results": [{"pid": 1, "net": 0}]}
+	var named: Array = session._named([joined, over])
+	assert_eq(named[0], {"type": "player_joined", "pid": 4, "name": "4"})
+	assert_eq(named[1]["results"][0], {"pid": 1, "net": 0, "name": "甲"})
+	assert_false(joined.has("name"), "原事件没被改")
+	assert_false(over["results"][0].has("name"), "原结算行没被改")
 
 
 func test_bet_actions_consume_the_turn_and_seat_actions_do_not():
