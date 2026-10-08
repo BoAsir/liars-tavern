@@ -94,7 +94,7 @@ static func _jaws(f: MeshForge, pal: Dictionary) -> void:
 	var upper := _colored(UPPER, pal["muzzle"])
 	upper.append([NOSTRILS[0], NOSTRILS[1], pal["muzzle"], "mirror"])
 	PatronBuilder.paint(f, pal, "muzzle", 0.6, PatronBuilder.SCALE)
-	f.blob(Vector3(0, 0.08, -0.2), upper, 28, 14, 0.02)
+	f.blob(Vector3(0, 0.08, -0.2), upper, 24, 12, 0.02)
 	var lower := _colored(LOWER, pal["jaw"])
 	lower.append([Vector3(0, 0.024, -0.2), Vector3(0.055, 0.016, 0.15), pal["belly"]])
 	PatronBuilder.paint(f, pal, "jaw", 0.6, PatronBuilder.SCALE)
