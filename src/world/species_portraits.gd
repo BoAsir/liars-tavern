@@ -1,14 +1,18 @@
 class_name SpeciesPortraits
 # 物种头像(主菜单与等待厅的 SpeciesChip / SpeciesPicker 用):texture(i) 取第 i 个物种的头像。
-# 目前只有回退:物种主色的圆片(SpeciesChip 在上面叠物种首字),纯 Image 运算,无头也能跑。
-# 3D 头像烘焙(子项目② §3.1:SubViewport 里摆 8 个 Patron 头像、正交相机、读回成图集)由建模会话接入:
-# 在 build 里烘好后把 _textures 换成图集切片、置 _baked = true,接口不变;SpeciesChip 轮询 is_built() 换图。
+# 头像是 3D 烘焙的:主菜单出来后在一个独立的 SubViewport 里摆 8 位酒客,正交相机拍一排头,读回后
+# 每格叠在物种主色的圆片上,切成 8 张图。烘好之前(以及无头运行时)用回退圆片(SpeciesChip 在上面叠物种首字);
+# SpeciesChip 轮询 is_built(),烘好后换图。
 
 
 const SIZE := 72                 # 回退圆片的边长(像素);头像按控件大小缩放
 const RIM := 3.0                 # 圆片描边宽度
 const RIM_DARKEN := 0.45
 const UNASSIGNED_COLOR := Color(0.36, 0.33, 0.3)   # 还没有形象(挑选中…)的灰圆片
+const CELL := 192                # 烘焙时每个头像的像素
+const SPACING := 0.62            # 烘焙台上酒客之间的间距(米):等于每格宽度(正交相机按高度定宽,8:1 的画面每格 VIEW_SIZE 宽)
+const HEAD_HEIGHT := 1.34        # 坐姿下头心离地约 1.27 m,镜头对准这里
+const VIEW_SIZE := 0.62          # 正交相机竖直方向拍多少米(一个头加帽子)
 # 各物种主色(sRGB,取自子项目② §2 造型表的皮毛色),只用于回退圆片;下标与 Species.IDS 一致
 const FALLBACK_COLORS := [
 	Color(0.80, 0.40, 0.14),   # 狐狸
@@ -26,15 +30,85 @@ static var _fallbacks := {}        # 物种下标(含 UNASSIGNED)-> 回退圆片
 static var _baked := false         # 是真头像(3D 烘焙)而不是回退圆片
 
 
-static func build(_host: Node) -> void:
-	# 菜单出来之后调用一次,不 await 也行。现在直接用回退圆片(无头安全);
-	# 接入 3D 烘焙时:非无头且物种网格已预建 → SubViewport 渲一帧、读回、切成 AtlasTexture
-	if is_built():
+static var _building := false
+
+
+static func build(host: Node) -> void:
+	# 菜单出来之后调用一次,不必 await(协程:烘焙要等几帧)。无头运行没有渲染,直接用回退圆片
+	if is_built() or _building:
 		return
-	_textures = []
+	if DisplayServer.get_name() == "headless":
+		_textures = []
+		for i in Species.count():
+			_textures.append(fallback_texture(i))
+		_baked = false
+		return
+	_building = true
+	var stage := _make_stage()
+	host.add_child(stage)
+	var viewport: SubViewport = stage.get_child(0)
+	for i in 4:
+		await host.get_tree().process_frame   # 酒客摆好姿势、看向镜头
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var strip := viewport.get_texture().get_image()
+	stage.queue_free()
+	_building = false
+	if not is_instance_valid(host):
+		return
+	strip.convert(Image.FORMAT_RGBA8)
+	var textures := []
 	for i in Species.count():
-		_textures.append(fallback_texture(i))
-	_baked = false
+		var disc := fallback_texture(i).get_image()
+		disc.resize(CELL, CELL, Image.INTERPOLATE_BILINEAR)
+		disc.blend_rect(strip, Rect2i(i * CELL, 0, CELL, CELL), Vector2i.ZERO)
+		textures.append(ImageTexture.create_from_image(disc))
+	_textures = textures
+	_baked = true
+
+
+static func _make_stage() -> Node:
+	# 烘焙台:独立世界、透明背景,8 位酒客一字排开面朝镜头;主光 + 补光 + 轮廓光,色调与酒馆一致
+	var stage := Node.new()
+	stage.name = "PortraitStage"
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(CELL * Species.count(), CELL)
+	viewport.own_world_3d = true
+	viewport.transparent_bg = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	stage.add_child(viewport)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CLEAR_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.5, 0.45, 0.42)
+	env.ambient_light_energy = 0.6
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.32
+	env.tonemap_white = 6.0
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	viewport.add_child(world_env)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = VIEW_SIZE
+	camera.keep_aspect = Camera3D.KEEP_HEIGHT
+	camera.position = Vector3(0, HEAD_HEIGHT, 3.0)
+	viewport.add_child(camera)
+	for spec in [[Vector3(-35, -25, 0), Color(1.0, 0.86, 0.7), 1.6], [Vector3(-10, 30, 0), Color(0.75, 0.8, 1.0), 0.5],
+			[Vector3(-20, 180, 0), Color(1.0, 0.8, 0.6), 1.2]]:
+		var light := DirectionalLight3D.new()
+		light.rotation_degrees = spec[0]
+		light.light_color = spec[1]
+		light.light_energy = spec[2]
+		viewport.add_child(light)
+	for i in Species.count():
+		var patron := Patron.new(i)
+		patron.position = Vector3((i - (Species.count() - 1) * 0.5) * SPACING, 0, 0)
+		patron.rotation.y = PI
+		viewport.add_child(patron)
+		patron.look_at_point(camera.position + Vector3(patron.position.x, 0, 0))
+	return stage
 
 
 static func is_built() -> bool:
@@ -81,3 +155,4 @@ static func clear() -> void:
 	_textures = []
 	_fallbacks = {}
 	_baked = false
+	_building = false
