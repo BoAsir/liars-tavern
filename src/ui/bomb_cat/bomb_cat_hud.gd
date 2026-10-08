@@ -145,19 +145,21 @@ static func window_text(window: Dictionary, names: Callable) -> String:
 
 func _build_info() -> void:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL_SOFT, Color(UiTheme.BRASS, 0.5), 1, 12))
+	var style := UiTheme.panel_box(UiTheme.PANEL_SOFT, Color(UiTheme.BRASS, 0.5), 1, 12)
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.position = Vector2(24, 20)
+	panel.position = Vector2(20, 16)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
+	box.add_theme_constant_override("separation", 2)
 	panel.add_child(box)
-	box.add_child(UiTheme.label("炸弹猫", 15, UiTheme.MUTED))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	box.add_child(row)
-	_deck_label = UiTheme.label("牌堆 —", 26, UiTheme.BRASS_BRIGHT, UiTheme.display_font())
+	_deck_label = UiTheme.label("牌堆 —", 24, UiTheme.BRASS_BRIGHT, UiTheme.display_font())
 	row.add_child(_deck_label)
 	var bomb_box := VBoxContainer.new()
 	bomb_box.add_theme_constant_override("separation", 0)
@@ -169,9 +171,9 @@ func _build_info() -> void:
 	_bombs.custom_minimum_size = Vector2(BOMB_ICON * 5.0, BOMB_ICON + 2.0)
 	_bombs.draw.connect(_draw_bombs)
 	bomb_box.add_child(_bombs)
-	_turn_info = UiTheme.label("", 17, UiTheme.PARCHMENT, UiTheme.display_font())
+	_turn_info = UiTheme.label("", 16, UiTheme.PARCHMENT, UiTheme.display_font())
 	box.add_child(_turn_info)
-	_my_line = UiTheme.label("", 14, UiTheme.MUTED)
+	_my_line = UiTheme.label("", 13, UiTheme.MUTED)
 	box.add_child(_my_line)
 
 

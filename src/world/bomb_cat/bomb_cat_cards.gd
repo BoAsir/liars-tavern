@@ -114,11 +114,12 @@ func peek_nodes() -> Array:
 
 # —— 对账 ——
 
-func sync(counts: Dictionary, my_hand: Array, p_deck_count: int, p_discard_count: int, top_ids: Array) -> void:
+func sync(counts: Dictionary, my_hand: Array, p_deck_count: int, p_discard_count: int, top_ids: Array, keep_bomb := false) -> void:
 	# 按视图瞬时摆好:counts = pid → 手牌张数(出局者 0;自己的按 my_hand),牌堆 / 弃牌堆张数,弃牌堆顶上的几张(最上面在最后)。
-	# 牌型对得上的牌留着,对不上的换掉;先停下所有还在走的动画
+	# 牌型对得上的牌留着,对不上的换掉;先停下所有还在走的动画。keep_bomb:正在等人塞回炸弹,立着的炸弹牌留着
 	_epoch += 1
-	_free_bomb()
+	if not keep_bomb:
+		_free_bomb()
 	_set_deck(p_deck_count)
 	discard_count = maxi(p_discard_count, 0)
 	_sync_discard(top_ids)
@@ -439,6 +440,7 @@ func _present_my_fan() -> void:
 			Vector3.UP * BombCatLayout.BIG_TABLE_FAN_RAISE))
 	else:
 		me.present_hand_to(world.third_person_view(my_pid).origin)
+		me.hold_fan(me.fan.transform.translated(Vector3.UP * BombCatLayout.SMALL_TABLE_FAN_RAISE))
 	me.hold_fan(me.fan.transform.scaled_local(Vector3.ONE * BombCatLayout.MY_FAN_SCALE))
 
 

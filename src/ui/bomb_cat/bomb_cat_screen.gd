@@ -221,7 +221,8 @@ func sync_table() -> void:
 	var counts := {}
 	for pid in state.seats:
 		counts[pid] = state.counts.get(pid, 0) if state.is_alive(pid) else 0
-	cards.sync(counts, state.shown_hand, state.deck_count, state.discard_count, state.discard_recent)
+	cards.sync(counts, state.shown_hand, state.deck_count, state.discard_count, state.discard_recent,
+		state.step == BombCatScreenState.STEP_REINSERT)
 	cards.set_selection(_selected, -1)
 	refresh_hud()
 

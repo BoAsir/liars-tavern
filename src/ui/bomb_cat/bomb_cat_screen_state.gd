@@ -163,6 +163,8 @@ func apply_event(ev: Dictionary) -> void:
 				if ev["type"] == "exploded":
 					exploded[pid] = true
 					bombs_left = maxi(bombs_left - 1, 0)
+				if current_pid == pid:
+					current_pid = null   # 轮到谁由紧跟着的 turn_passed 给出
 		"turn_passed":
 			current_pid = ev.get("pid") if ev.get("pid") is int else null
 			turns = _int(ev, "turns")

@@ -101,9 +101,9 @@ static func fuse_sparks(parent: Node3D, local_pos: Vector3) -> GPUParticles3D:
 	pm.gravity = Vector3(0, -1.2, 0)
 	pm.scale_min = 0.5
 	pm.scale_max = 1.5
-	pm.color_ramp = _ramp([Color(1.0, 0.92, 0.6), Color(1.0, 0.55, 0.1), Color(0.9, 0.2, 0.0, 0.0)])
+	pm.color_ramp = _ramp([Color(1.0, 0.75, 0.3), Color(1.0, 0.45, 0.08), Color(0.8, 0.15, 0.0, 0.0)])
 	particles.process_material = pm
-	particles.draw_pass_1 = _additive_quad(0.016, 7.0)
+	particles.draw_pass_1 = _additive_quad(0.016, 4.0)
 	particles.local_coords = false
 	particles.visibility_aabb = AABB(Vector3(-0.6, -0.6, -0.6), Vector3(1.2, 1.2, 1.2))
 	parent.add_child(particles)

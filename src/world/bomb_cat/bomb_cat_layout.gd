@@ -25,6 +25,7 @@ const MY_FAN_SCALE := 0.82
 const FP_FAN_CAM := Vector3(0.3, -0.07, -0.6)
 const FP_FAN_SCALE := 0.72
 const BIG_TABLE_FAN_RAISE := 0.1             # 大桌越肩:德州的举牌位置再抬高一点,牌扇露在回合横幅上方
+const SMALL_TABLE_FAN_RAISE := 0.13          # 小桌越肩:骗子酒馆的举牌位置再抬高一点(底部 HUD 比骗子酒馆高)
 # 偷看:三张牌浮在镜头前(镜头坐标)
 const PEEK_DISTANCE := 0.42
 const PEEK_SPACING := 0.1
