@@ -93,3 +93,36 @@ func test_cards_share_one_face_mesh():
 		for inst: MeshInstance3D in card.find_children("*", "MeshInstance3D", true, false):
 			meshes[inst.mesh] = true
 	assert_eq(meshes.size(), 1, "所有牌的正反面共用一份网格")
+
+
+func test_each_patron_is_merged_per_animation_pivot():
+	for patron: Patron in _tavern.find_children("*", "Patron", true, false):
+		var meshes := patron.find_children("*", "MeshInstance3D", true, false).filter(func(m: MeshInstance3D):
+			return m.is_visible_in_tree() and not patron.fan.is_ancestor_of(m) and not _under_revolver(m))
+		assert_lte(meshes.size(), 19, "每名酒客可见网格(含椅子,不含手牌与左轮)")
+		var materials := {}
+		for m: MeshInstance3D in meshes:
+			if m.name == "Chair":
+				continue
+			for s in m.mesh.get_surface_count():
+				var mat := m.get_active_material(s)
+				if mat != null:
+					materials[mat] = true
+		assert_lte(materials.size(), 2, "每名酒客材质(不含椅子):酒客共享材质 + 眼睛高光")
+		for pivot in ["Body", "Body/Neck", "Body/Head", "Body/ArmL", "Body/ArmR", "Body/ArmR/Hand", "Body/Fan"]:
+			assert_not_null(patron.get_node_or_null(pivot), "动画枢轴 %s 还在" % pivot)
+
+
+func _under_revolver(node: Node) -> bool:
+	while node != null:
+		if node is Revolver3D:
+			return true
+		node = node.get_parent()
+	return false
+
+
+func test_chairs_share_one_mesh():
+	var chairs := {}
+	for patron: Patron in _tavern.find_children("*", "Patron", true, false):
+		chairs[patron.get_node("Chair").mesh] = true
+	assert_eq(chairs.size(), 1)
