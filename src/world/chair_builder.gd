@@ -2,6 +2,7 @@ class_name ChairBuilder
 # 酒客的椅子:车削温莎椅(圆润鞍形座面、收腰圆头的车削腿与靠背柱、三根纺锤靠背杆、弧形顶梁、腿间横撑)。
 # 所有酒客与主菜单空椅子共用一份网格(自动实例化),木纹按每根木件自己的方向走。
 # 布局尺寸沿用旧椅子(尾巴走法、测试、出局姿势都依赖它们),公开成常量。
+# 动森式(2026-10-08):腿、柱、纺锤杆、横撑和顶梁都加粗,柱头圆球更大,像胖胖的玩具椅;布局尺寸不变。
 
 const SEAT_Y := Vector2(0.425, 0.475)    # 座面底、座面顶
 const SEAT_HALF_X := 0.24
@@ -9,7 +10,7 @@ const SEAT_Z := Vector2(-0.08, 0.36)
 const FRONT_LEG_Z := -0.04
 const BACK_LEG_Z := 0.32
 const LEG_X := 0.2
-const LEG_RADIUS := 0.022
+const LEG_RADIUS := 0.026
 const POST_Z := 0.34                     # 靠背柱
 const BACK_GAP_TOP := 0.53               # 靠背杆底端:座面与靠背之间留 5.5 cm 的缝(细尾巴从这里穿出)
 const TOP := 1.1
@@ -34,22 +35,22 @@ static func recipe(f: MeshForge) -> void:
 	for x in [-LEG_X, LEG_X]:
 		for z in [FRONT_LEG_Z, BACK_LEG_Z]:
 			f.seed = 0.2 + x + z
-			f.lathe(_turned(SEAT_Y.x + 0.002, 0.016, LEG_RADIUS), 7, PackedInt32Array(), MeshForge.xf(Vector3(x, 0, z)))
+			f.lathe(_turned(SEAT_Y.x + 0.002, 0.02, LEG_RADIUS), 7, PackedInt32Array(), MeshForge.xf(Vector3(x, 0, z)))
 		f.seed = 0.4 + x
-		f.cylinder(0.009, 0.009, BACK_LEG_Z - FRONT_LEG_Z, 8, MeshForge.CAPS_NONE,
+		f.cylinder(0.013, 0.013, BACK_LEG_Z - FRONT_LEG_Z, 8, MeshForge.CAPS_NONE,
 			MeshForge.xf(Vector3(x, 0.16, (FRONT_LEG_Z + BACK_LEG_Z) * 0.5), Vector3(90, 0, 0)))
 	f.seed = 0.5
-	f.cylinder(0.009, 0.009, LEG_X * 2.0, 8, MeshForge.CAPS_NONE, MeshForge.xf(Vector3(0, 0.2, (FRONT_LEG_Z + BACK_LEG_Z) * 0.5), Vector3(0, 0, 90)))
+	f.cylinder(0.013, 0.013, LEG_X * 2.0, 8, MeshForge.CAPS_NONE, MeshForge.xf(Vector3(0, 0.2, (FRONT_LEG_Z + BACK_LEG_Z) * 0.5), Vector3(0, 0, 90)))
 	# 靠背柱(顶端圆头)与三根纺锤杆
 	for x in [-LEG_X, LEG_X]:
 		f.seed = 0.6 + x
-		var post := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.02, 0.0), Vector2(0.016, 0.3),
-			Vector2(0.02, 0.5), Vector2(0.016, 0.56), Vector2(0.0, 0.56)])
+		var post := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.024, 0.0), Vector2(0.02, 0.3),
+			Vector2(0.024, 0.5), Vector2(0.02, 0.55), Vector2(0.0, 0.55)])
 		f.lathe(post, 8, PackedInt32Array(), MeshForge.xf(Vector3(x, SEAT_Y.y - 0.02, POST_Z)))
-		f.sphere(0.028, 6, MeshForge.xf(Vector3(x, SEAT_Y.y + 0.57, POST_Z)))
+		f.sphere(0.034, 6, MeshForge.xf(Vector3(x, SEAT_Y.y + 0.56, POST_Z)))
 	for x in [-0.1, 0.0, 0.1]:
 		f.seed = 0.8 + x
-		var spindle := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.008, 0.0), Vector2(0.013, 0.2), Vector2(0.008, 0.44),
+		var spindle := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.011, 0.0), Vector2(0.017, 0.2), Vector2(0.011, 0.44),
 			Vector2(0.0, 0.44)])
 		f.lathe(spindle, 6, PackedInt32Array(), MeshForge.xf(Vector3(x, BACK_GAP_TOP, POST_Z + 0.005)))
 	# 弧形顶梁:两柱之间往后弯
@@ -60,7 +61,7 @@ static func recipe(f: MeshForge) -> void:
 	for i in 5:
 		var t := i / 4.0
 		rail.append(Vector3(lerpf(-LEG_X - 0.02, LEG_X + 0.02, t), 0.995 + sin(t * PI) * 0.012, POST_Z + 0.004 + sin(t * PI) * 0.03))
-		radii.append(Vector2(0.045, 0.016))
+		radii.append(Vector2(0.05, 0.022))
 	f.loft(rail, radii, 6, Vector2i(1, 1), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3.UP)
 
 
