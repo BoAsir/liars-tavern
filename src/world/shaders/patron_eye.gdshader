@@ -16,10 +16,15 @@ instance uniform vec3 iris_color = vec3(0.45, 0.3, 0.12);   // sRGB,末尾统一
 instance uniform vec3 lid_color = vec3(0.5, 0.3, 0.15);
 instance uniform float pupil_shape = 0.0;          // 0 圆、1 竖缝(猫、鳄鱼)、2 横椭圆(羊驼)
 instance uniform float lashes = 0.0;
+// Q 版搞笑表演(PatronAntics 驱动):
+instance uniform float shock = 0.0;                // 吓到:眼睑全开、瞳孔缩成小黑点(枪口抵头、被喊骗子)
+instance uniform float joy = 0.0;                  // 眯眼笑:眼睛画成 ^ 形弯线(松一口气、得意)
+instance uniform float dizzy = 0.0;                // 晕乎乎:虹膜换成旋转的蚊香圈(中弹出局,和 × 交替)
 
 const vec3 SCLERA = vec3(0.66, 0.65, 0.62);   // 同 PatronParts.EYE_WHITE 档:烛光下不发白
 const vec3 PUPIL = vec3(0.025, 0.022, 0.03);
 const vec3 GREY = vec3(0.42);
+const float LID_REST_SCALE = 0.6;   // Q 版:物种默认眼睑整体少盖一点,眼睛更圆更亮(乌龟仍比别人眼皮厚)
 
 varying vec3 eye;
 
@@ -40,22 +45,36 @@ void fragment() {
 	vec2 q = uv - offset;
 	// 瞳孔形状:竖缝把 x 拉宽,横椭圆把 y 拉宽
 	vec2 pupil_scale = pupil_shape > 1.5 ? vec2(0.7, 1.8) : (pupil_shape > 0.5 ? vec2(3.2, 0.85) : vec2(1.0));
-	float iris = 1.0 - aa_step(0.55, length(q));
-	float pupil = 1.0 - aa_step(0.27, length(q * pupil_scale));
-	float ring = aa_step(0.42, length(q)) * iris;
+	// Q 版大眼:虹膜、瞳孔都放大;吓到时虹膜收小、瞳孔缩成针尖
+	float iris_r = mix(0.6, 0.42, shock);
+	float pupil_r = mix(0.33, 0.1, shock);
+	float iris = 1.0 - aa_step(iris_r, length(q));
+	float pupil = 1.0 - aa_step(pupil_r, length(q * mix(pupil_scale, vec2(1.0), shock)));
+	float ring = aa_step(iris_r * 0.78, length(q)) * iris;
 	vec3 col = SCLERA;
 	vec3 iris_lin = iris_color * (1.0 - 0.35 * ring) * (0.85 + 0.15 * smoothstep(0.55, -0.2, q.y));
-	col = mix(col, iris_lin, iris * (1.0 - dead));
-	col = mix(col, PUPIL, pupil * (1.0 - dead));
-	// 画上去的高光:左上一大一小两个点,跟着瞳孔走
-	float spark = 1.0 - aa_step(0.13, length(q - vec2(-0.2, 0.24)));
-	spark = max(spark, 1.0 - aa_step(0.06, length(q - vec2(0.18, -0.16))));
-	col = mix(col, vec3(0.95), spark * iris * (1.0 - dead));
-	// 出局:两条对角线画 ×
+	float open_eye = (1.0 - dead) * (1.0 - joy);
+	col = mix(col, iris_lin, iris * open_eye);
+	col = mix(col, PUPIL, pupil * open_eye);
+	// 画上去的高光:左上一大一小两个点,跟着瞳孔走(Q 版更大更亮)
+	float spark = 1.0 - aa_step(0.17, length(q - vec2(-0.22, 0.26)));
+	spark = max(spark, 1.0 - aa_step(0.08, length(q - vec2(0.2, -0.18))));
+	col = mix(col, vec3(0.97), spark * iris * open_eye);
+	// 晕乎乎:眼面画一圈旋转的蚊香(阿基米德螺线),出局时和 × 交替出现
+	float r = length(uv);
+	float a = atan(uv.y, uv.x * side) + TIME * 6.0;
+	float spiral = abs(fract(r * 3.2 - a / (2.0 * PI)) - 0.5);
+	col = mix(col, PUPIL, (1.0 - aa_step(0.13, spiral)) * step(r, 0.78) * dizzy);
+	// 出局:两条对角线画 ×(Q 版更粗)
 	float x_mark = min(abs(uv.x - uv.y), abs(uv.x + uv.y)) * 0.7071;
-	col = mix(col, PUPIL, (1.0 - aa_step(0.09, x_mark)) * step(length(uv), 0.75) * dead);
-	// 上眼睑:从上往下盖,lid_tilt 让内外眼角高低不同(side 区分左右,x 朝外为正)
-	float cover = max(lid, lid_rest) + lid_tilt * (uv.x * side) * 0.6;
+	col = mix(col, PUPIL, (1.0 - aa_step(0.11, x_mark)) * step(r, 0.75) * dead * (1.0 - dizzy));
+	// 眯眼笑:整只眼盖上眼皮色,中间一道 ^ 形弯线
+	float arc = abs(uv.y + 0.15 - (1.0 - uv.x * uv.x) * 0.45);
+	col = mix(col, lid_color, joy);
+	col = mix(col, PUPIL, (1.0 - aa_step(0.1, arc)) * step(abs(uv.x), 0.8) * joy);
+	// 上眼睑:从上往下盖,lid_tilt 让内外眼角高低不同(side 区分左右,x 朝外为正);吓到时眼睑全开
+	float rest = lid_rest * LID_REST_SCALE * (1.0 - shock);
+	float cover = (max(lid, rest) + lid_tilt * (uv.x * side) * 0.6) * (1.0 - joy);
 	float lid_edge = 1.0 - 2.0 * clamp(cover, 0.0, 1.0);
 	float covered = aa_step(lid_edge, uv.y);
 	float lash_line = (1.0 - aa_step(0.07, abs(uv.y - lid_edge))) * step(cover, 0.98);
