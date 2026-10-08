@@ -72,6 +72,12 @@ func open(current: int, taken: Dictionary, beside: Rect2, to_right: bool, return
 	_cells[focus].grab_focus()
 
 
+func update_taken(taken: Dictionary) -> void:
+	# 面板开着时名单变了(别人换了形象):只改格子状态,不动焦点与位置
+	for i in _cells.size():
+		_set_cell(i, taken.get(i, ""))
+
+
 func close() -> void:
 	if not visible:
 		return
