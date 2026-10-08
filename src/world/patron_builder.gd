@@ -18,13 +18,19 @@ const KNIT := 8.0
 const SMOOTH := 9.0
 
 const BODY_CENTER := Vector3(0, 0.25, 0)
-const SLEEVE_END := -0.35     # 袖口压住爪腕(Hand 在 -ARM_LENGTH = -0.4)
-const PAW_PITCH := 27.0       # 坐着时手臂俯 ≈27°,张开的爪反向烘焙这个角度,掌面才平贴桌面
-const FIST_CHUBBY := 1.12     # Q 版拳头胖一圈(握把仍包在拳里)
+const SLEEVE_END := -0.4      # 袖口压住手腕(Hand 在 -Patron.ARM_LENGTH = -0.45)
+# 动森式:坐着时肩比桌面只高一点,手臂几乎是平伸着搭到桌上(俯 ≈5°),圆手团反向烘焙这个角度,底面才平贴桌面
+const PAW_PITCH := 5.0
+const MITT := Vector3(0.062, 0.043, 0.066)   # 没有手指的圆手团(张开的手)半径;底面离 Hand 原点 ≈ Patron.PAW_RADIUS × PAW_SCALE.y
+const FIST_RADIUS := 0.058    # 握枪的圆拳(握把包在拳里)
 const BLOB_K := 0.035
-# Q 版大肚子:体型表里的腹部椭球再放大、往前挪一点
-const BELLY_SCALE := Vector3(1.1, 1.05, 1.14)
-const BELLY_SHIFT := Vector3(0, -0.005, -0.018)
+# 圆肚子:体型表里的腹部椭球再放大、往前挪;胸口与肩收窄一点,整个躯干是上小下大的蛋形
+const BELLY_SCALE := Vector3(1.16, 1.12, 1.2)
+const BELLY_SHIFT := Vector3(0, -0.01, -0.022)
+const CHEST_SCALE := Vector3(0.95, 0.95, 0.95)
+# 腿:左右腿中线离身体中线的距离,沿 leg_path 的截面半径(大腿粗、小腿短粗)
+const LEG_X := 0.1
+const LEG_RADII := [Vector2(0.088, 0.086), Vector2(0.084, 0.082), Vector2(0.074, 0.072), Vector2(0.066, 0.064), Vector2(0.062, 0.06)]
 
 # 体型:pelvis / belly / chest 三个椭球 [中心, 半径]
 const BUILDS := {
@@ -78,10 +84,10 @@ static func body_shapes(look: Dictionary, pal: Dictionary) -> Array:
 	var build: Array = BUILDS[body.get("build", "slim")]
 	# Q 版:肚子更圆更挺(往前、往两侧鼓),骨盆略宽;胸口不动(胸前要给对手的牌扇让位)
 	var shapes := [
-		[build[0][0], build[0][1] * Vector3(1.06, 1.0, 1.04), color(pal, body.get("pants", "pants"))],
+		[build[0][0], build[0][1] * Vector3(1.1, 1.0, 1.06), color(pal, body.get("pants", "pants"))],
 		[build[1][0] + BELLY_SHIFT, build[1][1] * BELLY_SCALE, color(pal, body.get("belly", "coat"))],
-		[build[2][0], build[2][1], color(pal, body.get("coat", "coat"))],
-		[Vector3(0.14, 0.47, -0.01), Vector3(0.11, 0.075, 0.1), color(pal, body.get("coat", "coat")), "mirror"],
+		[build[2][0], build[2][1] * CHEST_SCALE, color(pal, body.get("coat", "coat"))],
+		[Vector3(0.13, 0.46, -0.01), Vector3(0.1, 0.075, 0.095), color(pal, body.get("coat", "coat")), "mirror"],
 		[Vector3(0, 0.53, -0.02), Vector3(0.1, 0.05, 0.09), color(pal, body.get("collar", body.get("coat", "coat")))],
 	]
 	if body.has("shirt"):
@@ -99,36 +105,21 @@ static func body_shapes(look: Dictionary, pal: Dictionary) -> Array:
 
 static func body(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
 	start(f, 0.1)
-	f.push(xf(Vector3.ZERO, Vector3.ZERO, Vector3(1.0, PatronParts.BODY_SQUASH, 1.0)))   # Q 版:躯干连衣片一起压扁
+	f.push(body_xform())   # 动森式:躯干连衣片一起压扁、加宽
 	var b: Dictionary = look["body"]
 	var shapes := body_shapes(look, pal)
 	paint(f, pal, b.get("coat", "coat"), 0.85, b.get("material", CLOTH))
 	f.blob(BODY_CENTER, shapes, 36, 22, BLOB_K)
 	if b.get("lapels", false):
 		_lapels(f, pal, b, shapes)
-	var buttons: int = b.get("buttons", 0)
-	if buttons > 0:
-		paint(f, pal, "brass", 0.32, METAL, 1.0)
-		for i in buttons:
-			var y := 0.3 - i * (0.22 / maxf(buttons - 1, 1))
-			var p := MeshForge.blob_surface(BODY_CENTER, Vector3(0, y, -1.0) - Vector3(0, BODY_CENTER.y, 0), shapes, BLOB_K)
-			f.sphere(0.012, 8, xf(p + Vector3(0, 0, 0.004)))
 	_neckwear(f, pal, b)
-	if b.get("chain", false):
-		# 怀表链:从背心扣子垂到侧边口袋的悬链线
-		paint(f, pal, "brass", 0.3, METAL, 1.0)
-		var a := MeshForge.blob_surface(BODY_CENTER, Vector3(0, 0.0, -1), shapes, BLOB_K)
-		var c := MeshForge.blob_surface(BODY_CENTER, Vector3(0.75, -0.05, -0.8), shapes, BLOB_K)
-		var chain := PackedVector3Array()
-		for i in 9:
-			var t := i / 8.0
-			var p := a.lerp(c, t)
-			p.y -= sin(t * PI) * 0.035
-			p.z -= 0.006
-			chain.append(p)
-		f.tube(chain, 0.0028, 5)
 	hooks.extras(f, "body", look, pal)
 	f.pop()
+
+
+static func body_xform() -> Transform3D:
+	# 躯干网格(连衣片、物种特件)整体的压扁加宽,绕髋部(Body 局部原点)
+	return xf(Vector3.ZERO, Vector3.ZERO, Vector3(PatronParts.BODY_WIDEN, PatronParts.BODY_SQUASH, PatronParts.BODY_WIDEN))
 
 
 static func _lapels(f: MeshForge, pal: Dictionary, b: Dictionary, shapes: Array) -> void:
@@ -155,8 +146,6 @@ static func _neckwear(f: MeshForge, pal: Dictionary, b: Dictionary) -> void:
 			paint(f, pal, key, 0.6, CLOTH)
 			f.blob(at + Vector3(0, -0.04, -0.01), [[at + Vector3(0, -0.01, -0.01), Vector3(0.035, 0.03, 0.022), color(pal, key)],
 				[at + Vector3(0, -0.065, -0.012), Vector3(0.028, 0.045, 0.016), color(pal, key)]], 14, 10, 0.012)
-			paint(f, pal, "gem", 0.15, METAL, 0.6)
-			f.sphere(0.008, 8, xf(at + Vector3(0, -0.03, -0.035)))
 		"bandana":
 			paint(f, pal, key, 0.7, CLOTH)
 			f.torus(0.07, 0.1, 18, xf(Vector3(0, 0.55, -0.02), Vector3.ZERO, Vector3(1.0, 0.5, 1.0)))
@@ -166,13 +155,6 @@ static func _neckwear(f: MeshForge, pal: Dictionary, b: Dictionary) -> void:
 			paint(f, pal, key, 0.7, CLOTH)
 			f.torus(0.072, 0.098, 18, xf(Vector3(0, 0.552, -0.02), Vector3.ZERO, Vector3(1.0, 0.45, 1.0)))
 			f.sphere(0.02, 10, xf(at + Vector3(0.02, -0.01, -0.01), Vector3.ZERO, Vector3(1.2, 1.0, 0.8)))
-		"bolo":
-			paint(f, pal, "dark", 0.6, LEATHER)
-			for side: float in [-1.0, 1.0]:
-				f.tube(PackedVector3Array([Vector3(0.06 * side, 0.55, -0.08), at + Vector3(0.008 * side, -0.05, -0.02),
-					at + Vector3(0.012 * side, -0.14, -0.03)]), 0.003, 5)
-			paint(f, pal, key, 0.3, METAL, 0.3)
-			f.cylinder(0.018, 0.018, 0.006, 12, MeshForge.CAPS_BOTH, xf(at + Vector3(0, -0.05, -0.03), Vector3(90, 0, 0)))
 
 
 # —— 脖子 ——
@@ -189,16 +171,16 @@ static func neck(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 # —— 手臂与爪子 ——
 
 static func arm(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
-	# 袖子:肩 → 肘(略往下弯)→ 袖口,沿 -Z;袖口一圈换色。卷袖的物种(bear/pig)小臂露出皮毛
+	# 短粗的袖子:肩 → 袖口沿 -Z 几乎一样粗,两头圆;袖口一圈换色。卷袖的物种(bear/pig)小臂露出皮毛
 	start(f, 0.3)
 	var a: Dictionary = look["arms"]
 	var sleeve := color(pal, a.get("sleeve", "coat"))
 	var cuff := color(pal, a.get("cuff", a.get("sleeve", "coat")))
 	var forearm: String = a.get("forearm", "")
-	var path := PackedVector3Array([Vector3(0, 0.005, 0.02), Vector3(0, 0, -0.06), Vector3(0, -0.012, -0.18),
-		Vector3(0, -0.006, -0.27), Vector3(0, 0, -0.31), Vector3(0, 0, -0.312), Vector3(0, 0, SLEEVE_END)])
-	var radii := PackedVector2Array([Vector2(0.07, 0.07), Vector2(0.066, 0.064), Vector2(0.054, 0.052),
-		Vector2(0.052, 0.05), Vector2(0.056, 0.054), Vector2(0.06, 0.058), Vector2(0.058, 0.056)])
+	var path := PackedVector3Array([Vector3(0, 0.0, 0.03), Vector3(0, 0, -0.05), Vector3(0, -0.006, -0.18),
+		Vector3(0, -0.004, -0.28), Vector3(0, 0, -0.34), Vector3(0, 0, -0.342), Vector3(0, 0, SLEEVE_END)])
+	var radii := PackedVector2Array([Vector2(0.076, 0.076), Vector2(0.078, 0.076), Vector2(0.072, 0.07),
+		Vector2(0.068, 0.066), Vector2(0.068, 0.066), Vector2(0.072, 0.07), Vector2(0.07, 0.068)])
 	var colors := PackedColorArray()
 	for i in path.size():
 		var c := sleeve
@@ -208,14 +190,14 @@ static func arm(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript
 			c = cuff
 		colors.append(Color(c.r, c.g, c.b, 1.0))
 	if forearm != "":
-		# 卷到小臂的袖口:袖子本身到肘下为止,外面一圈卷边
+		# 卷到小臂的袖口:袖子本身到肘下为止,外面一圈胖胖的卷边
 		paint(f, pal, a.get("sleeve", "coat"), 0.85, a.get("material", CLOTH))
 		f.loft(path.slice(0, 4), radii.slice(0, 4), 14, Vector2i(1, 0), Transform3D.IDENTITY, colors.slice(0, 3) + PackedColorArray([colors[2]]))
 		paint(f, pal, a.get("cuff", a.get("sleeve", "coat")), 0.85, CLOTH)
-		f.torus(0.052, 0.068, 16, xf(Vector3(0, -0.008, -0.2), Vector3(90, 0, 0)))
+		f.torus(0.062, 0.086, 16, xf(Vector3(0, -0.005, -0.21), Vector3(90, 0, 0)))
 		paint(f, pal, forearm, 0.75, FUR)
-		f.loft(path.slice(2), PackedVector2Array([Vector2(0.046, 0.044), Vector2(0.044, 0.042), Vector2(0.046, 0.044),
-			Vector2(0.047, 0.045), Vector2(0.046, 0.044)]), 12, Vector2i(0, 1))
+		f.loft(path.slice(2), PackedVector2Array([Vector2(0.064, 0.062), Vector2(0.06, 0.058), Vector2(0.06, 0.058),
+			Vector2(0.06, 0.058), Vector2(0.058, 0.056)]), 12, Vector2i(0, 1))
 	else:
 		paint(f, pal, a.get("sleeve", "coat"), 0.85, a.get("material", CLOTH))
 		f.loft(path, radii, 14, Vector2i(1, 1), Transform3D.IDENTITY, colors)
@@ -223,67 +205,54 @@ static func arm(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript
 
 
 static func paw(f: MeshForge, look: Dictionary, pal: Dictionary, side: float) -> void:
-	# 张开的爪:掌心 + 指头(猴子长、猪 3 根粗指)+ 拇指;反向烘焙坐姿的手臂俯角,掌面平贴桌面
+	# 张开的手:没有手指的圆手团(动森式),朝身体内侧鼓一个小拇指包;反向烘焙坐姿的手臂俯角,底面平贴桌面
 	start(f, 0.4 + side * 0.05)
 	var p: Dictionary = look["paws"]
 	var fur := color(pal, p.get("color", "paw"))
-	var pad := color(pal, p.get("pads", "pad"))
-	var fingers: int = p.get("fingers", 4)
-	var length: float = p.get("length", 0.032)
-	var shapes := [[Vector3(0, -0.004, -0.004), Vector3(0.054, 0.034, 0.056), fur],
-		[Vector3(0, -0.03, -0.012), Vector3(0.034, 0.012, 0.03), pad]]
-	for i in fingers:
-		var t := (i - (fingers - 1) * 0.5) / maxf(fingers - 1, 1)
-		var x := t * (0.07 if fingers > 3 else 0.06)
-		shapes.append([Vector3(x, -0.012, -0.05 - length * 0.5), Vector3(0.016 if fingers > 3 else 0.021, 0.016, length * 0.75), fur])
-	shapes.append([Vector3(0.052 * side, -0.006, -0.012), Vector3(0.018, 0.016, 0.026), fur])   # 拇指朝身体内侧
-	# Q 版胖爪:绕掌底着桌的那一点放大,掌底高度不变(手照样平贴桌面)
-	var sole := Basis.from_euler(Vector3(deg_to_rad(PAW_PITCH), 0, 0)) * Vector3(0, -0.038, -0.01)
-	f.push(Transform3D(Basis.from_scale(Vector3.ONE * PatronParts.PAW_CHUBBY), sole - sole * PatronParts.PAW_CHUBBY))
-	paint(f, pal, p.get("color", "paw"), 0.75, FUR)
-	f.blob(Vector3(0, -0.004, -0.01), shapes, 24, 14, 0.014, xf(Vector3.ZERO, Vector3(PAW_PITCH, 0, 0)))
-	if p.get("claws", "") != "":
-		paint(f, pal, p["claws"], 0.4, LEATHER)
-		for i in fingers:
-			var t := (i - (fingers - 1) * 0.5) / maxf(fingers - 1, 1)
-			f.cylinder(0.0, 0.006, 0.014, 6, MeshForge.CAPS_BOTH,
-				xf(Vector3(t * 0.07, -0.016, -0.05 - length * 1.25), Vector3(PAW_PITCH - 90, 0, 0)))
-	f.pop()
+	var shapes := [[Vector3(0, 0.0, -0.012), MITT, fur],
+		[Vector3(0.05 * side, -0.004, -0.004), Vector3(0.024, 0.022, 0.028), fur]]   # 拇指包朝身体内侧
+	paint(f, pal, p.get("color", "paw"), 0.8, SMOOTH)
+	f.blob(Vector3(0, 0.0, -0.01), shapes, 22, 12, 0.014, xf(Vector3.ZERO, Vector3(PAW_PITCH, 0, 0)))
 
 
 static func fist(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
-	# 握枪的拳头(只有右手):圆拳加指节;按旧左轮握把位置(原点 6 cm 以内)调
+	# 握枪的拳头(只有右手):一个圆团,顶上压着一个小拇指包;握把包在拳里
 	start(f, 0.45)
 	var fur := color(pal, look["paws"].get("color", "paw"))
-	var shapes := [[Vector3(0, 0, 0.0), Vector3(0.05, 0.05, 0.052), fur]]
-	for i in 4:
-		shapes.append([Vector3(-0.03 + i * 0.02, 0.012, -0.044), Vector3(0.014, 0.016, 0.014), fur])
-	shapes.append([Vector3(-0.045, 0.02, -0.01), Vector3(0.016, 0.02, 0.022), fur])
-	paint(f, pal, look["paws"].get("color", "paw"), 0.75, FUR)
-	f.blob(Vector3.ZERO, shapes, 20, 12, 0.012, xf(Vector3.ZERO, Vector3.ZERO, Vector3.ONE * FIST_CHUBBY))
+	paint(f, pal, look["paws"].get("color", "paw"), 0.8, SMOOTH)
+	f.blob(Vector3.ZERO, [[Vector3.ZERO, Vector3(1.0, 0.96, 1.0) * FIST_RADIUS, fur],
+		[Vector3(-0.03, 0.04, -0.02), Vector3(0.022, 0.02, 0.026), fur]], 20, 12, 0.012)
 
 
 # —— 腿、鞋、尾巴(座位坐标)——
 
 static func legs(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
+	# 短粗的腿:大腿平放在座面上到前沿,小腿垂下来,圆圆的小脚悬在半空(动森式坐椅子)
 	start(f, 0.5)
 	var l: Dictionary = look["legs"]
-	var pants := color(pal, l.get("pants", "pants"))
 	for side: float in [-1.0, 1.0]:
-		var x := 0.1 * side
-		var path := PackedVector3Array([Vector3(x, 0.47, 0.12), Vector3(x, 0.49, -0.02), Vector3(x, 0.49, -0.12),
-			Vector3(x * 1.02, 0.38, -0.155), Vector3(x * 1.04, 0.2, -0.16), Vector3(x * 1.04, 0.08, -0.155)])
-		var radii := PackedVector2Array([Vector2(0.08, 0.078), Vector2(0.074, 0.072), Vector2(0.062, 0.06),
-			Vector2(0.056, 0.054), Vector2(0.05, 0.049), Vector2(0.046, 0.045)])
+		var path := leg_path(side)
 		paint(f, pal, l.get("pants", "pants"), 0.85, l.get("material", CLOTH))
-		f.loft(path, radii, 12, Vector2i(1, 0), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(0, 0, -1))
-		_shoe(f, pal, l, Vector3(x * 1.04, 0.0, -0.17), side)
+		f.loft(path, PackedVector2Array(LEG_RADII), 12, Vector2i(1, 0), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(0, 0, -1))
+		_shoe(f, pal, l, foot_point(side))
 	hooks.extras(f, "legs", look, pal)
 	_tail(f, look, pal)
 
 
-static func _shoe(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3, side: float) -> void:
-	# Q 版胖脚:绕鞋底中心放大(鞋底仍贴地)
+static func leg_path(side: float) -> PackedVector3Array:
+	# 大腿根 → 膝(座面前沿)→ 小腿往下略往前垂
+	var x := LEG_X * side
+	return PackedVector3Array([Vector3(x, 0.5, 0.1), Vector3(x, 0.505, -0.02), Vector3(x, 0.49, -0.1),
+		Vector3(x * 1.02, 0.38, -0.13), Vector3(x * 1.03, 0.27, -0.14)])
+
+
+static func foot_point(side: float) -> Vector3:
+	# 脚底中心(座位坐标):悬在离地 ≈0.2 m 处
+	return Vector3(LEG_X * 1.03 * side, 0.2, -0.15)
+
+
+static func _shoe(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3) -> void:
+	# 胖脚:绕脚底中心放大
 	f.push(Transform3D(Basis.from_scale(Vector3.ONE * PatronParts.FOOT_CHUBBY), at - at * PatronParts.FOOT_CHUBBY))
 	_shoe_shape(f, pal, l, at)
 	f.pop()
@@ -293,34 +262,24 @@ static func _shoe_shape(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector
 	var kind: String = l.get("foot", "oxford")
 	match kind:
 		"bare", "hoof", "claws":
-			# 光脚:皮毛色的大脚掌加趾头(蹄子是两趾,三爪带指甲)
+			# 光脚:皮毛色的圆脚团(蹄子、爪子都不分趾,颜色区分)
 			var fur := color(pal, l.get("foot_color", "paw"))
-			var toes := 2 if kind == "hoof" else 3
-			var shapes := [[at + Vector3(0, 0.035, -0.02), Vector3(0.05, 0.035, 0.075), fur]]
-			for i in toes:
-				var t := (i - (toes - 1) * 0.5) / maxf(toes - 1, 1)
-				shapes.append([at + Vector3(t * 0.045, 0.022, -0.085), Vector3(0.022, 0.02, 0.026), fur])
-			paint(f, pal, l.get("foot_color", "paw"), 0.75, FUR)
-			f.blob(at + Vector3(0, 0.035, -0.02), shapes, 18, 10, 0.012)
-			if kind == "claws":
-				paint(f, pal, "nose", 0.4, LEATHER)
-				for i in toes:
-					var t := (i - (toes - 1) * 0.5) / maxf(toes - 1, 1)
-					f.cylinder(0.0, 0.007, 0.018, 6, MeshForge.CAPS_BOTH, xf(at + Vector3(t * 0.045, 0.015, -0.115), Vector3(-90, 0, 0)))
+			paint(f, pal, l.get("foot_color", "paw"), 0.8, SMOOTH)
+			f.blob(at + Vector3(0, 0.035, -0.02), [[at + Vector3(0, 0.035, -0.025), Vector3(0.05, 0.038, 0.07), fur],
+				[at + Vector3(0, 0.05, 0.01), Vector3(0.046, 0.04, 0.045), fur]], 18, 10, 0.014)
 		_:
-			# 鞋 / 靴:鞋身扁椭球 + 鞋底;靴子多一截靴筒(牛仔靴的尖头和马刺由物种 extras 画)
+			# 鞋 / 靴:圆头胖鞋,鞋底一圈深色(颜色混合,不另做鞋底块);靴子多一截圆靴筒
 			var shoe := color(pal, l.get("shoe", "shoe"))
-			paint(f, pal, l.get("shoe", "shoe"), 0.45, LEATHER)
-			f.blob(at + Vector3(0, 0.04, -0.03), [[at + Vector3(0, 0.04, -0.03), Vector3(0.05, 0.04, 0.085), shoe],
-				[at + Vector3(0, 0.05, 0.02), Vector3(0.048, 0.045, 0.05), shoe]], 18, 10, 0.015)
-			paint(f, pal, "sole", 0.8, LEATHER)
-			f.box(Vector3(0.1, 0.014, 0.17), xf(at + Vector3(0, 0.007, -0.03)))
+			var sole := color(pal, "sole")
+			paint(f, pal, l.get("shoe", "shoe"), 0.6, LEATHER)
+			var shapes := [[at + Vector3(0, 0.04, -0.03), Vector3(0.052, 0.04, 0.075), shoe],
+				[at + Vector3(0, 0.05, 0.015), Vector3(0.048, 0.044, 0.048), shoe],
+				[at + Vector3(0, 0.008, -0.02), Vector3(0.05, 0.012, 0.07), sole]]
 			if kind == "boot" or kind == "cowboy":
-				paint(f, pal, l.get("shoe", "shoe"), 0.45, LEATHER)
-				f.cylinder(0.05, 0.055, 0.14, 12, MeshForge.CAPS_BOTH, xf(at + Vector3(0, 0.12, 0.0)))
+				shapes.append([at + Vector3(0, 0.1, 0.005), Vector3(0.052, 0.07, 0.05), shoe])
 			if kind == "spats":
-				paint(f, pal, l.get("spats", "cream"), 0.8, CLOTH)
-				f.cylinder(0.05, 0.052, 0.07, 12, MeshForge.CAPS_BOTH, xf(at + Vector3(0, 0.075, -0.005)))
+				shapes.append([at + Vector3(0, 0.075, 0.0), Vector3(0.05, 0.035, 0.05), color(pal, l.get("spats", "cream"))])
+			f.blob(at + Vector3(0, 0.045, -0.01), shapes, 18, 12, 0.014)
 
 
 static func _tail(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:

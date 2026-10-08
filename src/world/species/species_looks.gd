@@ -31,12 +31,13 @@ static func look(index: int) -> Dictionary:
 
 
 static func palette(look_data: Dictionary) -> Dictionary:
-	# 物种调色板(sRGB):缺省项补齐,派生色(翻领、爪子、后脑)按规则算,所有颜色按最大通道封顶,防止烛光下过曝
+	# 物种调色板(sRGB):缺省项补齐,先提亮成粉彩(PatronParts.pastel),派生色(翻领、爪子、后脑)按规则算,
+	# 所有颜色按最大通道封顶,防止烛光下过曝
 	var raw: Dictionary = DEFAULTS.duplicate()
 	raw.merge(look_data["palette"], true)
 	var pal := {}
 	for key in raw:
-		pal[key] = raw[key] if METAL_KEYS.has(key) else PatronParts.capped(raw[key])
+		pal[key] = raw[key] if METAL_KEYS.has(key) else PatronParts.capped(PatronParts.pastel(raw[key]))
 	if not pal.has("cream"):
 		pal["cream"] = pal["muzzle"]
 	if not pal.has("lapel"):

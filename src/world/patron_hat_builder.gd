@@ -28,7 +28,8 @@ static func hat(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript
 		"flat":
 			_flat(f, pal, h)
 	hooks.extras(f, "hat", look, pal)
-	f.displace(from, func(p: Vector3) -> Vector3: return p * Vector3(PatronParts.HEAD_SCALE, PatronParts.HAT_SCALE_Y, PatronParts.HEAD_SCALE))
+	var scale := PatronParts.hat_scale(look)
+	f.displace(from, func(p: Vector3) -> Vector3: return p * scale)
 
 
 static func _brim(f: MeshForge, inner: float, outer: float, thick: float, segs := 40) -> int:
@@ -122,13 +123,12 @@ static func _conductor(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
 
 
 static func _pillbox(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
-	# 药盒帽(门童):矮圆柱 + 金箍 + 颏带
+	# 药盒帽(门童):矮圆柱 + 宽金箍 + 颏带(可关)
 	var r: float = h.get("radius", 0.075)
 	PatronBuilder.paint(f, pal, h.get("color", "coat"), 0.7, PatronBuilder.CLOTH)
 	f.lathe(PackedVector2Array([Vector2(r, 0.0), Vector2(r * 0.98, 0.07), Vector2(r * 0.9, 0.08), Vector2(0.0, 0.08)]), 28, PackedInt32Array([2]))
-	PatronBuilder.paint(f, pal, "brass", 0.35, PatronBuilder.METAL, 1.0)
-	f.lathe(PackedVector2Array([Vector2(r * 1.02, 0.006), Vector2(r * 1.01, 0.018)]), 28)
-	f.sphere(0.012, 8, PatronBuilder.xf(Vector3(0, 0.084, 0)))
+	PatronBuilder.paint(f, pal, "brass", 0.5, PatronBuilder.METAL, 1.0)
+	f.lathe(PackedVector2Array([Vector2(r * 1.02, 0.006), Vector2(r * 1.01, 0.022)]), 28)
 	if h.get("chin_strap", true):
 		PatronBuilder.paint(f, pal, "dark", 0.6, PatronBuilder.LEATHER)
 		var strap: Array = h.get("strap", [Vector3(0.07, 0.0, 0.0), Vector3(0.1, -0.12, -0.04), Vector3(0.0, -0.2, -0.1)])
@@ -173,12 +173,10 @@ static func _straw(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
 
 
 static func _flat(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
-	# 亡命徒平檐低冠帽:平直宽檐 + 矮冠 + 银扣
+	# 亡命徒平檐低冠帽:平直宽檐 + 矮冠 + 帽带
 	var brim: float = h.get("brim", 0.19)
 	PatronBuilder.paint(f, pal, "hat", 0.65, PatronBuilder.LEATHER)
 	_brim(f, 0.09, brim, 0.012, 40)
 	f.lathe(PackedVector2Array([Vector2(0.1, 0.0), Vector2(0.096, 0.07), Vector2(0.0, 0.074)]), 28, PackedInt32Array([1]))
 	PatronBuilder.paint(f, pal, h.get("band", "band"), 0.5, PatronBuilder.LEATHER)
 	f.lathe(PackedVector2Array([Vector2(0.102, 0.008), Vector2(0.099, 0.026)]), 28)
-	PatronBuilder.paint(f, pal, "silver", 0.25, PatronBuilder.METAL, 1.0)
-	f.box(Vector3(0.026, 0.02, 0.008), PatronBuilder.xf(Vector3(0, 0.017, -0.102)))

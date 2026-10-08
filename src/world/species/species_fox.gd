@@ -1,18 +1,19 @@
 extends RefCounted
-# 狐狸「老千绅士」:窄额长尖吻、白颊连成围嘴;礼帽夹在两耳之间、藏青燕尾服、金锦缎背心、奶油领巾、怀表链;
-# 蓬松大尾巴从左侧翻过座面垂下,尾尖白;帽带上插一张 A 牌。
+# 狐狸「老千绅士」:短圆吻、白颊连成围嘴;礼帽夹在两耳之间、藏青燕尾服、金色背心、奶油领巾;
+# 蓬松大尾巴从左侧翻过座面垂下,尾尖白;帽带上插一张 A 牌。动森式:纯色衣片,去掉扣子、表链、口袋这些碎件。
 # 本文件后半段是「衣片工具」(贴身衣片、背带、贴花):熊、猪、猫的脚本 preload 本文件共用。
 
 
 const LOOK := {
 	"id": "fox",
-	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
+	"gun_clearance": 0.331,   # 持枪净空(米,已含动森式大头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.80, 0.40, 0.14), "muzzle": Color(0.80, 0.74, 0.62), "dark": Color(0.18, 0.08, 0.04),
 		"coat": Color(0.13, 0.17, 0.30), "accent": Color(0.70, 0.52, 0.22), "vest": Color(0.66, 0.48, 0.18),
 		"shirt": Color(0.78, 0.74, 0.64), "hat": Color(0.1, 0.08, 0.08), "band": Color(0.62, 0.16, 0.14),
 		"pants": Color(0.12, 0.15, 0.26), "shoe": Color(0.07, 0.06, 0.06), "pad": Color(0.22, 0.1, 0.08),
 		"card": Color(0.78, 0.76, 0.7), "lapel": Color(0.07, 0.09, 0.17), "vest_dark": Color(0.42, 0.27, 0.08),
+		"blush": Color(0.88, 0.5, 0.4),
 	},
 	"head": {
 		"skull": [
@@ -23,17 +24,20 @@ const LOOK := {
 			[Vector3(0, 0.02, -0.06), Vector3(0.07, 0.045, 0.07), "muzzle"],            # 下巴连到喉咙的白围嘴
 		],
 		"blend": 0.04,
-		"snout": {"path": [Vector3(0, 0.082, -0.13), Vector3(0, 0.084, -0.2), Vector3(0, 0.086, -0.26)],
-			"radii": [Vector2(0.05, 0.046), Vector2(0.034, 0.03), Vector2(0.02, 0.019)], "color": "muzzle"},
-		"nose": {"pos": Vector3(0, 0.094, -0.276), "radii": Vector3(0.021, 0.017, 0.016), "color": "nose"},
-		"mouth": {"kind": "smirk", "pos": Vector3(0, 0.058, -0.2), "width": 0.062},
+		# 动森式短圆吻:比写实版短一截、更胖,鼻头圆
+		"snout": {"path": [Vector3(0, 0.08, -0.12), Vector3(0, 0.082, -0.175), Vector3(0, 0.084, -0.21)],
+			"radii": [Vector2(0.054, 0.05), Vector2(0.04, 0.036), Vector2(0.028, 0.026)], "color": "muzzle"},
+		"nose": {"pos": Vector3(0, 0.092, -0.228), "radii": Vector3(0.022, 0.018, 0.017), "color": "nose"},
+		"mouth": {"kind": "smirk", "pos": Vector3(0, 0.056, -0.172), "width": 0.062},
+		"blush": true,
 	},
 	"eyes": {"pos": Vector3(0.064, 0.168, -0.128), "size": Vector3(0.04, 0.046, 0.02), "iris": Color(0.80, 0.52, 0.12),
 		"pupil": 0, "lid_rest": 0.18, "lashes": false},
 	"brows": {"pos": Vector3(0.064, 0.224, -0.142), "color": "dark"},
 	"ears": {"kind": "pointy", "pivot": Vector3(0.135, 0.21, 0.0), "rot": Vector3(0, 0, -28),
 		"size": Vector3(0.05, 0.15, 0.02), "inner": "muzzle", "tip": "dark"},
-	"hat": {"kind": "top", "pivot": Vector3(0, 0.255, -0.01), "rot": Vector3(-6, 0, 3), "crown": [0.082, 0.21], "brim": 0.118,
+	# 矮胖的软胶礼帽(动森式:帽冠比写实版矮 4 cm,德州铭牌和吊灯都不挡)
+	"hat": {"kind": "top", "pivot": Vector3(0, 0.255, -0.01), "rot": Vector3(-6, 0, 3), "crown": [0.085, 0.17], "brim": 0.118,
 		"curl": 0.022, "band": "band"},
 	"neck": {"base": Vector3(0, 0.55, -0.02), "radius": 0.075, "color": "muzzle"},
 	# 背心、翻领、扣子、领巾、表链都在 extras 里按衣片画(贴着躯干表面、有厚度),这里只留躯干形体
@@ -60,14 +64,13 @@ static func extras(f: MeshForge, part: String, look: Dictionary, pal: Dictionary
 		"body":
 			_body(f, look, pal)
 		"head":
-			# 腮边三簇毛:往后下方梳的软尖簇
+			# 腮边一簇胖胖的软尖毛:往后下方梳
 			PatronBuilder.paint(f, pal, "muzzle", 0.8, PatronBuilder.FUR)
 			for side: float in [-1.0, 1.0]:
-				for k in 3:
-					var root := Vector3(0.12 * side, 0.04 + k * 0.022, -0.04 + k * 0.012)
-					var tip := root + Vector3((0.036 - k * 0.008) * side, -0.026 + k * 0.004, 0.02)
-					f.loft(PackedVector3Array([root, root.lerp(tip, 0.5) + Vector3(0.003 * side, 0.003, 0), tip]),
-						PackedVector2Array([Vector2(0.022, 0.016), Vector2(0.014, 0.011), Vector2(0.005, 0.005)]), 6)
+				var root := Vector3(0.12 * side, 0.05, -0.035)
+				var tip := root + Vector3(0.038 * side, -0.03, 0.022)
+				f.loft(PackedVector3Array([root, root.lerp(tip, 0.5) + Vector3(0.004 * side, 0.004, 0), tip]),
+					PackedVector2Array([Vector2(0.03, 0.022), Vector2(0.02, 0.016), Vector2(0.006, 0.006)]), 8)
 
 
 static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
@@ -88,34 +91,13 @@ static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 		collar.append(Vector3(sin(a) * 0.1, 0.548 + 0.02 * back, -cos(a) * 0.098 - 0.02))
 		collar_r.append(Vector2(0.018 + 0.012 * back, 0.008))
 	f.loft(collar, collar_r, 8)
-	# 金锦缎背心:左右两片在胸前合拢,V 领露出衬衫与领巾,下摆两个尖角;右片压左片
+	# 金色背心:左右两片在胸前合拢,V 领露出衬衫与领巾,下摆两个尖角;右片压左片
 	for side: float in [-1.0, 1.0]:
 		PatronBuilder.paint(f, pal, "vest", 0.5, PatronBuilder.CLOTH)
 		panel(f, c, shapes, k, func(u: float, v: float) -> Vector3:
 			var y := lerpf(0.46, lerpf(0.02, 0.11, u), v)
 			var a_in := lerpf(22.0, -2.0, clampf((0.46 - y) / 0.2, 0.0, 1.0))
-			return aim(c, lerpf(a_in, 46.0, u) * side, y), 6, 10, 0.0065 if side > 0.0 else 0.0055,
-			func(u: float, _v: float) -> Color:
-				return pal["vest"].lerp(pal["vest_dark"], smoothstep(0.75, 1.0, u)))
-	# 背心扣子:合缝处一排三颗铜扣
-	PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
-	for i in 3:
-		var p := surface_point(c, shapes, k, aim(c, 0.0, 0.26 - i * 0.065), 0.011)
-		f.sphere(0.0095, 10, PatronBuilder.xf(p, Vector3.ZERO, Vector3(1.0, 1.0, 0.7)))
-	# 怀表链:从中间扣眼垂到右侧口袋,口袋上露出半个表
-	var chain := PackedVector3Array()
-	for i in 9:
-		var t := i / 8.0
-		var p := surface_point(c, shapes, k, aim(c, lerpf(1.0, 30.0, t), lerpf(0.2, 0.15, t) - sin(t * PI) * 0.045), 0.0095)
-		chain.append(p)
-	f.tube(chain, 0.0028, 5)
-	var fob := surface_point(c, shapes, k, aim(c, 31.0, 0.155), 0.012)
-	f.cylinder(0.014, 0.014, 0.006, 12, MeshForge.CAPS_BOTH, PatronBuilder.xf(fob, Vector3(80, 0, -25)))
-	# 背心口袋:两道深金滚边
-	PatronBuilder.paint(f, pal, "vest_dark", 0.5, PatronBuilder.CLOTH)
-	for side: float in [-1.0, 1.0]:
-		panel(f, c, shapes, k, func(u: float, v: float) -> Vector3:
-			return aim(c, lerpf(20.0, 38.0, u) * side, lerpf(0.17, 0.155, v) - u * 0.01), 3, 1, 0.0085)
+			return aim(c, lerpf(a_in, 46.0, u) * side, y), 6, 10, 0.0065 if side > 0.0 else 0.0055)
 	# 翻领:沿外套前襟从肩头斜到腰,上宽下窄,缎面压暗
 	PatronBuilder.paint(f, pal, "lapel", 0.4, PatronBuilder.CLOTH)
 	for side: float in [-1.0, 1.0]:
@@ -123,7 +105,7 @@ static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 			var y := lerpf(0.54, 0.18, v)
 			var w := lerpf(24.0, 6.0, v) * (1.0 - 0.35 * smoothstep(0.1, 0.0, v))
 			return aim(c, (lerpf(27.0, 47.0, v) + (u - 0.3) * w) * side, y), 3, 8, 0.011)
-	# 领巾:领口打一个蓬松的结,往下垂到背心 V 领里,别一颗红宝石别针
+	# 领巾:领口打一个蓬松的结,往下垂到背心 V 领里
 	var knot := surface_point(c, shapes, k, aim(c, 0.0, 0.5), 0.0)
 	var puff := surface_point(c, shapes, k, aim(c, 0.0, 0.44), 0.0)
 	var drop := surface_point(c, shapes, k, aim(c, 0.0, 0.37), 0.0)
@@ -134,10 +116,6 @@ static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 		[Vector3(0.022, puff.y + 0.01, puff.z - 0.01), Vector3(0.034, 0.042, 0.024), cream, "mirror"],
 		[Vector3(0, drop.y, drop.z - 0.008), Vector3(0.032, 0.04, 0.018), cream.darkened(0.06)],
 	], 18, 12, 0.014)
-	PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
-	f.cylinder(0.011, 0.011, 0.004, 10, MeshForge.CAPS_BOTH, PatronBuilder.xf(Vector3(0, puff.y + 0.005, puff.z - 0.03), Vector3(90, 0, 0)))
-	PatronBuilder.paint(f, pal, "gem", 0.12, PatronBuilder.METAL, 0.6)
-	f.sphere(0.0085, 10, PatronBuilder.xf(Vector3(0, puff.y + 0.005, puff.z - 0.034)))
 	# 燕尾:从后腰两侧垂到座面外、椅腿外的两片长尾,上宽下尖
 	PatronBuilder.paint(f, pal, "coat", 0.85, PatronBuilder.CLOTH)
 	for side: float in [-1.0, 1.0]:

@@ -3,13 +3,15 @@ extends GutTest
 # 头心是瞄准点与机位目标、脖子是单位高网格、帽顶不碰名牌、头不往后挡自己的手牌、胸前让出对手的牌扇、
 # 膝盖在桌下、脚让开椅腿、尾巴不穿座面。外观怎么改都要守住。
 
-# Q 版(2026-10-08):头整体按头心放大 PatronParts.HEAD_SCALE 倍,下面两条按同一倍数放宽(原 0.51 / 0.22、羊驼 0.48),
-# 意图不变——帽顶不碰名牌(Patron.NAMEPLATE_HEIGHT 跟着从 1.82 抬到 1.92),头不往后伸进越肩镜头和手牌之间
-# (test_hand_visibility 按三角形实测遮挡)
-const HEAD_TOP := 0.12 + (0.51 - 0.12) * PatronParts.HEAD_SCALE    # 帽顶、耳尖在 Head 局部的上限(≈0.627)
-const ALPACA_TOP := 0.12 + (0.48 - 0.12) * PatronParts.HEAD_SCALE  # 羊驼脖子长、头本来就高(≈0.588)
-const BEHIND := 0.22 * PatronParts.HEAD_SCALE                      # 头部几何离头心往后(+Z,朝越肩镜头)最多这么远(≈0.286)
-const FRONT_TIP := {"fox": -0.3, "alpaca": -0.27, "crocodile": -0.38}   # 吻尖 z 下限(放大前;规格 §3.4,狐狸鼻头细化后到 -0.292);其余 -0.22
+# 动森式 2 头身(2026-10-08,接在 Q 版之后):头按头心放大 PatronParts.HEAD_SCALE 1.95 倍(前后再乘 HEAD_DEPTH),
+# 帽子竖向只放 HAT_SCALE_Y。下面几条按实测放宽,意图不变——帽顶不碰名牌:头枢轴在座位上方 ≈1.12 m(坐直),
+# 0.66 的帽顶 + 欢呼蹦起 0.08 ≈1.86 m,低于 Patron.NAMEPLATE_HEIGHT 1.92(Q 版 0.627、写实 0.51;羊驼单列的 0.588 并进来,
+# 它的耳朵改短后和别人一样);头不往后伸进越肩镜头和手牌之间(test_hand_visibility 按三角形实测遮挡,
+# 最远的是猫的宽檐牛仔帽后檐 ≈0.363,Q 版 0.286、写实 0.22)
+const HEAD_TOP := 0.66      # 帽顶、耳尖在 Head 局部的上限(狐狸礼帽 ≈0.640、羊驼耳尖 ≈0.628)
+const BEHIND := 0.37        # 头部几何离头心往后(+Z,朝越肩镜头)最多这么远
+# 吻尖 z 下限(放大前;乘以头的前后放大倍数):动森式吻更短更圆,狐狸 -0.3 → -0.25、羊驼 -0.27 → -0.23;其余 -0.22
+const FRONT_TIP := {"fox": -0.25, "alpaca": -0.23, "crocodile": -0.38}
 const CHEST_FRONT := -0.24      # 胸前(身体局部 y 0.35–0.55)最靠前的 z
 const MAX_VISIBLE := 16
 const MAX_TRIANGLES := 15000
@@ -71,8 +73,7 @@ func test_head_center_hat_height_and_nothing_far_behind():
 			for v in _points(m, head):
 				top = maxf(top, v.y)
 				back = maxf(back, v.z - 0.0)
-		var limit := ALPACA_TOP if id == "alpaca" else HEAD_TOP
-		assert_lte(top, limit + 0.002, id + " 帽顶/耳尖高度")
+		assert_lte(top, HEAD_TOP + 0.002, id + " 帽顶/耳尖高度")
 		assert_lte(back, BEHIND, id + " 头部往后伸")
 
 
@@ -157,7 +158,8 @@ func test_crocodile_reaches_less_far():
 
 
 func test_snout_tips_and_forward_reach():
-	# 头部往前伸(吻、鼻、帽檐)按放大后的尺寸量:吻尖不超过各物种的下限 × HEAD_SCALE(鳄鱼前后只放 scale_z 倍),
+	# 头部往前伸(吻、鼻、帽檐)按放大后的尺寸量:吻尖不超过各物种的下限 × 头的前后放大倍数(HEAD_SCALE × HEAD_DEPTH,
+	# 鳄鱼是 HEAD_SCALE × scale_z),
 	# 伸脖子上限 + 往前伸的长度 ≤ FRONT_REACH_MAX,4 人同时探向桌心吻尖不互穿
 	for i in Species.count():
 		var p := _patron(i)

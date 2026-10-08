@@ -221,7 +221,9 @@ func test_muck_and_deck_lie_behind_the_board():
 # —— 自己的牌扇 ——
 
 func test_poker_fan_is_raised_to_the_spec_spot():
-	assert_eq(PokerLayout.poker_fan_offset(), Vector3(0.30, 0.74, -0.30))
+	# 规格 §5.3 的位置是 (0.30, 0.74, -0.30);动森式大头(半宽 ≈0.32 m)会整个挡住它,挪到大头右前方
+	# (遮挡由 test_hand_visibility 的德州底牌用例按三角形实测)
+	assert_eq(PokerLayout.poker_fan_offset(), Vector3(0.48, 0.72, -0.36))
 
 
 func test_own_fan_faces_the_over_shoulder_camera():

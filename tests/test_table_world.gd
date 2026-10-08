@@ -315,9 +315,11 @@ func test_liars_table_keeps_its_camera_views():
 func test_poker_table_uses_the_spec_camera_views():
 	world.configure_table(POKER_R)
 	_arrange([1, 2])
-	_assert_view(world.third_person_view(1), Vector3(0.55, 1.92, 2.6), Vector3(0, 0.78, -0.12), "越肩")
-	_assert_view(world.third_person_view(2), Vector3(-0.55, 1.92, -2.6), Vector3(0, 0.78, 0.12), "对面座位的越肩")
-	_assert_view(world.overview_view(), Vector3(0, 2.0, 2.6), Vector3(0, 0.78, 0.0), "观战")
+	# 动森式大头之后铭牌挂高(TableWorld.NAMEPLATE_HEIGHT 1.74 起、错开高低),越肩与观战机位跟着抬高一点
+	# (Q 版 (0.55, 1.92, 2.6) / (0, 2.0, 2.6));再高到帽顶的连线就擦到吊灯罩(test_poker_view_layout)
+	_assert_view(world.third_person_view(1), Vector3(0.6, 2.05, 2.55), Vector3(0, 0.78, -0.12), "越肩")
+	_assert_view(world.third_person_view(2), Vector3(-0.6, 2.05, -2.55), Vector3(0, 0.78, 0.12), "对面座位的越肩")
+	_assert_view(world.overview_view(), Vector3(0, 2.1, 2.7), Vector3(0, 0.78, 0.0), "观战")
 	_assert_view(world.lobby_view(), Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1), "等待厅")
 
 
@@ -420,15 +422,19 @@ func test_remove_patron_of_an_unknown_player_is_harmless():
 
 
 func test_nameplate_anchor_sits_above_the_seat_origin():
+	# 动森式大头之后挂在最高的头顶之上(1.74;Q 版 1.62),绕桌序号为偶数的座位(含本机)再高一档,相邻铭牌错开
 	world.configure_table(POKER_R)
 	_arrange([1, 2, 3, 4, 5, 6, 7, 8])
-	assert_eq(TableWorld.NAMEPLATE_HEIGHT, 1.62)
+	assert_eq(TableWorld.NAMEPLATE_HEIGHT, 1.74)
 	for pid in world.patrons:
 		var seat := world.seat_transform(world.seat_angles[pid]).origin
-		assert_almost_eq(world.nameplate_anchor(pid), seat + Vector3(0, 1.62, 0), Vector3.ONE * 0.0001)
+		var high: bool = (pid - 1) % 2 == 0
+		var height := TableWorld.NAMEPLATE_HEIGHT + (TableWorld.NAMEPLATE_STAGGER if high else 0.0)
+		assert_almost_eq(world.nameplate_anchor(pid), seat + Vector3(0, height, 0), Vector3.ONE * 0.0001)
 	world.remove_patron(5)
 	var empty_seat := world.seat_transform(world.seat_angles[5]).origin
-	assert_almost_eq(world.nameplate_anchor(5), empty_seat + Vector3(0, 1.62, 0), Vector3.ONE * 0.0001, "离桌后仍按座位算")
+	assert_almost_eq(world.nameplate_anchor(5), empty_seat + Vector3(0, TableWorld.NAMEPLATE_HEIGHT + TableWorld.NAMEPLATE_STAGGER, 0),
+		Vector3.ONE * 0.0001, "离桌后仍按座位算")
 
 
 func test_angle_of_inverts_the_seat_direction():

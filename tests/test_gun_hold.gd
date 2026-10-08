@@ -6,6 +6,7 @@ extends GutTest
 const FAST_CLOCK := 8.0
 const RAISE_SETTLE := 0.5    # 举枪结束后再等的游戏秒(头回正、坐直的插值)
 const DRIFT_WINDOW := 1.5    # 之后观察头心漂移的时长
+const BARREL_RADIUS := 0.0128   # 枪管半径(B 路的玩具感左轮加粗了枪管,原 0.0105):沿枪管表面上下左右取样
 
 
 func after_each():
@@ -66,12 +67,13 @@ func test_muzzle_rests_on_the_temple_for_every_species():
 
 
 func _gun_samples(gun: Revolver3D) -> PackedVector3Array:
-	# 枪口冠中心、准星顶、枪管上沿每 1 cm 一个点(全局坐标)
+	# 枪口冠中心、准星顶、枪管表面上下左右每 1 cm 一圈点(全局坐标)
 	var xf := gun.global_transform
 	var points := PackedVector3Array([xf * Revolver3D.MUZZLE_POS, xf * Vector3(0, Revolver3D.BARREL_Y + 0.019, -0.242)])
 	var z := -0.075
 	while z > -0.256:
-		points.append(xf * Vector3(0, Revolver3D.BARREL_Y + 0.0105, z))
+		for d: Vector2 in [Vector2(0, 1), Vector2(1, 0), Vector2(-1, 0), Vector2(0, -1)]:
+			points.append(xf * Vector3(d.x * BARREL_RADIUS, Revolver3D.BARREL_Y + d.y * BARREL_RADIUS, z))
 		z -= 0.01
 	return points
 
