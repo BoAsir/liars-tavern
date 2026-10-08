@@ -10,6 +10,11 @@ extends SceneTree
 # 文件名带状态,同一机位可以拍几种底部区域。没写 --hud 时展台的德州机位也带 HUD:座位机位 bet,观战机位 spectate。
 # 全套:--views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview
 #       --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase(4:3 再加 --resolution 1280x960)
+# --bomb-cat-showcase 时摆炸弹猫展台(tools/bomb_cat_showcase.gd,6 人大桌):机位 bomb_seat / bomb_overview / bomb_fp(第一人称)/
+# bomb_close(摸到炸弹的特写);--hud= 按位置给每个机位一个状态(BombCatShowcase.HUD_STATES:turn / window / bomb / exploded /
+# defuse / peek / give / settlement),没写时 bomb_seat、bomb_fp 用 turn,bomb_overview 用 exploded,bomb_close 用 bomb。
+# 全套:--views=bomb_seat,bomb_seat,bomb_close,bomb_overview,bomb_seat,bomb_seat,bomb_fp,bomb_seat,bomb_seat
+#       --hud=turn,window,bomb,exploded,defuse,peek,turn,give,settlement --bomb-cat-showcase
 # --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
@@ -36,6 +41,7 @@ const PLASTER_RECTS := {
 var opts := {}
 var _poker_world: TableWorld = null
 var _poker: Node = null
+var _bomb: Node = null
 var _showcase: Node = null
 var _ui: Control = null
 
@@ -91,6 +97,11 @@ func _run() -> void:
 		await poker.build(tavern)
 		_poker_world = poker.world
 		_poker = poker
+	if opts.has("bomb-cat-showcase"):
+		var bomb: Node = load("res://tools/bomb_cat_showcase.gd").new()
+		root.add_child(bomb)
+		await bomb.build(tavern)
+		_bomb = bomb
 	if opts.has("freeze"):
 		paused = true   # 暂停场景树:_process、补间、计时器停下,渲染照常
 		# 火焰着色器按渲染时间 TIME 跳动、粒子在 GPU 上推进,暂停树管不到:一并停下
@@ -104,7 +115,12 @@ func _run() -> void:
 		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
 		if hud_state == "" and _poker != null:
 			hud_state = PokerShowcase.SPECTATE_STATE if view == "poker_overview" else PokerShowcase.BET_STATE
-		if CameraViews.FIRST_PERSON.has(view):
+		if view.begins_with("bomb_") and _bomb != null:
+			if hud_state == "" or not BombCatShowcase.HUD_STATES.has(hud_state):
+				hud_state = {"bomb_overview": BombCatShowcase.STATE_EXPLODED, "bomb_close": BombCatShowcase.STATE_BOMB}.get(view,
+					BombCatShowcase.STATE_TURN)
+			await _place_bomb_camera(tavern, view, hud_state)
+		elif CameraViews.FIRST_PERSON.has(view):
 			var fp_world: TableWorld = _poker_table(tavern) if view.begins_with("poker_") else _showcase.world
 			if view.begins_with("poker_"):
 				_place_poker_camera(tavern, "poker_seat")
@@ -202,6 +218,32 @@ func _place_poker_camera(tavern: Tavern, view: String) -> void:
 			push_warning("unknown view " + view)
 			return
 	rig.snap(xform.origin, xform.origin - xform.basis.z)
+
+
+func _place_bomb_camera(tavern: Tavern, view: String, state: String) -> void:
+	# 炸弹猫机位:取自展台的牌桌(本机座位 = 1 号);先摆状态的 3D,再上机位与 HUD
+	var world: TableWorld = _bomb.world
+	var rig := tavern.camera_rig
+	await _bomb.stage(state)
+	if view == "bomb_fp":
+		CameraViews.place_first_person(rig, world, BombCatShowcase.ME, view)
+	else:
+		CameraViews.leave_first_person(world, BombCatShowcase.ME)
+		_bomb.cards.present_my_fan()
+		rig.stop_follow()
+		rig.camera.fov = CameraRig.DEFAULT_FOV
+		rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT if view == "bomb_seat" else 0.0
+		var xform: Transform3D = _bomb.view(view)
+		rig.snap(xform.origin, xform.origin - xform.basis.z)
+	if _ui == null:
+		var layer := CanvasLayer.new()
+		root.add_child(layer)
+		_ui = Control.new()
+		_ui.theme = UiTheme.theme()
+		_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_ui)
+	_bomb.stage_hud(_ui, state)
 
 
 func _poker_table(tavern: Tavern) -> TableWorld:
