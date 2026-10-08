@@ -47,3 +47,12 @@ func test_action_sets():
 	for action in PokerRules.BET_ACTIONS + PokerRules.SEAT_ACTIONS:
 		assert_true(action is String and action != "")
 	assert_false(PokerRules.BET_ACTIONS.has(PokerRules.BET), "bet 只出现在事件里,意图统一用 raise")
+
+
+func test_seat_intents_include_sitting_back_in():
+	# 网络层按 BET_ACTIONS + SEAT_ACTIONS 校验意图(规格 §3.3),这几个字符串是协议的一部分
+	assert_eq(PokerRules.SEAT_ACTIONS, ["rebuy", "spectate", "sit_in"])
+	for action in PokerRules.SEAT_ACTIONS:
+		assert_false(PokerRules.BET_ACTIONS.has(action))
+	assert_eq(PokerRules.STATUS_AWAY, "away")
+	assert_eq(PokerRules.AWAY_AFTER_TIMEOUTS, 2, "连续 2 次超时离座(规格 §2.8)")

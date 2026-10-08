@@ -22,17 +22,22 @@ const RAISE := "raise"           # 意图里的下注与加注都用它,amount �
 const ALLIN := "allin"
 const REBUY := "rebuy"
 const SPECTATE := "spectate"
+const SIT_IN := "sit_in"         # 挂机离座的人回到牌桌
 const BET_ACTIONS := [FOLD, CHECK, CALL, RAISE, ALLIN]
-const SEAT_ACTIONS := [REBUY, SPECTATE]
+const SEAT_ACTIONS := [REBUY, SPECTATE, SIT_IN]
 
-# —— 玩家状态(公共视图 players[].status)——
-const STATUS_ACTIVE := "active"          # 在本手中,还能行动
-const STATUS_ALLIN := "allin"            # 在本手中,已全下
-const STATUS_FOLDED := "folded"          # 本手已弃牌
-const STATUS_WAITING := "waiting"        # 有筹码但不在本手中,下一手发牌
+# —— 玩家状态(公共视图 players[].status,规格 §4.4)——
+const STATUS_ACTIVE := "active"          # 本手(或刚结束的一手)中没弃牌、没全下
+const STATUS_ALLIN := "allin"            # 本手(或刚结束的一手)中已全下
+const STATUS_FOLDED := "folded"          # 本手(或刚结束的一手)中已弃牌
+const STATUS_WAITING := "waiting"        # 已入座或已再领,还没被发过牌(下一手发牌)
 const STATUS_BUSTED := "busted"          # 筹码 0,还没选择再领或观战
 const STATUS_SPECTATING := "spectating"  # 筹码 0,选择了观战
-const STATUS_LEFT := "left"              # 已离开,下一手开始时移出座位
+const STATUS_AWAY := "away"              # 挂机离座:有筹码但不发牌,按钮与盲注跳过他
+# 不是 status 的取值:离开用玩家的 left 标记(全下后离开的人 status 仍是 allin,照常摊牌);只留作界面文案的键
+const STATUS_LEFT := "left"
+
+const AWAY_AFTER_TIMEOUTS := 2   # 连续超时这么多次,从下一手起离座(规格 §2.8)
 
 # —— 下注轮 ——
 const PREFLOP := "preflop"
