@@ -3,10 +3,12 @@ class_name Fx
 
 
 static var _soft_dot_texture: GradientTexture2D = null
+static var _quads := {}   # 粒子面片(连同材质)按参数缓存:每次开枪不再新建网格与材质
 
 
 static func clear_cache() -> void:
 	_soft_dot_texture = null
+	_quads = {}
 
 
 static func embers(pos: Vector3) -> GPUParticles3D:
@@ -127,6 +129,20 @@ static func _process_material(extents: Vector3, direction: Vector3, spread: floa
 
 
 static func _additive_quad(size: float, boost: float) -> QuadMesh:
+	var key := "add:%s:%s" % [size, boost]
+	if not _quads.has(key):
+		_quads[key] = _build_additive_quad(size, boost)
+	return _quads[key]
+
+
+static func _lit_quad(size: float, color: Color) -> QuadMesh:
+	var key := "lit:%s:%s" % [size, color.to_html()]
+	if not _quads.has(key):
+		_quads[key] = _build_lit_quad(size, color)
+	return _quads[key]
+
+
+static func _build_additive_quad(size: float, boost: float) -> QuadMesh:
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2(size, size)
 	var mat := WorldMaterials.particle(true, boost, 1.6)
@@ -134,7 +150,7 @@ static func _additive_quad(size: float, boost: float) -> QuadMesh:
 	return mesh
 
 
-static func _lit_quad(size: float, color: Color) -> QuadMesh:
+static func _build_lit_quad(size: float, color: Color) -> QuadMesh:
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2(size, size)
 	var mat := StandardMaterial3D.new()

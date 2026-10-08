@@ -104,13 +104,14 @@ static func flame() -> ShaderMaterial:
 
 
 static func particle(additive: bool, boost: float, softness: float) -> ShaderMaterial:
-	# 混合模式是着色器的编译期 render_mode,只能换着色器而不能用 uniform 切换
-	var mat := ShaderMaterial.new()
-	mat.shader = PARTICLE_ADD_SHADER if additive else PARTICLE_SHADER
-	mat.render_priority = 1
-	mat.set_shader_parameter("emission_boost", boost)
-	mat.set_shader_parameter("softness", softness)
-	return mat
+	# 混合模式是着色器的编译期 render_mode,只能换着色器而不能用 uniform 切换;同参数共用一份
+	return _cached("particle:%s:%s:%s" % [additive, boost, softness], func():
+		var mat := ShaderMaterial.new()
+		mat.shader = PARTICLE_ADD_SHADER if additive else PARTICLE_SHADER
+		mat.render_priority = 1
+		mat.set_shader_parameter("emission_boost", boost)
+		mat.set_shader_parameter("softness", softness)
+		return mat)
 
 
 static func gunmetal() -> StandardMaterial3D:

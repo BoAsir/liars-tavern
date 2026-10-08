@@ -37,8 +37,7 @@ static func refresh_materials() -> void:
 
 
 func _init() -> void:
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(WIDTH, HEIGHT)
+	var mesh := MeshKit.plane(Vector2(WIDTH, HEIGHT))   # 所有牌共用一份网格,同牌型的牌可以自动实例化
 	_front = MeshInstance3D.new()
 	_front.mesh = mesh
 	_front.position.y = GAP

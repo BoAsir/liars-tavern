@@ -56,3 +56,12 @@ func test_additive_particles_use_the_additive_shader():
 	assert_eq(WorldMaterials.particle(false, 1.0, 1.0).shader, WorldMaterials.PARTICLE_SHADER)
 	assert_string_contains(WorldMaterials.PARTICLE_ADD_SHADER.code, "blend_add")
 	assert_false(WorldMaterials.PARTICLE_SHADER.code.contains("blend_add"))
+
+
+func test_effect_quads_and_particle_materials_are_shared():
+	# 每次开枪不再新建网格与材质:同参数的粒子面片与材质共用一份
+	assert_same(Fx._additive_quad(0.32, 9.0), Fx._additive_quad(0.32, 9.0))
+	assert_same(Fx._lit_quad(0.12, Color.WHITE), Fx._lit_quad(0.12, Color.WHITE))
+	assert_not_same(Fx._lit_quad(0.12, Color.WHITE), Fx._lit_quad(0.12, Color.RED))
+	assert_same(WorldMaterials.particle(true, 5.0, 1.6), WorldMaterials.particle(true, 5.0, 1.6))
+	assert_not_same(WorldMaterials.particle(true, 5.0, 1.6), WorldMaterials.particle(false, 5.0, 1.6))

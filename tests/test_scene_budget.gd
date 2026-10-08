@@ -83,3 +83,13 @@ func test_all_flames_share_one_material_with_distinct_seeds():
 		seeds[flame.get_instance_shader_parameter("seed")] = true
 	assert_eq(materials.size(), 1, "火焰共用一份材质")
 	assert_eq(seeds.size(), flames.size(), "每簇火焰的种子不同,相邻火苗不同步")
+
+
+func test_cards_share_one_face_mesh():
+	var cards := _tavern.find_children("*", "Card3D", true, false)
+	assert_gt(cards.size(), 1)
+	var meshes := {}
+	for card in cards:
+		for inst: MeshInstance3D in card.find_children("*", "MeshInstance3D", true, false):
+			meshes[inst.mesh] = true
+	assert_eq(meshes.size(), 1, "所有牌的正反面共用一份网格")
