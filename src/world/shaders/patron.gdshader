@@ -12,6 +12,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 #define TOON_WRAP 0.5
 #define TOON_SHADOW 0.32
 #define TOON_RIM 0.22
+#define TOON_SHADOW_TINT vec3(0.9, 0.86, 1.0)   // 暗面一点暖紫,和场景(prop / wood)一致
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
 instance uniform float fade = 0.0;          // 0 正常 → 1 褪成灰

@@ -50,13 +50,11 @@ const LOOK := {
 	"anim": {"look_pitch_min": -0.45, "blink_speed": 1.0},
 }
 
-# 虎斑纹:头上的贴花条(方位角°, 高度),半宽°
+# 虎斑纹:头上的贴花条(方位角°, 高度),半宽°。动森式:脸上不画颊纹(大眼旁边一道深线像划痕),只留额头 M 纹和后脑横纹
 const HEAD_STRIPES := [
 	[[Vector2(0, 0.19), Vector2(0, 0.255)], 4.0],                                      # 额头 M 纹中线
 	[[Vector2(9, 0.198), Vector2(13, 0.255)], 3.4, "mirror"],                          # M 纹内侧两笔
 	[[Vector2(25, 0.208), Vector2(32, 0.25)], 3.0, "mirror"],                          # M 纹外侧两笔(眉梢上方)
-	[[Vector2(42, 0.156), Vector2(62, 0.146), Vector2(84, 0.128)], 5.4, "mirror"],     # 颊纹(眼角往后)
-	[[Vector2(48, 0.108), Vector2(68, 0.098), Vector2(88, 0.084)], 4.6, "mirror"],
 	[[Vector2(96, 0.205), Vector2(130, 0.21), Vector2(166, 0.204)], 5.4, "mirror"],    # 后脑三道横纹
 	[[Vector2(100, 0.152), Vector2(134, 0.152), Vector2(168, 0.146)], 5.4, "mirror"],
 	[[Vector2(106, 0.098), Vector2(140, 0.092), Vector2(170, 0.086)], 5.0, "mirror"],
