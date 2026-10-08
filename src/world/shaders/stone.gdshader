@@ -2,11 +2,14 @@
 // 双尺度污渍、颗粒、压条上方的手印带、顶部烟熏、壁灯上方的熏痕、露砖斑块与细裂缝。
 // 噪声取自 SurfaceNoise 烘焙的可平铺贴图;凹凸只取解析形状。COLOR.rgb(sRGB)乘到底色上(MeshForge 网格的炉膛熏黑)。
 shader_type spatial;
-render_mode diffuse_burley;
 
 #include "res://src/world/shaders/noise.gdshaderinc"
 #include "res://src/world/shaders/surface.gdshaderinc"
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_NO_RIM
+#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 color_a : source_color = vec3(0.32, 0.28, 0.24);
 uniform vec3 color_b : source_color = vec3(0.20, 0.17, 0.15);

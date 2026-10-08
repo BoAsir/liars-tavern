@@ -2,10 +2,13 @@
 // 噪声取自 SurfaceNoise 烘焙的可平铺贴图(surface.gdshaderinc),不再逐像素算 fbm;
 // 新增参数的默认值保持旧行为(椅子、牌桌、握把等不开这些开关)。
 shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://src/world/shaders/noise.gdshaderinc"
 #include "res://src/world/shaders/surface.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_NO_RIM
+#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 color_dark : source_color = vec3(0.16, 0.08, 0.04);
 uniform vec3 color_light : source_color = vec3(0.42, 0.24, 0.12);

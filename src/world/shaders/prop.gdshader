@@ -2,9 +2,12 @@
 // UV = MeshForge.glow:x 自发光强度(灯泡 1.0、灯罩内壁 0.12、蜡烛顶端渐亮到 0.06),y 透光(蜡 0.35);
 // 没写 UV 的网格读到 0,和原来一样。
 shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
 
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_RIM 0.18
+#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 emission_color : source_color = vec3(1.0, 0.78, 0.5);
 uniform float emission_energy = 4.0;

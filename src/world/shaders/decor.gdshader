@@ -7,10 +7,14 @@
 // 4 布料:色调 × 织纹,边缘一点绒光
 // 5 余烬:炭黑底,细胞边线上滚动的橙红辉光
 shader_type spatial;
-render_mode diffuse_burley, cull_disabled;
+render_mode cull_disabled;
 
 #include "res://src/world/shaders/vertex_pbr.gdshaderinc"
 #include "res://src/world/shaders/surface.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_RIM 0.12
+#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform sampler2D atlas : source_color, filter_linear_mipmap_anisotropic;
 uniform vec4 rug_sizes[2];

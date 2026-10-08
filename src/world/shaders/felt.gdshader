@@ -1,8 +1,11 @@
 // 牌桌桌布:细密绒面噪声 + 边缘压暗 + 金线刺绣圆环 + 绒面逆光光泽。
 shader_type spatial;
-render_mode diffuse_burley;
 
 #include "res://src/world/shaders/noise.gdshaderinc"
+// 柔和卡通光照(见 toon_light.gdshaderinc)
+#define TOON_RIM 0.3
+#define TOON_SHADOW_TINT vec3(0.86, 0.9, 1.0)
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 felt_color : source_color = vec3(0.04, 0.15, 0.095);
 uniform vec3 felt_edge : source_color = vec3(0.012, 0.05, 0.035);
