@@ -9,6 +9,7 @@ const OTHER_VIEW_DRAW_CALLS := 900
 
 const LIMITS := {
 	"seat": {"draw_calls": 700, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"fp": {"draw_calls": 700, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},   # 第一人称:同越肩
 	"menu": {"draw_calls": 800, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"opponent": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"closeup": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},

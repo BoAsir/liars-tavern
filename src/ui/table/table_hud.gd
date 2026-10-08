@@ -253,7 +253,7 @@ func set_actions(can_play: bool, can_challenge: bool, selected: int, my_turn: bo
 	elif selected > 0:
 		_hint.text = "已预选 %d 张,轮到你时按 Enter 出牌" % selected
 	else:
-		_hint.text = "可以先点选手牌预选 · WASD 探头 · T 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开" \
+		_hint.text = "可以先点选手牌预选 · WASD 探头 · V 切换视角 · T 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开" \
 			% OS.get_keycode_string(RulebookContent.HOTKEY)
 
 

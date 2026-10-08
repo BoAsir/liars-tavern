@@ -8,7 +8,7 @@ extends SceneTree
 # 每组打印整帧耗时、CPU 渲染线程耗时与可见 / 阴影 draw call、物体、图元。
 # --assert-budget:按 tools/perf_budget.gd 核对 budget 那一组(游戏实际渲染配置),超预算时退出码为 1。
 # --showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、7 个底池,约 900 枚筹码),
-# 机位 seat / overview 取自 TableWorld;德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(德州规格 §8)。
+# 机位 seat / overview 取自 TableWorld;第一人称 fp 两种展台都有(取自 TableWorld.first_person_view);德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(德州规格 §8)。
 
 const CameraViews := preload("res://tools/camera_views.gd")
 const PerfBudget := preload("res://tools/perf_budget.gd")
@@ -25,6 +25,7 @@ var _viewport: SubViewport
 var _tavern: Tavern
 var _post_fx: PostFx
 var _world: TableWorld = null   # 德州展台的牌桌:机位从它取
+var _liars_world: TableWorld = null   # 骗子酒馆展台的牌桌:第一人称机位 fp 从它取
 
 
 func _initialize() -> void:
@@ -59,6 +60,7 @@ func _run() -> void:
 	_viewport.add_child(showcase)
 	await showcase.build(_tavern)
 	_world = showcase.get("world") if kind == "poker" else null
+	_liars_world = showcase.get("world") if kind == "liars" else null
 	var rid := _viewport.get_viewport_rid()
 	RenderingServer.viewport_set_measure_render_time(rid, true)
 	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
@@ -327,6 +329,14 @@ func _measure() -> Dictionary:
 
 
 func _place_camera(view: String) -> bool:
+	if view == "fp" or view == "poker_fp":
+		# 第一人称(V 切换):自己的头只投影不渲染,手牌拿在镜头右下方
+		var fp_world := _world if _world != null else _liars_world
+		CameraViews.place_first_person(_tavern.camera_rig, fp_world, 1, view)
+		return true
+	for w in [_world, _liars_world]:
+		if w != null:
+			CameraViews.leave_first_person(w, 1)
 	if _world != null:
 		# 德州展台:本机座位 = 1 号的越肩或观战机位
 		var xform := _world.overview_view() if view == "overview" else _world.third_person_view(1)

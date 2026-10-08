@@ -13,6 +13,7 @@ extends Node
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
+#   --camera=first|third 本次运行的牌桌视角(第一人称 / 越肩),只覆盖本次、不写设置
 #   --update-from=IP:端口 从这个房主下载更新并装好,装好后打印 UPDATE_READY 退出(失败退出码 1)
 #   --update-url=网址    同上,但从任意更新源(如 BuildInfo.FEED_URL + 平台 + "/")
 
@@ -263,6 +264,9 @@ func _on_game_started(seats: Array) -> void:
 	var director = screen.get("director") if screen != null else null
 	if director is TableDirector:
 		director.event_started.connect(_on_director_event)
+		if opts.has("camera"):
+			director.seat_camera.set_first_person(opts["camera"] == "first", false)
+			_capture_once("seat", 3.0)
 
 
 func _on_director_event(ev: Dictionary) -> void:

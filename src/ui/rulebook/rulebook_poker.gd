@@ -214,6 +214,7 @@ static func _controls() -> Dictionary:
 				{"action": "散局(仅房主)", "mouse": "「散局」按钮", "keys": []},
 				{"action": "转头张望", "mouse": "移动鼠标", "keys": []},
 				{"action": "探头 / 缩回(脖子自动伸缩)", "mouse": "", "keys": ["W", "A", "S", "D"]},
+				{"action": "切换视角(越肩 / 第一人称)", "mouse": "", "keys": ["V"]},
 				RulebookContent.BANTER_KEYS[0],
 				RulebookContent.BANTER_KEYS[1],
 				{"action": "翻开说明书", "mouse": "「规则」按钮", "keys": [OS.get_keycode_string(RulebookContent.HOTKEY)]},

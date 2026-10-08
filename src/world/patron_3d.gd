@@ -56,6 +56,13 @@ const FAN_POS := Vector3(0, 0.46, -0.37)
 # 高度让牌扇停在回合横幅之上(座位坐标,相对髋部;越肩机位按它取景)
 const SELF_FAN_POS := Vector3(0.48, 0.88, 0.16)
 const SELF_FAN_SCALE := 1.25
+# 第一人称(V 切换,规格 2026-10-08-first-person-toggle):眼睛 = 头心(头枢轴上方 0.12)再往上、往桌心挪一点(座位坐标),
+# 落在大头里面靠前的位置——自己的头只投影不渲染,往下看时胸口与领口也在镜头后面。
+# 牌扇按镜头坐标摆在画面右下、像拿在手里(FP_FAN_CAM:右、下、前),跟着眼睛平移,探头、前倾时牌在画面里不动
+const FP_EYE_OFFSET := Vector3(0, 0.07, -0.12)
+const FP_FAN_CAM := Vector3(0.22, -0.12, -0.55)
+const FP_FAN_SCALE := 1.0
+const FP_SPEECH_AHEAD := Vector3(0, 0.12, -0.7)   # 第一人称时自己的快捷语气泡挂在眼前上方(座位坐标,相对眼睛):头顶在镜头背后
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
 const CHEER_BOUNCES := 3
 const CHEER_BOUNCE_TIME := 0.22
@@ -84,6 +91,9 @@ var body: Node3D
 var head: Node3D
 var fan: Node3D
 var _fan_alive = null   # 出局前牌扇的位置(Transform3D);reset_pose 时放回
+var _fan_fp = null      # 第一人称的牌扇(Transform3D,座位坐标,眼睛在 rest_eye 时):有值时牌扇每帧跟着眼睛平移,画面里不动
+var _head_hidden := false
+var _hidden_parts := {}  # 第一人称时藏起来的几何体 -> [原 cast_shadow, 原 layers](恢复用)
 var right_hand: Node3D
 
 var _arm_l: Node3D
@@ -357,6 +367,8 @@ func _update_neck(delta: float) -> void:
 	# 偏移按座位坐标给出:换到(前倾、出局时歪倒的)身体局部坐标,头才是水平地探出去
 	head.position = HEAD_PIVOT + body.quaternion.inverse() * _neck_offset
 	_fit_neck()
+	if _fan_fp != null and alive:
+		_place_fan_first_person()
 
 
 func _fit_neck() -> void:
@@ -375,12 +387,30 @@ func head_position() -> Vector3:
 	return head.global_transform * Vector3(0, 0.12, 0)
 
 
+func eye_position() -> Vector3:
+	# 第一人称的眼睛(全局)
+	return global_transform * eye_local()
+
+
+func eye_local() -> Vector3:
+	# 第一人称的眼睛(座位坐标):头心(不含转头,只含前倾、呼吸、蹦跳与脖子偏移)+ FP_EYE_OFFSET
+	return body.transform * (head.position + Vector3(0, 0.12, 0)) + FP_EYE_OFFSET
+
+
+static func rest_eye() -> Vector3:
+	# 坐着(SEATED_LEAN)、脖子没探出时的眼睛,座位坐标:第一人称镜头的朝向、手里牌扇的位置都按它定
+	return HIP + Basis(Vector3.RIGHT, -SEATED_LEAN) * (HEAD_PIVOT + Vector3(0, 0.12, 0)) + FP_EYE_OFFSET
+
+
 func nameplate_anchor() -> Vector3:
 	return global_transform * Vector3(0, NAMEPLATE_HEIGHT, 0.1)
 
 
 func speech_anchor() -> Vector3:
-	# 没有铭牌的人(越肩机位下的自己)快捷语气泡挂在头顶上方:跟着头晃、探头
+	# 没有铭牌的人(越肩机位下的自己)快捷语气泡挂在头顶上方:跟着头晃、探头。
+	# 第一人称坐在座位上(头藏着)时头顶在镜头背后,改挂在眼前上方
+	if _head_hidden:
+		return global_transform * (eye_local() + FP_SPEECH_AHEAD)
 	return head_position() + Vector3.UP * SPEECH_ABOVE_HEAD
 
 
@@ -443,7 +473,98 @@ func present_hand_to(viewer: Vector3) -> void:
 	var normal := (viewer - fan_world).normalized()
 	var bottom := -(Vector3.UP - normal * Vector3.UP.dot(normal)).normalized()
 	var world_basis := Basis(normal.cross(bottom), normal, bottom)
-	fan.transform = _in_seat(Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), fan_seat))
+	hold_fan(_in_seat(Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * SELF_FAN_SCALE), fan_seat)))
+
+
+func present_hand_first_person(seat: Transform3D, view: Transform3D, cam_offset := FP_FAN_CAM, fan_scale := FP_FAN_SCALE) -> void:
+	# 第一人称:牌扇拿在镜头右下方(cam_offset),牌面正对眼睛、牌顶朝画面上方;之后每帧跟着眼睛平移
+	# (探头、轮到自己前倾、呼吸都不会让牌在画面里挪动)。seat = 座位的静止变换,view = 脖子没探出时的第一人称机位
+	_fan_fp = first_person_fan(seat, view, cam_offset, fan_scale)
+	_place_fan_first_person()
+
+
+func hold_fan(xform: Transform3D) -> void:
+	# 越肩:自己的牌扇停在 xform(身体局部),不再跟着眼睛走
+	_fan_fp = null
+	fan.transform = xform
+
+
+func holds_fan_first_person() -> bool:
+	return _fan_fp != null
+
+
+func _place_fan_first_person() -> void:
+	# 座位坐标里的牌扇按眼睛离开 rest_eye 的位移平移,再换到身体局部(身体前倾、呼吸缩放都抵消掉)
+	var seat_xform: Transform3D = _fan_fp
+	seat_xform.origin += eye_local() - rest_eye()
+	fan.transform = body.transform.affine_inverse() * seat_xform
+
+
+static func first_person_fan(seat: Transform3D, view: Transform3D, cam_offset: Vector3, fan_scale: float) -> Transform3D:
+	# 纯函数:第一人称手里的牌扇在座位坐标里的变换(德州的底牌也用它,只是 cam_offset 不同)。
+	# 位置 = 机位 × cam_offset;牌面法线指向眼睛、牌顶朝镜头的上方;放大 fan_scale
+	var fan_world := view * cam_offset
+	var normal := (view.origin - fan_world).normalized()
+	var up := view.basis.y.normalized()
+	var bottom := -(up - normal * up.dot(normal)).normalized()
+	var world_basis := Basis(normal.cross(bottom), normal, bottom)
+	var seat_basis := seat.basis.orthonormalized()
+	return Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * fan_scale),
+		seat_basis.inverse() * (fan_world - seat.origin))
+
+
+# —— 第一人称:藏起自己的头 ——
+
+func set_head_hidden(hidden: bool) -> void:
+	# 只在本机:头、眼、眉、耳、帽、脖子与挂在头上的表演件(汗珠、舌头……)不渲染,但照样投影(自己的影子还在桌上)。
+	# 本来就不投影的(眼睛、眉、汗珠)挪到镜头不看的 LAYER_LOCAL_HIDDEN;藏着期间新挂到头上的东西(番茄印子等)也一并处理。
+	# 恢复时按记下的原值放回,即使帽子已经被打飞、挂到了别处
+	if hidden == _head_hidden:
+		return
+	_head_hidden = hidden
+	if hidden:
+		for root: Node in [head, _neck]:
+			for node in root.find_children("*", "GeometryInstance3D", true, false):
+				_hide_part(node)
+		if is_inside_tree():
+			get_tree().node_added.connect(_on_node_added)
+	else:
+		if is_inside_tree() and get_tree().node_added.is_connected(_on_node_added):
+			get_tree().node_added.disconnect(_on_node_added)
+		for node in _hidden_parts:
+			if is_instance_valid(node):
+				node.cast_shadow = _hidden_parts[node][0]
+				node.layers = _hidden_parts[node][1]
+		_hidden_parts.clear()
+
+
+func is_head_hidden() -> bool:
+	return _head_hidden
+
+
+func _hide_part(node: GeometryInstance3D) -> void:
+	if _hidden_parts.has(node) or not is_instance_valid(node):
+		return
+	_hidden_parts[node] = [node.cast_shadow, node.layers]
+	if node.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+		node.layers = MeshKit.LAYER_LOCAL_HIDDEN   # 镜头不看这一层;它本来就不投影
+	else:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+
+
+func _on_node_added(node: Node) -> void:
+	# 延后一帧处理:挂件常在 add_child 之后才设 cast_shadow
+	if node is GeometryInstance3D and (head.is_ancestor_of(node) or _neck.is_ancestor_of(node)):
+		_hide_added.call_deferred(node)
+
+
+func _hide_added(node: GeometryInstance3D) -> void:
+	if _head_hidden and is_instance_valid(node) and (head.is_ancestor_of(node) or _neck.is_ancestor_of(node)):
+		_hide_part(node)
+
+
+func _exit_tree() -> void:
+	set_head_hidden(false)
 
 
 func pose_arms(left_target: Vector3, right_target: Vector3, duration: float) -> Tween:
@@ -688,6 +809,7 @@ func reset_pose() -> void:
 	_set_fist(false)
 	right_hand.quaternion = Quaternion.IDENTITY
 	_steady = false
+	set_head_hidden(false)   # 镜头若仍在第一人称,SeatCamera 下一帧再藏
 	body.position = HIP
 	if _fan_alive != null:
 		fan.transform = _fan_alive

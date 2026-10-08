@@ -307,6 +307,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_confirm_leave()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V:
+		# V 切换越肩 / 第一人称:出局后也能改设置(观战机位不变,下次回到座位生效);快捷语面板开着时不切
+		get_viewport().set_input_as_handled()
+		var banter = app.get("banter_view")
+		if banter == null or not banter.is_panel_open():
+			director.toggle_camera_mode()
+		return
 	if _dead.has(my_pid):
 		return
 	if event is InputEventMouseMotion:
