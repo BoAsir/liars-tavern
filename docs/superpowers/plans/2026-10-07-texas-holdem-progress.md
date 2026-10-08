@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 10:00)
+## 状态(2026-10-08 10:40)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -23,14 +23,15 @@
 | 3 玩法接入 | ✅ th/modes 完成、审查通过、修完 | 协议 v4(合并时改 v5)、兼容旧版的发现报文(cap/seated/mode/playing)、check_join 新顺序、rpc_join_accepted 带 mode、主菜单 ModePicker、房间行 RoomRow、等待厅、Settings.KEY_LAST_MODE、RPC 编号冻结测试 |
 | 4 视线抽取 | ✅ th/gaze 完成 | SeatGaze;已合并到 feature/texas-holdem(cc18285),之后又有一个修复提交(探头不往后探)待合并 |
 | 5 说明书 | ✅ th/rulebook 完成、审查通过、修完 | 两本书页签、hands 牌型表、按书记页、README 写明开房后不能改玩法 |
-| 合并第一批 | ⏳ 下一步 | 见下方「合并清单」 |
-| 6 网络会话 | ⬜ 未开始 | 脚本已备好:`scratchpad/wave2.js`(临时目录,换机器需重写;内容按计划任务 6/7 的提示词) |
-| 7 德州牌桌界面 | ⬜ 未开始 | 拆成 7a HUD 控件、7b 控制器与演出导演(7b 等 7a 合并后开始) |
+| 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
+| 6 网络会话 | ⏳ 进行中 | worktree `th-net`(分支 th/net),从 102f73a 分出 |
+| 7a HUD 控件 | ⏳ 进行中 | worktree `th-hud`(分支 th/hud),从 102f73a 分出 |
+| 7b 控制器与演出 | ⬜ 等 7a 合并后开始 | 分支 th/screen |
 | 8 bot 与冒烟 | ⬜ 未开始 | |
 | 9 联调与截图验收 | ⬜ 未开始 | |
 | 10 审查 | ⬜ 未开始 | |
 
-## 合并清单(第一批 → feature/texas-holdem)
+## 合并清单(第一批 → feature/texas-holdem)—— 已完成,留作记录
 
 1. 依次合并 `th/gaze`、`th/rulebook`、`th/faces`、`th/modes`、`th/engine`、`th/world`,每次跑全量测试
    (`$GODOT --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit`)。
