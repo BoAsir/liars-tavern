@@ -24,6 +24,27 @@ const SPECIES := [
 		"fur": Color(0.46, 0.47, 0.52), "muzzle": Color(0.88, 0.87, 0.85), "dark": Color(0.1, 0.1, 0.12),
 		"coat": Color(0.3, 0.22, 0.38), "accent": Color(0.42, 0.66, 0.72), "hat": "cowboy", "ears": "cat",
 	},
+	# 以下四种是子项目②新增:顺序与 Species.IDS 一致(下标随协议冻结);造型在 ②d 按物种配方重做
+	{
+		"id": "turtle", "label": "乌龟",
+		"fur": Color(0.42, 0.55, 0.28), "muzzle": Color(0.76, 0.68, 0.42), "dark": Color(0.4, 0.33, 0.18),
+		"coat": Color(0.55, 0.16, 0.12), "accent": Color(0.78, 0.62, 0.3), "hat": "bowler", "ears": "none",
+	},
+	{
+		"id": "alpaca", "label": "羊驼",
+		"fur": Color(0.78, 0.66, 0.5), "muzzle": Color(0.8, 0.74, 0.62), "dark": Color(0.35, 0.26, 0.18),
+		"coat": Color(0.7, 0.16, 0.14), "accent": Color(0.25, 0.6, 0.58), "hat": "cap", "ears": "pointy",
+	},
+	{
+		"id": "monkey", "label": "猴子",
+		"fur": Color(0.42, 0.26, 0.14), "muzzle": Color(0.8, 0.62, 0.48), "dark": Color(0.16, 0.09, 0.05),
+		"coat": Color(0.7, 0.12, 0.1), "accent": Color(0.82, 0.62, 0.25), "hat": "cap", "ears": "round",
+	},
+	{
+		"id": "crocodile", "label": "鳄鱼",
+		"fur": Color(0.24, 0.46, 0.22), "muzzle": Color(0.76, 0.7, 0.45), "dark": Color(0.1, 0.16, 0.08),
+		"coat": Color(0.22, 0.22, 0.24), "accent": Color(0.72, 0.16, 0.12), "hat": "cowboy", "ears": "none",
+	},
 ]
 
 
@@ -33,10 +54,7 @@ static func species(index: int) -> Dictionary:
 
 static func first_free_species(used: Array) -> int:
 	# 新酒客取第一个没人用的物种,同桌不撞脸;物种全被占用(人数超过物种数)时才轮流重复
-	for i in SPECIES.size():
-		if not used.has(i):
-			return i
-	return posmod(used.size(), SPECIES.size())
+	return Species.first_free(used)
 
 
 # —— 调色板:部件键 → [sRGB 颜色, 粗糙度, 金属度] ——

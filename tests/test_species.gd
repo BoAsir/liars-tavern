@@ -1,0 +1,46 @@
+extends GutTest
+# 物种目录(网络与场景共用):下标就是网络上传的值,协议 v5 起冻结;同桌不撞脸,先取第一个空着的。
+
+
+func test_catalog_has_eight_unique_species_in_frozen_order():
+	assert_eq(Species.IDS, ["fox", "bear", "pig", "cat", "turtle", "alpaca", "monkey", "crocodile"])
+	assert_eq(Species.LABELS.size(), Species.IDS.size())
+	assert_eq(Species.count(), 8)
+
+
+func test_index_of_round_trips():
+	for i in Species.count():
+		assert_eq(Species.index_of(Species.IDS[i]), i)
+	assert_eq(Species.index_of("dragon"), Species.UNASSIGNED)
+
+
+func test_is_valid_accepts_only_in_range_ints():
+	assert_true(Species.is_valid(0))
+	assert_true(Species.is_valid(7))
+	for bad in [-1, 8, 999, 2.0, "fox", null]:
+		assert_false(Species.is_valid(bad), str(bad))
+
+
+func test_sanitize_turns_bad_values_into_unassigned():
+	assert_eq(Species.sanitize(3), 3)
+	for bad in [-1, 8, "x", null, 1.5]:
+		assert_eq(Species.sanitize(bad), Species.UNASSIGNED, str(bad))
+
+
+func test_first_free_starts_from_zero_and_fills_gaps():
+	assert_eq(Species.first_free([]), 0)
+	assert_eq(Species.first_free([0, 2]), 1)
+	assert_eq(Species.first_free([1, 0, 3]), 2)
+
+
+func test_first_free_wraps_only_when_every_species_is_taken():
+	var all := range(Species.count())
+	assert_eq(Species.first_free(all), 0)
+	assert_eq(Species.first_free(all + [0]), 1)
+
+
+func test_patron_species_table_follows_the_catalog_order():
+	assert_eq(PatronParts.SPECIES.size(), Species.count())
+	for i in Species.count():
+		assert_eq(PatronParts.species(i)["id"], Species.IDS[i])
+		assert_eq(PatronParts.species(i)["label"], Species.LABELS[i])
