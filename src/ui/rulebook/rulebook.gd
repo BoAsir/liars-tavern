@@ -8,7 +8,8 @@ extends ColorRect
 
 signal closed
 # 翻开或切到某本书。德州牌面在后台生成(规格 §5.2「说明书翻到德州那本」时开始),
-# 生成完之前示例小牌是占位色块:监听方据此开始生成,完成后调用 refresh_card_faces()
+# 生成完之前示例小牌是占位色块。接线在 main(任务 7 合并时接上):
+# book_shown(德州那本) → PokerFaces.build();PokerFaces.built_signal() → refresh_card_faces()
 signal book_shown(book: String)
 
 const HOTKEY := RulebookContent.HOTKEY

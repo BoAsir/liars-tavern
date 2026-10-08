@@ -1,12 +1,15 @@
 class_name RulebookPoker
 # 说明书的德州扑克那本(长牌、短牌共用):按章节组织的纯数据,由 Rulebook 渲染,块类型见 RulebookContent。
-# 规则数字全部取自 PokerRules 与 Protocol.TURN_TIMEOUT(挂机离座的次数引擎还没有常量,暂记在 AWAY_TIMEOUTS),
-# 规则改动时说明书自动跟随;例子里的金额按大盲的倍数算,改了盲注也自洽。
+# 规则数字全部取自 PokerRules 与 Protocol.TURN_TIMEOUT,规则改动时说明书自动跟随;
+# 例子里的金额按大盲的倍数算,改了盲注也自洽。下面两个常量在规则引擎(任务 1)里才有归宿,
+# 这里的副本必须与之相同,引擎合并后改用引擎的:
+#   HAND_SIZE     = HandEvaluator.HAND_SIZE
+#   AWAY_TIMEOUTS = PokerRules.AWAY_AFTER_TIMEOUTS
 # 界面字体里没有花色字形(规格 §6.1):文案不写花色符号,具体的牌由 hands 块画成小牌。
 
 
 const HAND_SIZE := 5                       # 牌型由 5 张牌组成:示例每行 5 张,顺子是 5 个相连的点数
-const AWAY_TIMEOUTS := 2                   # 连续这么多次超时就离座(规格 §2.8);规则引擎有了对应常量后改用它
+const AWAY_TIMEOUTS := 2                   # 连续这么多次超时就离座(规格 §2.8)
 # 例子里的金额(以大盲计,不是规则)
 const RAISE_EXAMPLE_BLINDS := 3            # 翻牌前有人加注到 3 个大盲
 const REFUND_EXAMPLE_BLINDS := [15, 5]     # 你下注 15 个大盲,对手全下只跟了 5 个
