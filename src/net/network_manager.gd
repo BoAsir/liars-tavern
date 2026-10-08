@@ -1,6 +1,6 @@
 extends Node
 # 网络管理(autoload "Net"):房主权威 listen-server。
-# 房主持有等待厅名单与唯一的会话对象(LiarsSession / PokerSession,规格 §4.2);客户端只发意图、收视图与事件。
+# 房主持有等待厅名单与唯一的会话对象(LiarsSession / PokerSession / BombCatSession,规格 §4.2);客户端只发意图、收视图与事件。
 # 这里只管连接、等待厅、RPC 收发与计时器,玩法逻辑都在会话里。
 # UI 层只使用本类的公开方法、只读属性与信号,不直接触碰 multiplayer API。
 # 点对点的 RPC 一律经 _send_to 发出:对方没连着就不发(离线测试里对未知 peer 调 rpc_id 会报引擎错误)。
@@ -554,7 +554,7 @@ func start_game() -> void:
 	_lobby.assign_unassigned()
 	var order := _lobby.seat_order()
 	seats = _seat_entries(order, _lobby.names())
-	_session = PokerSession.new(game_mode) if GameMode.is_poker(game_mode) else LiarsSession.new()
+	_session = _new_session(game_mode)
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var events := _session.start(order, _lobby.names(), rng)
@@ -563,6 +563,15 @@ func start_game() -> void:
 	# 各端进入牌桌先播开场运镜,第一局的发牌演出排在它后面
 	_anim_left = Pacing.INTRO
 	_after_action(events)
+
+
+static func _new_session(mode: String) -> GameSession:
+	# 按玩法建会话:德州(长牌 / 短牌)、炸弹猫,其余是骗子酒馆
+	if GameMode.is_poker(mode):
+		return PokerSession.new(mode)
+	if GameMode.is_bomb_cat(mode):
+		return BombCatSession.new()
+	return LiarsSession.new()
 
 
 func _seat_entries(order: Array, names := {}) -> Array:
@@ -713,6 +722,42 @@ func _handle_poker_rpc(pid: int, action: Variant, amount: Variant) -> void:
 	_handle_intent(pid, {"kind": action, "amount": amount})
 
 
+# —— 意图(字典式,目前只有炸弹猫,设计稿 §2):{"kind": "play" | "nope" | "draw" | "reinsert" | "give", ...} ——
+# 骗子酒馆与德州仍走各自的 RPC(行为不变);这个入口在别的玩法里一律拒绝
+
+func submit_session_intent(intent: Dictionary) -> void:
+	if not in_game:
+		return
+	if is_host:
+		_handle_session_rpc(HOST_ID, intent)
+	else:
+		_send_to(HOST_ID, "rpc_session_intent", [intent])
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_session_intent(intent) -> void:
+	# 参数不加类型:来自不可信对端,在 _handle_session_rpc 里校验。
+	# 方法名排在 rpc_join_request 之后(叫 rpc_bomb_cat_intent 会排到最前,挤动握手消息的编号)
+	if is_host:
+		_handle_session_rpc(multiplayer.get_remote_sender_id(), intent)
+
+
+func _handle_session_rpc(pid: int, intent: Variant) -> void:
+	if not in_game or _session == null:
+		return
+	var error := ""
+	if not _lobby.has(pid):
+		error = "not_seated"
+	elif not GameMode.is_bomb_cat(game_mode):
+		error = BombCatState.ERR_INVALID_INTENT
+	else:
+		error = BombCatSession.check_intent(intent)
+	if error != "":
+		_reject(pid, error)
+		return
+	_handle_intent(pid, intent)
+
+
 func _handle_intent(pid: int, intent: Dictionary) -> void:
 	if _session == null or not in_game:
 		return
@@ -822,7 +867,8 @@ func rpc_look_relay(pid: int, point: Vector3, neck: Vector3, active: bool) -> vo
 		gaze_updated.emit(pid, point, neck, active)
 
 
-# —— 回合限时(仅房主):超时代打由会话决定(骗子酒馆出手牌第一张;德州能过牌就过牌,否则弃牌) ——
+# —— 回合限时(仅房主):超时代打由会话决定(骗子酒馆出手牌第一张;德州能过牌就过牌,否则弃牌;
+# 炸弹猫按步骤:结算反应窗口 / 随机塞回 / 随机给牌 / 直接摸牌) ——
 
 func _on_turn_timeout() -> void:
 	if _session == null or not _session.has_turn():
