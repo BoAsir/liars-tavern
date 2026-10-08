@@ -15,6 +15,7 @@ const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
 # 翻牌机位朝出牌者偏转的权重(0 = 只看翻牌行,1 = 只看出牌者头部)
 const REVEAL_LIAR_WEIGHT_FRONT := 0.35
 const REVEAL_LIAR_WEIGHT_SIDE := 0.2
+const EMPTY_CHAIRS := 4        # 主菜单(没有酒客时)牌桌旁摆的空椅子
 
 var tavern: Tavern
 var cards: CardTable
@@ -23,6 +24,7 @@ var revolvers := {}    # pid -> Revolver3D
 var seat_angles := {}  # pid -> float
 var my_pid := 0
 var _show_self := true
+var _empty_chairs: Array[MeshInstance3D] = []
 
 
 func _init(p_tavern: Tavern) -> void:
@@ -32,6 +34,12 @@ func _init(p_tavern: Tavern) -> void:
 func _ready() -> void:
 	cards = CardTable.new(self)
 	add_child(cards)
+	# 主菜单第一眼不再是一张光秃秃的桌子:没有酒客时摆上空椅子(共用酒客椅子的网格)
+	for i in EMPTY_CHAIRS:
+		var chair := MeshKit.add(self, PatronParts.chair_mesh(), null)
+		chair.name = "EmptyChair%d" % i
+		chair.transform = seat_transform(TAU * i / EMPTY_CHAIRS)
+		_empty_chairs.append(chair)
 
 
 # —— 座位 ——
@@ -40,6 +48,7 @@ func arrange(players: Array, p_my_pid: int, show_self: bool, with_revolvers: boo
 	# players: [{"pid", ...}] 按座位顺序;新玩家弹出登场,离开的玩家消失
 	my_pid = p_my_pid
 	_show_self = show_self
+	_show_empty_chairs(false)
 	var order := players.map(func(p): return p["pid"])
 	var my_index := maxi(order.find(my_pid), 0)
 	for pid in patrons.keys():
@@ -121,6 +130,12 @@ func clear() -> void:
 	seat_angles = {}
 	cards.clear_all()
 	_clear_debris()
+	_show_empty_chairs(true)
+
+
+func _show_empty_chairs(shown: bool) -> void:
+	for chair in _empty_chairs:
+		chair.visible = shown
 
 
 func _clear_debris() -> void:

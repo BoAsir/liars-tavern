@@ -112,3 +112,27 @@ func test_clear_removes_knocked_off_hats():
 	world.patrons[2].die()
 	world.clear()
 	assert_eq(_debris().size(), 0)
+
+
+# —— 主菜单空椅子 ——
+
+func _empty_chairs() -> Array:
+	return world.get_children().filter(func(n: Node) -> bool: return String(n.name).begins_with("EmptyChair"))
+
+
+func test_cleared_table_shows_four_shared_empty_chairs():
+	world.clear()
+	var chairs := _empty_chairs()
+	assert_eq(chairs.size(), 4)
+	for chair: MeshInstance3D in chairs:
+		assert_true(chair.visible)
+		assert_same(chair.mesh, chairs[0].mesh, "共用一份椅子网格(自动实例化)")
+
+
+func test_arranging_players_hides_the_empty_chairs():
+	_arrange([1, 2])
+	for chair: MeshInstance3D in _empty_chairs():
+		assert_false(chair.visible, "有真人酒客时空椅子收起(酒客自带椅子)")
+	world.clear()
+	for chair: MeshInstance3D in _empty_chairs():
+		assert_true(chair.visible)

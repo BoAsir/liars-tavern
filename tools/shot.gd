@@ -1,7 +1,7 @@
 extends SceneTree
 # 视觉检查:搭建酒馆并按指定机位截图(需要窗口渲染,不能 --headless)。
 # 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase] [--stats]
-# --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
+# --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具;--scene=menu 时是主菜单状态(空牌桌与空椅子)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
@@ -37,7 +37,11 @@ func _run() -> void:
 	RenderBudget.apply(root)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
-	if opts.has("showcase"):
+	if opts.get("scene", "") == "menu":
+		var world := TableWorld.new(tavern)
+		tavern.table_root.add_child(world)
+		world.clear()
+	elif opts.has("showcase"):
 		var script: GDScript = load("res://tools/showcase.gd")
 		var showcase: Node = script.new()
 		root.add_child(showcase)
