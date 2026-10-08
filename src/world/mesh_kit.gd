@@ -15,6 +15,7 @@ const SMALL_CASTER := 0.08   # 米:节点自身变换下网格包围盒最大边
 # 可见层(位值):月光只让窗框与窗墙投影(Light3D.shadow_caster_mask = LAYER_MOON)
 const LAYER_WORLD := 1    # 编辑器第 1 层,所有物体的默认层
 const LAYER_MOON := 4     # 编辑器第 3 层
+const LAYER_SCENERY := 8  # 编辑器第 4 层:房间布景(地板、墙、木构、墙饰),不进任何灯的 caster mask;接地贴花只投到这一层
 
 static var _cache := {}   # key -> 只读 PrimitiveMesh
 
