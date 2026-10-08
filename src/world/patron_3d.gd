@@ -31,15 +31,18 @@ const SLAM_SPREAD := 0.08
 # 出牌手势:双手抬离桌面、朝桌心前推(座位坐标)
 const REACH_POINT := Vector3(0.06, SeatLayout.TABLE_TOP + 0.14, -0.75)
 const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
-# 举枪:手在以肩为心、一臂长的球面上,沿 GUN_APPROACH(头局部,从头心指向举枪的一侧)一族方向找手位,
-# 使枪管轴线穿过头心时枪口离头心 = 物种的持枪净空 gun_clearance + GUN_CLEARANCE(枪口贴在太阳穴外 8 mm)。
-# HAND_GUN_HEAD 是默认净空下的解(= gun_hand_target(DEFAULT_GUN_CLEARANCE)),测试校验
+# —— 举枪几何(枪口相对头心的位置全在这一处)——
+# 手在以肩为心、一臂长的球面上,沿 GUN_APPROACH(头局部,从头心指向举枪的一侧)一族方向找手位,
+# 使枪管轴线穿过头心时枪口离头心 = 持枪净空 + GUN_CLEARANCE(枪口贴在太阳穴外 8 mm)。
+# 持枪净空 = 物种表的 gun_clearance(按实际头部网格量的,已含头的缩放);没给时用下面头缩放 1.0 时的实测值
+# 乘以 head_scale()(头绕头心等比放大,太阳穴表面跟着往外移)。HAND_GUN_HEAD 是头缩放 1.0、默认净空下的解
+# (= gun_hand_target(DEFAULT_GUN_CLEARANCE)),测试校验;运行时一律现算
 const GUN_CLEARANCE := 0.008
 const DEFAULT_GUN_CLEARANCE := 0.17
 const GUN_APPROACH := Vector3(0.9656, 0.2414, -0.0966)   # = Vector3(1, 0.25, -0.1).normalized()
 const HAND_GUN_HEAD := Vector3(0.4386, 0.8456, -0.0615)
-# 物种表(子项目②)还没给 gun_clearance 时的实测值:按举枪流程搜出的最小净空(含抖耳 −0.3)再留 3–5 mm;
-# 没列出的物种用默认值。②在物种数据里给出 gun_clearance 后以那边为准
+# 物种表(子项目②)还没给 gun_clearance 时的实测值(头缩放 1.0):按举枪流程搜出的最小净空(含抖耳 −0.3)
+# 再留 3–5 mm;没列出的物种用默认值
 const GUN_CLEARANCE_FALLBACK := {"fox": 0.175, "bear": 0.188, "pig": 0.175}
 const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心的时长
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
@@ -478,10 +481,23 @@ func raise_gun_to_head(gun: Node3D, duration: float) -> void:
 
 
 func _gun_clearance() -> float:
-	# 物种的持枪净空(头心沿举枪方向到头部最外表面的距离,含毛、耳朵、帽子);没给时取默认头半径
-	var spec := PatronParts.species(species_index)
-	var fallback: float = GUN_CLEARANCE_FALLBACK.get(spec.get("id", ""), DEFAULT_GUN_CLEARANCE)
-	return spec.get("gun_clearance", _look_data.get("gun_clearance", fallback))
+	return gun_clearance_for(species_index)
+
+
+static func gun_clearance_for(index: int) -> float:
+	# 物种的持枪净空(头心沿举枪方向到头部最外表面的距离,含毛、耳朵、帽子)
+	var spec := PatronParts.species(index)
+	if spec.has("gun_clearance"):
+		return spec["gun_clearance"]
+	var look := SpeciesLooks.look(index)
+	if look.has("gun_clearance"):
+		return look["gun_clearance"]
+	return GUN_CLEARANCE_FALLBACK.get(spec.get("id", ""), DEFAULT_GUN_CLEARANCE) * head_scale()
+
+
+static func head_scale() -> float:
+	# 酒客头的等比缩放(子项目② 的大头版会加 PatronParts.HEAD_SCALE;没有时为 1.0)
+	return float((PatronParts as Script).get_script_constant_map().get("HEAD_SCALE", 1.0))
 
 
 static func gun_aim(origin: Vector3, center: Vector3) -> Basis:

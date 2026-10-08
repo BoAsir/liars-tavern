@@ -149,4 +149,7 @@ func test_muzzle_rests_against_the_temple_not_inside_the_head():
 		await patron.pick_up(gun, 0.05)
 		await patron.raise_gun_to_head(gun, 0.05)
 		var gap := gun.muzzle_transform().origin.distance_to(patron.head_position())
-		assert_between(gap, 0.172, 0.2, "%s 枪口到头心" % PatronParts.species(patron.species_index)["id"])
+		# 枪口贴在太阳穴外(持枪净空 + 2~25 mm):头缩放 1.0 时就是原来的 0.172–0.20
+		var r := Patron.gun_clearance_for(patron.species_index)
+		assert_between(gap, r + 0.002, r + 0.025, "%s 枪口到头心" % PatronParts.species(patron.species_index)["id"])
+		assert_between(gap, 0.172 * Patron.head_scale(), 0.20 * Patron.head_scale(), "不插进头里,也不离太远")
