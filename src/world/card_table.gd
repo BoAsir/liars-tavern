@@ -17,6 +17,9 @@ const SWEEP_FLIGHT := 0.4
 const LIFT_HOVER := 0.012
 const LIFT_SELECTED := 0.032
 const REVEAL_Z := 0.44
+# 平放在桌上的牌:背面也要高出毡面(FELT_TOP)一点,否则和毡面抢深度,时隐时现
+const PILE_STEP := 0.0011
+const REVEAL_Y := SeatLayout.FELT_TOP + Card3D.GAP + 0.0004
 const STAND_HEIGHT := 0.1
 const STAND_SPIN := 0.45
 # 卡牌本地系(+Y 法线, -Z 牌顶)→ 竖立面向持牌者:X→右,Y→朝向持牌者,Z→向下
@@ -131,6 +134,11 @@ func _fan_of(pid: int) -> Node3D:
 	return world.patrons[pid].fan if world.patrons.has(pid) else null
 
 
+static func pile_y(index: int) -> float:
+	# 牌堆第 index 张牌的高度(自下而上叠放)
+	return REVEAL_Y + index * PILE_STEP
+
+
 static func fan_slot(i: int, count: int, lift: float) -> Transform3D:
 	var slot: Dictionary = SeatLayout.fan_slots(count)[i]
 	var basis := Basis(Vector3.UP, slot["rot"])
@@ -192,7 +200,7 @@ func play(pid: int, count: int, my_indices: Array) -> void:
 	for card in nodes:
 		card.reparent(self, true)
 		var off := SeatLayout.pile_offset(pile.size(), _pile_seed)
-		var pos := Vector3(off["pos"].x, SeatLayout.TABLE_TOP + 0.003 + pile.size() * 0.0011, off["pos"].y)
+		var pos := Vector3(off["pos"].x, pile_y(pile.size()), off["pos"].y)
 		var basis := Basis(Vector3.UP, off["rot"]) * Basis(Vector3.BACK, PI)
 		pile.append(card)
 		card.set_glow(0.0)
@@ -251,7 +259,7 @@ func gather_for_reveal(count: int) -> void:
 	for i in revealed.size():
 		var card: Card3D = revealed[i]
 		pile.erase(card)
-		var pos := Vector3(xs[i], SeatLayout.TABLE_TOP + 0.004, REVEAL_Z)
+		var pos := Vector3(xs[i], REVEAL_Y, REVEAL_Z)
 		tween = card.fly_to(Transform3D(Basis(Vector3.BACK, PI), pos), 0.38, 0.1)
 	sfx.emit("slide")
 	if tween != null:

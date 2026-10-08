@@ -5,6 +5,8 @@ class_name SeatLayout
 
 const TABLE_RADIUS := 0.95
 const TABLE_TOP := 0.78
+const FELT_TOP := TABLE_TOP + 0.004   # 桌布顶面(桌布 4 mm 厚,铺在桌面上):平放在桌上的牌和枪都要高于它
+const FELT_RADIUS := 0.82
 const SEAT_RADIUS := 1.25
 const PILE_INNER := 0.13
 const PILE_OUTER := 0.31

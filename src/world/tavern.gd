@@ -181,8 +181,10 @@ func _build_table() -> void:
 		Vector3(0, top_y - 0.075, 0))
 	MeshKit.add(table, MeshKit.torus(r - 0.012, r + 0.008, 96), WorldMaterials.brass(), Vector3(0, top_y, 0),
 		Vector3.ZERO, Vector3(1, 0.35, 1))
-	var felt := MeshKit.add(table, MeshKit.cylinder(0.82, 0.82, 0.004, 96), WorldMaterials.felt(),
-		Vector3(0, top_y + 0.002, 0))
+	var felt_thickness := SeatLayout.FELT_TOP - top_y
+	var felt := MeshKit.add(table, MeshKit.cylinder(SeatLayout.FELT_RADIUS, SeatLayout.FELT_RADIUS, felt_thickness, 96),
+		WorldMaterials.felt(), Vector3(0, top_y + felt_thickness / 2.0, 0))
+	felt.name = "Felt"
 	felt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	MeshKit.add(table, MeshKit.cylinder(0.09, 0.13, 0.62, 24), WorldMaterials.wood("dark"), Vector3(0, 0.41, 0))
 	MeshKit.add(table, MeshKit.cylinder(0.16, 0.16, 0.06, 24), WorldMaterials.brass(), Vector3(0, 0.66, 0))

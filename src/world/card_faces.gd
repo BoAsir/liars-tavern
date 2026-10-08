@@ -24,6 +24,15 @@ static var _textures := {}
 static var _building := false
 
 
+static func chamber_points(center: Vector2, radius: float) -> PackedVector2Array:
+	# 牌背上的弹巢:孔数与规则的膛数一致,第一个孔在正上方
+	var points := PackedVector2Array()
+	for i in Revolver.CHAMBERS:
+		var a := -PI / 2 + TAU * i / Revolver.CHAMBERS
+		points.append(center + Vector2(cos(a), sin(a)) * radius)
+	return points
+
+
 static func texture(kind: int) -> Texture2D:
 	if _textures.has(kind):
 		return _textures[kind]
@@ -248,9 +257,7 @@ class CardPainter:
 		draw_circle(center, 86.0, Color(0.12, 0.02, 0.03))
 		draw_arc(center, 86.0, 0.0, TAU, 96, CardFaces.GOLD, 4.0, true)
 		draw_arc(center, 74.0, 0.0, TAU, 96, Color(CardFaces.GOLD, 0.5), 1.5, true)
-		for i in 6:
-			var a := -PI / 2 + TAU * i / 6.0
-			var p := center + Vector2(cos(a), sin(a)) * 44.0
+		for p in CardFaces.chamber_points(center, 44.0):
 			draw_circle(p, 15.0, CardFaces.GOLD)
 			draw_circle(p, 10.0, Color(0.08, 0.01, 0.02))
 		draw_circle(center, 9.0, CardFaces.GOLD)
