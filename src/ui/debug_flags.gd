@@ -9,7 +9,7 @@ extends Node
 #   --room=房名          房主的房间名
 #   --autojoin=IP[:端口] 自动直连
 #   --discover[=房名]    自动加入局域网发现的(指定名字的)房间
-#   --bot                自动准备/选牌/出牌/质疑(走真实界面路径)
+#   --bot                自动准备/选牌/出牌/质疑(走真实界面路径);开局后朝别人丢一个番茄、按 Q 说一句快捷语
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
@@ -22,6 +22,8 @@ const CHALLENGE_CHANCE := 0.35
 const BOT_FIDGET := 1.5    # bot 按住 W 探头、松开、按住 S 收回、松开,每步这么久(秒);冒烟测试据此确认脖子偏移走通了网络
 const BOT_FIDGET_KEYS := [KEY_W, KEY_S]
 const SHOT_SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛)
+const BOT_BANTER_DELAY := 2.0  # 开局后 bot 过这么久丢番茄,再过 BOT_SAY_DELAY 说快捷语(冒烟测试核对各端都收到)
+const BOT_SAY_DELAY := 1.8
 
 var app: Node
 var opts := {}
@@ -32,6 +34,8 @@ var _gaze_from := {}   # 收到过谁的视线同步(冒烟测试据此确认视
 var _neck_from := {}   # 收到过谁伸出的脖子
 var _fidget_timer := BOT_FIDGET
 var _fidget_step := 0
+var _tomato_from := {}   # 收到过谁丢的番茄(冒烟测试据此确认丢番茄走通)
+var _said_from := {}     # 收到过谁说的快捷语
 
 
 func _init(p_app: Node) -> void:
@@ -90,6 +94,8 @@ func _ready() -> void:
 		_gaze_from[pid] = true
 		if neck != Vector3.ZERO:
 			_neck_from[pid] = true)
+	Net.banter.tomato_thrown.connect(func(from_pid: int, _target: int, _seed: int): _tomato_from[from_pid] = true)
+	Net.banter.said.connect(func(pid: int, _phrase: int): _said_from[pid] = true)
 	Net.join_failed.connect(_fail.bind("join_failed"))
 	Net.left_lobby.connect(_on_left)
 	if opts.has("shots"):
@@ -187,6 +193,32 @@ func _bot_act(screen: Node) -> void:
 	screen._submit_play()
 
 
+func _bot_banter(seats: Array) -> void:
+	# 走真实界面:光标移到下家的头上按 T(界面按屏幕投影选目标),再按 Q 打开快捷语面板、按数字说出
+	await get_tree().create_timer(BOT_BANTER_DELAY + randf() * 0.5).timeout
+	var order := seats.map(func(s): return s["pid"])
+	var me := order.find(Net.my_pid())
+	var target: int = order[(me + 1) % order.size()]
+	var view: BanterView = app.get("banter_view")
+	var world: TableWorld = app.get("world")
+	if view != null and world != null and world.patrons.has(target):
+		var camera: Camera3D = app.tavern.camera_rig.camera
+		var head: Vector3 = world.patrons[target].head_position()
+		var picked := BanterView.pick_target(camera, camera.unproject_position(head), world.patrons, Net.my_pid())
+		if picked == target:
+			view.throw_at_cursor(camera.unproject_position(head))
+		else:
+			Net.banter.throw_tomato(target)   # 镜头在拍特写、下家不在画面里:直接发
+	await get_tree().create_timer(BOT_SAY_DELAY).timeout
+	for keycode in [KEY_Q, KEY_1 + randi() % Banter.PHRASES.size()]:
+		for pressed in [true, false]:
+			var key := InputEventKey.new()
+			key.keycode = keycode
+			key.pressed = pressed
+			Input.parse_input_event(key)
+			await get_tree().process_frame
+
+
 func _on_joined() -> void:
 	print("[debug] joined lobby as ", Net.my_pid())
 	if opts.has("shots"):
@@ -216,12 +248,15 @@ func _on_events(events: Array) -> void:
 	for ev in events:
 		if ev["type"] == "match_over":
 			print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
+			print("[debug] BANTER tomatoes=%d said=%d" % [_tomato_from.size(), _said_from.size()])
 			print("[debug] MATCH_OVER winner=", ev["winner"])
 			_match_finished = true
 
 
 func _on_game_started(seats: Array) -> void:
 	print(species_line(seats))
+	if opts.has("bot"):
+		_bot_banter(seats)
 	# 截图与退出按演出进度触发:事件批到达时前面的动画可能还要播好几秒
 	await get_tree().process_frame
 	var screen: Node = app.current_screen()
