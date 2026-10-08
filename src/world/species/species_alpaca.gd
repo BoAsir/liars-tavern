@@ -1,12 +1,13 @@
 extends RefCounted
 # 羊驼「披毯客」:小颅骨、长脸、前伸的吻(分开的上唇、两颗下门牙)、头顶一大团卷毛、大眼长睫毛;
-# 香蕉耳从卷毛里竖起;卷毛顶上一顶用颏绳戴着的迷你草帽;毛团凸起的绒毛躯干、脖根一圈蓬松毛领、
-# 左肩斜披到右胯的宽条纹织毯(贴着身体、胯侧打结垂流苏)、绿松石波洛领绳;绒腿套着一圈圈堆起的毛线腿套、两趾软蹄;长脖子。
+# 香蕉耳从卷毛里竖起;卷毛顶上一顶迷你草帽;毛团凸起的绒毛躯干、脖根一圈蓬松毛领、
+# 左肩斜披到右胯的宽条纹织毯(贴着身体、胯侧打结垂两片毯尾);绒腿套着三圈胖胖的毛线腿套、圆蹄;长脖子。
+# 动森式:去掉颏绳、波洛领绳、流苏。
 
 
 const LOOK := {
 	"id": "alpaca",
-	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
+	"gun_clearance": 0.260,   # 持枪净空(米,已含动森式大头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.78, 0.66, 0.5), "muzzle": Color(0.80, 0.74, 0.62), "dark": Color(0.35, 0.26, 0.18),
 		"fleece": Color(0.80, 0.70, 0.55), "coat": Color(0.76, 0.64, 0.48), "accent": Color(0.25, 0.6, 0.58),
@@ -14,7 +15,7 @@ const LOOK := {
 		"cream": Color(0.80, 0.75, 0.62), "weft": Color(0.24, 0.14, 0.10), "straw": Color(0.78, 0.66, 0.38),
 		"band": Color(0.70, 0.16, 0.14), "pants": Color(0.74, 0.62, 0.46), "warmer": Color(0.80, 0.72, 0.58),
 		"nose": Color(0.3, 0.2, 0.16), "hoof": Color(0.22, 0.16, 0.12), "pad": Color(0.4, 0.3, 0.22),
-		"tooth": Color(0.80, 0.78, 0.70),
+		"tooth": Color(0.80, 0.78, 0.70), "blush": Color(0.9, 0.62, 0.55),
 	},
 	"head": {
 		"skull": [
@@ -24,21 +25,23 @@ const LOOK := {
 			[Vector3(0, 0.025, -0.13), Vector3(0.05, 0.03, 0.07), "muzzle"],    # 下巴
 		],
 		"blend": 0.045,
-		"snout": {"path": [Vector3(0, 0.07, -0.11), Vector3(0, 0.06, -0.17), Vector3(0, 0.056, -0.214)],
-			"radii": [Vector2(0.062, 0.064), Vector2(0.052, 0.056), Vector2(0.043, 0.047)], "color": "muzzle"},
-		"nose": {"pos": Vector3(0, 0.083, -0.248), "radii": Vector3(0.022, 0.011, 0.01), "color": "nose"},
-		"mouth": {"kind": "smile", "pos": Vector3(0, 0.036, -0.252), "width": 0.042},
+		# 动森式短圆吻:比写实版短 3.4 cm、更胖
+		"snout": {"path": [Vector3(0, 0.07, -0.11), Vector3(0, 0.062, -0.15), Vector3(0, 0.058, -0.18)],
+			"radii": [Vector2(0.062, 0.064), Vector2(0.055, 0.058), Vector2(0.048, 0.052)], "color": "muzzle"},
+		"nose": {"pos": Vector3(0, 0.083, -0.218), "radii": Vector3(0.022, 0.011, 0.01), "color": "nose"},
+		"mouth": {"kind": "smile", "pos": Vector3(0, 0.036, -0.222), "width": 0.042},
+		"blush": true,
 	},
 	"eyes": {"pos": Vector3(0.068, 0.15, -0.105), "size": Vector3(0.042, 0.046, 0.02), "iris": Color(0.24, 0.16, 0.1),
 		"pupil": 2, "lid_rest": 0.15, "lashes": true, "yaw": 22.0},
 	"brows": {"pos": Vector3(0.07, 0.2, -0.11), "color": "dark", "width": 0.045, "thickness": 0.008},
 	"ears": {"kind": "banana", "pivot": Vector3(0.1, 0.27, 0.0), "rot": Vector3(0, 0, -12),
-		"size": Vector3(0.03, 0.168, 0.018), "inner": "dark"},
+		"size": Vector3(0.032, 0.125, 0.018), "inner": "dark"},   # 动森式:比写实版短一截(大头上耳朵相对小)
 	"hat": {"kind": "straw", "pivot": Vector3(0, 0.335, 0.0), "rot": Vector3(-6, 0, 0), "crown_radius": 0.05, "brim": 0.072,
 		"band": "band"},
 	"neck": {"base": Vector3(0, 0.44, -0.04), "radius": 0.07, "color": "fur"},
 	"body": {"build": "round", "coat": "coat", "belly": "coat", "pants": "pants",
-		"buttons": 0, "neckwear": "bolo", "neckwear_color": "accent", "collar": "fleece",
+		"buttons": 0, "neckwear": "none", "collar": "fleece",
 		# 绒毛团:背上、肩后、腰侧、肚前几团鼓起(平滑并集出蓬松的轮廓)
 		"shapes": [[Vector3(0.12, 0.43, 0.07), Vector3(0.08, 0.07, 0.07), "fleece", "mirror"],
 			[Vector3(0, 0.3, 0.1), Vector3(0.11, 0.1, 0.065), "coat"],
@@ -68,8 +71,6 @@ static func extras(f: MeshForge, part: String, look: Dictionary, pal: Dictionary
 	match part:
 		"head":
 			_head(f, look, pal)
-		"hat":
-			_strap(f, look, pal)
 		"body":
 			var shapes := PatronBuilder.body_shapes(look, pal)
 			_ruff(f, pal)
@@ -98,26 +99,10 @@ static func _head(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	f.blob(Vector3(0, 0.255, 0.0), shapes, 30, 18, 0.016)
 	# 上唇中缝(从鼻子下到嘴线)与两颗下门牙
 	PatronBuilder.paint(f, pal, "dark", 0.5, PatronBuilder.SMOOTH)
-	f.tube(PackedVector3Array([Vector3(0, 0.075, -0.257), Vector3(0, 0.055, -0.259), Vector3(0, 0.038, -0.254)]), 0.0026, 4)
+	f.tube(PackedVector3Array([Vector3(0, 0.075, -0.223), Vector3(0, 0.055, -0.225), Vector3(0, 0.038, -0.22)]), 0.0034, 5)
 	PatronBuilder.paint(f, pal, "tooth", 0.4, PatronBuilder.SMOOTH)
 	for side: float in [-1.0, 1.0]:
-		f.box(Vector3(0.011, 0.012, 0.006), PatronBuilder.xf(Vector3(0.0065 * side, 0.027, -0.246), Vector3(-15, 0, 0)))
-
-
-static func _strap(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
-	# 草帽颏绳:从帽檐两侧贴着脸颊绕到下巴底下(按头雕表面取点,再换到帽子局部)
-	var skull := PatronHeadBuilder.skull_shapes(look, pal)
-	var hat: Dictionary = look["hat"]
-	var to_hat := MeshForge.xf(hat["pivot"], hat["rot"]).affine_inverse()
-	var dirs := [Vector3(0.95, 0.15, -0.28), Vector3(0.82, -0.4, -0.42), Vector3(0.4, -0.8, -0.5), Vector3(0.0, -0.86, -0.52)]
-	PatronBuilder.paint(f, pal, "band", 0.7, PatronBuilder.CLOTH)
-	for side: float in [-1.0, 1.0]:
-		var path := PackedVector3Array([Vector3(0.068 * side, 0.004, -0.004)])
-		for d: Vector3 in dirs:
-			var dd := Vector3(d.x * side, d.y, d.z)
-			var p := MeshForge.blob_surface(PatronHeadBuilder.HEAD_CENTER, dd, skull, 0.045) + dd.normalized() * 0.004
-			path.append(to_hat * p)
-		f.tube(path, 0.0019, 4)
+		f.box(Vector3(0.011, 0.012, 0.006), PatronBuilder.xf(Vector3(0.0065 * side, 0.027, -0.212), Vector3(-15, 0, 0)))
 
 
 # —— 躯干:毛领、织毯 ——
@@ -184,7 +169,7 @@ static func _sash(f: MeshForge, pal: Dictionary, shapes: Array) -> void:
 		band += 1
 	PatronBuilder.paint(f, pal, "blanket", 0.95, PatronBuilder.CLOTH)
 	_grid(f, rows, colors, SASH_FROM)
-	# 右胯侧的结:一团毯子,下面垂两片短毯尾,末端一排流苏
+	# 右胯侧的结:一团毯子,下面垂两片短毯尾
 	var knot := _sash_point(shapes, SASH_KNOT, 0.0, 0.02)
 	var out := (knot - SASH_FROM).normalized()
 	PatronBuilder.paint(f, pal, "blanket", 0.95, PatronBuilder.CLOTH)
@@ -197,10 +182,6 @@ static func _sash(f: MeshForge, pal: Dictionary, shapes: Array) -> void:
 		f.loft(PackedVector3Array([top, top.lerp(bottom, 0.5) + out * 0.006, bottom]),
 			PackedVector2Array([Vector2(0.007, 0.03), Vector2(0.006, 0.028), Vector2(0.005, 0.026)]), 6, Vector2i(1, 1),
 			Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), out)
-		PatronBuilder.paint(f, pal, "cream", 0.9, PatronBuilder.CLOTH)
-		for j in 5:
-			var root := bottom + Vector3(0, 0, (j - 2) * 0.011)
-			f.tube(PackedVector3Array([root, root + Vector3(0.006 + j * 0.002, -0.032, 0.0)]), 0.0028, 4)
 
 
 static func _length_to_t(lengths: PackedFloat32Array, at: float) -> float:
@@ -215,25 +196,20 @@ static func _length_to_t(lengths: PackedFloat32Array, at: float) -> float:
 # —— 腿:毛线腿套 ——
 
 static func _warmers(f: MeshForge, pal: Dictionary) -> void:
-	# 小腿上一圈圈堆起来的毛线腿套(放样半径一大一小交替),脚踝处收成蓬松的一团盖住蹄口
+	# 小腿上三圈胖胖的毛线腿套(放样半径一大一小交替),脚踝处收成蓬松的一团盖住蹄口
 	var c: Color = pal["warmer"]
 	for side: float in [-1.0, 1.0]:
-		var x := 0.1 * side
+		var leg := PatronBuilder.leg_path(side)
 		var path := PackedVector3Array()
 		var radii := PackedVector2Array()
 		var colors := PackedColorArray()
-		var rings := 15
+		var rings := 7
 		for k in rings:
 			var t := float(k) / (rings - 1)
-			var y := lerpf(0.37, 0.06, t)
-			var z := lerpf(-0.155, -0.16, smoothstep(0.38, 0.2, y)) + lerpf(0.0, 0.005, smoothstep(0.2, 0.08, y))
-			var base := lerpf(0.046, 0.05, smoothstep(0.08, 0.2, y)) + lerpf(0.0, 0.006, smoothstep(0.2, 0.38, y))
-			var puff := 0.017 if k % 2 == 0 else 0.006
-			if k == rings - 1:
-				puff = 0.022
-			path.append(Vector3(x * lerpf(1.02, 1.04, t), y, z))
-			radii.append(Vector2.ONE * (base + puff))
-			var shade := c.darkened(0.0 if k % 2 == 0 else 0.1)
+			path.append(leg[2].lerp(leg[4], t) + Vector3(0, -0.02 * t, 0))
+			var puff := 0.016 if k % 2 == 0 else 0.004
+			radii.append(Vector2.ONE * (0.068 + puff + (0.008 if k == rings - 1 else 0.0)))
+			var shade := c.darkened(0.0 if k % 2 == 0 else 0.08)
 			colors.append(Color(shade.r, shade.g, shade.b, 1.0))
 		PatronBuilder.paint(f, pal, "warmer", 0.95, PatronBuilder.KNIT)
 		f.loft(path, radii, 12, Vector2i(1, 1), Transform3D.IDENTITY, colors)

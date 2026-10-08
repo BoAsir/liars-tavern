@@ -1,12 +1,13 @@
 extends RefCounted
-# 乌龟「老淘金客」:光秃圆头(斑驳老皮、额纹、颈褶、几块老人斑)、短钝角质喙、厚眼睑、白色海象胡、黄铜圆眼镜;
-# 没有耳朵,软毡宽松帽(帽冠打补丁);橄榄棕背甲(盾片中心浅、生长环纹、缝深、甲缘一圈缘盾),
-# 米黄腹甲代替衬衫前襟(中缝与横缝),红黑格法兰绒衬衫与袖子,棕背带配铜扣;卡其裤膝上补丁、旧靴;小尖尾藏在甲缘下。
+# 乌龟「老淘金客」:光秃圆头(几块老人斑)、短钝角质喙、厚眼睑、白色海象胡、黄铜圆眼镜;
+# 没有耳朵,软毡宽松帽(帽冠打一块补丁);橄榄棕背甲(盾片中心浅、缝深、甲缘一圈缘盾),
+# 米黄腹甲代替衬衫前襟(中缝与横缝),红色大格子衬衫与袖子,棕背带配铜扣;卡其裤、圆头靴;小尖尾藏在甲缘下。
+# 动森式:去掉额纹、颈褶、甲上的生长环纹、补丁针脚。
 
 
 const LOOK := {
 	"id": "turtle",
-	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
+	"gun_clearance": 0.308,   # 持枪净空(米,已含动森式大头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.37, 0.47, 0.25), "muzzle": Color(0.58, 0.60, 0.39), "dark": Color(0.2, 0.24, 0.12),
 		"fur_back": Color(0.32, 0.42, 0.22), "spot": Color(0.30, 0.38, 0.19), "beak": Color(0.56, 0.52, 0.34),
@@ -78,11 +79,9 @@ static func extras(f: MeshForge, part: String, look: Dictionary, pal: Dictionary
 			_shell(f, pal)
 			_plastron(f, pal, shapes)
 			_suspenders(f, pal, shapes)
-		"legs":
-			_patches(f, pal)
 
 
-# —— 头:海象胡、眼镜、额纹、颈褶 ——
+# —— 头:海象胡、眼镜 ——
 
 static func _head(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	var skull := PatronHeadBuilder.skull_shapes(look, pal)
@@ -97,54 +96,37 @@ static func _head(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 		[Vector3(0.088, -0.006, -0.138), Vector3(0.013, 0.022, 0.013), m.darkened(0.1), "mirror"],
 		[Vector3(0.04, 0.036, -0.184), Vector3(0.016, 0.016, 0.014), m.darkened(0.08), "mirror"],
 		[Vector3(0, 0.064, -0.184), Vector3(0.016, 0.015, 0.015), m]], 24, 14, 0.012)
-	# 黄铜圆眼镜:细框、鼻梁、往后搭到头侧的镜腿
-	PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
+	# 黄铜圆眼镜:圆框套住画在脸上的大眼(框半径按眼睛大小换算回放大前的尺寸)、鼻梁、往后搭到头侧的镜腿;
+	# 框比写实版粗,像软胶玩具上的一圈
+	var eye: Dictionary = look["eyes"]
+	var eye_pos: Vector3 = eye["pos"]
+	var r: float = eye["size"].x * PatronParts.EYE_SCALE * 1.15
+	PatronBuilder.paint(f, pal, "brass", 0.45, PatronBuilder.METAL, 1.0)
 	for side: float in [-1.0, 1.0]:
 		var ring := PackedVector3Array()
-		var center := Vector3(0.062 * side, 0.165, -0.153)
+		var center := Vector3(eye_pos.x * side, eye_pos.y, -0.153)
 		for k in 17:
 			var a := TAU * k / 16.0
-			ring.append(center + Vector3(cos(a) * 0.037, sin(a) * 0.037, -sin(a) * 0.004))
-		f.tube(ring, 0.0028, 5)
-		var hinge := center + Vector3(0.036 * side, 0.004, 0.004)
+			ring.append(center + Vector3(cos(a) * r, sin(a) * r, -sin(a) * 0.004))
+		f.tube(ring, 0.0042, 6)
+		var hinge := center + Vector3(r * side, 0.004, 0.004)
 		var ear := MeshForge.blob_surface(c, Vector3(0.98 * side, 0.3, 0.2), skull, 0.045) + Vector3(0.004 * side, 0, 0)
-		f.tube(PackedVector3Array([hinge, hinge.lerp(ear, 0.5) + Vector3(0.012 * side, 0.004, 0), ear]), 0.0022, 4)
-	f.tube(PackedVector3Array([Vector3(-0.026, 0.17, -0.158), Vector3(0, 0.178, -0.166), Vector3(0.026, 0.17, -0.158)]), 0.0026, 4)
-	# 额纹:眉上两道浅弧,贴着头皮
-	PatronBuilder.paint(f, pal, "fur_back", 0.8, PatronBuilder.LEATHER)
-	for k in 2:
-		var arc := PackedVector3Array()
-		for i in 7:
-			var t := i / 6.0 - 0.5
-			var d := Vector3(t * 0.9, 0.62 + k * 0.17 + absf(t) * -0.12, -0.78)
-			arc.append(MeshForge.blob_surface(c, d, skull, 0.045))
-		f.tube(arc, 0.0032, 4)
-	# 颈褶:下巴下面两圈松皮
-	for k in 2:
-		var ring := PackedVector3Array()
-		for i in 17:
-			var a := TAU * i / 16.0
-			ring.append(Vector3(sin(a) * (0.076 - k * 0.004), -0.012 - k * 0.022 + cos(a) * 0.006, cos(a) * (0.072 - k * 0.004) - 0.01))
-		f.tube(ring, 0.0075, 5)
+		f.tube(PackedVector3Array([hinge, hinge.lerp(ear, 0.5) + Vector3(0.012 * side, 0.004, 0), ear]), 0.0036, 5)
+	var bridge := eye_pos.x - r
+	f.tube(PackedVector3Array([Vector3(-bridge, eye_pos.y + 0.004, -0.158), Vector3(0, eye_pos.y + 0.012, -0.166),
+		Vector3(bridge, eye_pos.y + 0.004, -0.158)]), 0.004, 5)
 
 
 static func _hat(f: MeshForge, pal: Dictionary) -> void:
-	# 帽冠右侧一块补丁,四角粗针脚
+	# 帽冠右侧一块补丁
 	PatronBuilder.paint(f, pal, "patch", 0.9, PatronBuilder.CLOTH)
-	var at := Vector3(0.088, 0.062, -0.035)
-	var rot := Vector3(-12, 112, 0)
-	f.box(Vector3(0.05, 0.042, 0.006), PatronBuilder.xf(at, rot))
-	PatronBuilder.paint(f, pal, "thread", 0.8, PatronBuilder.CLOTH)
-	var basis := Basis.from_euler(rot * PI / 180.0, EULER_ORDER_YXZ)
-	for corner in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		var p: Vector3 = at + basis * Vector3(corner.x * 0.019, corner.y * 0.015, -0.0035)
-		f.box(Vector3(0.012, 0.0025, 0.002), PatronBuilder.xf(p, rot + Vector3(0, 0, 45 * corner.x * corner.y)))
+	f.box(Vector3(0.05, 0.042, 0.006), PatronBuilder.xf(Vector3(0.088, 0.062, -0.035), Vector3(-12, 112, 0)))
 
 
 # —— 背甲 ——
 
 static func _shell(f: MeshForge, pal: Dictionary) -> void:
-	# 椭球帽网格:盾片按最近中心划分(Voronoi),缝里压暗下陷,盾片中心提亮微鼓,带一圈圈生长纹
+	# 椭球帽网格:盾片按最近中心划分(Voronoi),缝里压暗下陷,盾片中心提亮微鼓(大色块,不画生长纹)
 	var rows := []
 	var colors := []
 	var light: Color = pal["shell_light"]
@@ -168,14 +150,13 @@ static func _shell(f: MeshForge, pal: Dictionary) -> void:
 					d1 = d
 				elif d < d2:
 					d2 = d
-			var seam := 1.0 - smoothstep(0.012, 0.055, d2 - d1)
+			var seam := 1.0 - smoothstep(0.02, 0.07, d2 - d1)
 			var unit := Vector3(uv.x, uv.y, cos(alpha))
 			var normal := (unit / SHELL_R).normalized()
 			var lift := SHELL_DOME * (1.0 - smoothstep(0.0, 0.3, d1)) - 0.004 * seam
 			row.append(SHELL_C + unit * SHELL_R + normal * lift)
 			var col := light.lerp(base, smoothstep(0.02, 0.26, d1))
-			col *= 0.93 + 0.07 * cos(d1 * TAU / 0.075)
-			col = col.lerp(groove, seam * 0.85)
+			col = col.lerp(groove, seam * 0.6)
 			crow.append(Color(col.r, col.g, col.b, 1.0))
 		rows.append(row)
 		colors.append(crow)
@@ -266,27 +247,9 @@ static func _suspenders(f: MeshForge, pal: Dictionary, shapes: Array) -> void:
 			radii.append(Vector2(0.0045, 0.015))
 		f.loft(path, radii, 6, Vector2i(1, 1), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(0, 0, -1))
 		# 铜扣:扣在最下端
-		PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
+		PatronBuilder.paint(f, pal, "brass", 0.5, PatronBuilder.METAL, 1.0)
 		var clip := path[0] + (path[0] - path[1]).normalized() * 0.004 + Vector3(0, 0, -0.004)
-		f.box(Vector3(0.026, 0.02, 0.006), PatronBuilder.xf(clip, Vector3(-12, 0, 0)))
-		f.sphere(0.0075, 8, PatronBuilder.xf(clip + Vector3(0, -0.018, 0.002)))
-
-
-# —— 裤子补丁 ——
-
-static func _patches(f: MeshForge, pal: Dictionary) -> void:
-	# 左膝上一块深色补丁、右靴尖一块圆补丁,都带十字针脚
-	PatronBuilder.paint(f, pal, "pants_patch", 0.9, PatronBuilder.CLOTH)
-	var knee := Vector3(-0.1, 0.561, -0.075)
-	f.box(Vector3(0.062, 0.008, 0.055), PatronBuilder.xf(knee, Vector3(-8, 12, 0)))
-	PatronBuilder.paint(f, pal, "shoe", 0.7, PatronBuilder.LEATHER)
-	var toe := Vector3(0.104, 0.072, -0.252)
-	f.cylinder(0.02, 0.02, 0.006, 10, MeshForge.CAPS_BOTH, PatronBuilder.xf(toe, Vector3(-20, 0, 0)))
-	PatronBuilder.paint(f, pal, "thread", 0.8, PatronBuilder.CLOTH)
-	for k in 3:
-		var x := -0.02 + k * 0.02
-		f.box(Vector3(0.0025, 0.003, 0.012), PatronBuilder.xf(knee + Vector3(x, 0.005, 0.03), Vector3(-8, 12 + 45, 0)))
-		f.box(Vector3(0.0025, 0.003, 0.012), PatronBuilder.xf(knee + Vector3(x, 0.005, -0.03), Vector3(-8, 12 - 45, 0)))
+		f.box(Vector3(0.03, 0.024, 0.008), PatronBuilder.xf(clip, Vector3(-12, 0, 0)))
 
 
 # —— 网格工具 ——

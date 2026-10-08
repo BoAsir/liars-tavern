@@ -1,13 +1,14 @@
 extends RefCounted
-# 鳄鱼「亡命徒」:扁宽的长吻分上下两颌(上颌罩住下颌、嘴角上翘的嘴缝)、上颌一排圆钝牙加一颗金牙、下颌两颗獠牙;
+# 鳄鱼「亡命徒」:扁宽的圆头长吻分上下两颌(上颌罩住下颌、嘴角上翘的嘴缝)、上颌几颗圆钝大牙加一颗金牙、下颌两颗獠牙;
 # 吻尖两个鼻孔包、头顶两个眼包(眼睛长在包上)、后脑一排圆疙瘩;没有耳朵,黑色平檐低冠帽向后推露出眼包;
-# 炭灰衬衫敞开 V 领露米黄腹鳞、红色强盗方巾、前后交叉的两条子弹带(铜弹壳);破边深色裤、光脚三爪;
+# 炭灰衬衫敞开 V 领露米黄腹鳞、红色强盗方巾、一条斜挎的宽皮带;深色裤、圆圆的光脚;
 # 粗鳞尾从左侧翻过座面落地、沿地面往后弯,背上一排鳞脊,只有尾尖贴着地面扫。
+# 动森式:两条子弹带简化成一条斜挎皮带(没有弹壳),牙只留几颗大的,去掉破裤边。
 
 
 const LOOK := {
 	"id": "crocodile",
-	"gun_clearance": 0.221,   # 持枪净空(米,已含 Q 版头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
+	"gun_clearance": 0.306,   # 持枪净空(米,已含动森式大头的放大):按举枪流程实测最小值(含抖耳)再留 ≥4 mm
 	"palette": {
 		"fur": Color(0.24, 0.46, 0.22), "muzzle": Color(0.28, 0.48, 0.24), "dark": Color(0.1, 0.16, 0.08),
 		"fur_back": Color(0.17, 0.34, 0.16), "jaw": Color(0.34, 0.50, 0.28), "coat": Color(0.22, 0.22, 0.24),
@@ -27,7 +28,7 @@ const LOOK := {
 		],
 		"blend": 0.04,
 		"material": 4.0,
-		"scale_z": 0.85,   # Q 版放大时前后方向少放一点:长吻不至于捅到桌心,伸脖子也不至于短太多
+		"scale_z": 0.72,   # 放大时前后方向少放一点(其他物种 PatronParts.HEAD_DEPTH):长吻不捅到桌心,伸脖子也不至于短太多
 	},
 	"eyes": {"pos": Vector3(0.058, 0.222, -0.112), "size": Vector3(0.032, 0.03, 0.016), "iris": Color(0.72, 0.62, 0.12),
 		"pupil": 1, "lid_rest": 0.28, "lashes": false, "yaw": 18.0},
@@ -61,11 +62,11 @@ const LOWER := [
 	[Vector3(0, 0.038, -0.31), Vector3(0.048, 0.025, 0.042)],
 ]
 const SEAM_Y := 0.052
-const TEETH := 7               # 每侧上牙数
-const GOLD_TOOTH := 2          # 右侧第几颗是金牙
-# 子弹带:绕躯干一整圈的斜带,前后交叉
+const TEETH := 3               # 每侧上牙数(动森式:几颗圆圆的大牙)
+const GOLD_TOOTH := 1          # 右侧第几颗是金牙
+# 斜挎皮带:绕躯干一整圈,从右肩斜到左胯
 const BELT_FROM := Vector3(0, 0.29, 0.0)
-const BELT_WIDTH := 0.034
+const BELT_WIDTH := 0.05
 
 
 static func extras(f: MeshForge, part: String, look: Dictionary, pal: Dictionary) -> void:
@@ -76,10 +77,8 @@ static func extras(f: MeshForge, part: String, look: Dictionary, pal: Dictionary
 		"body":
 			var shapes := PatronBuilder.body_shapes(look, pal)
 			_open_shirt(f, pal, shapes)
-			_bandolier(f, pal, shapes, -1.0, 0.0)
-			_bandolier(f, pal, shapes, 1.0, 0.006)
+			_belt(f, pal, shapes, 1.0)
 		"legs":
-			_torn_hems(f, pal)
 			_tail_ridge(f, look, pal)
 
 
@@ -122,10 +121,10 @@ static func _jaws(f: MeshForge, pal: Dictionary) -> void:
 	PatronBuilder.paint(f, pal, "mouth", 0.5, PatronBuilder.SMOOTH)
 	f.tube(seam, 0.0032, 4)
 	# 上牙:沿上颌外沿往下的圆钝牙,右侧一颗金牙;下颌吻尖两颗往上的獠牙
-	var tooth := PackedVector2Array([Vector2(0.0065, 0.0), Vector2(0.006, 0.006), Vector2(0.0038, 0.012), Vector2(0.0, 0.016)])
+	var tooth := PackedVector2Array([Vector2(0.01, 0.0), Vector2(0.0095, 0.008), Vector2(0.006, 0.016), Vector2(0.0, 0.02)])
 	for side: float in [-1.0, 1.0]:
 		for k in TEETH:
-			var z := lerpf(-0.12, -0.33, float(k) / (TEETH - 1))
+			var z := lerpf(-0.16, -0.3, float(k) / (TEETH - 1))
 			var p := _outline(upper, z, side, SEAM_Y + 0.004, -0.001)
 			var gold := side > 0.0 and k == GOLD_TOOTH
 			if gold:
@@ -156,7 +155,7 @@ static func _ridge(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 		f.sphere(r, 8, PatronBuilder.xf(p - d * r * 0.35, Vector3(rad_to_deg(a), 0, 0), Vector3(1.0, 0.8, 1.0)))
 
 
-# —— 躯干:敞开的衬衫、腹鳞、子弹带 ——
+# —— 躯干:敞开的衬衫、腹鳞、斜挎皮带 ——
 
 static func _v_half(y: float) -> float:
 	# 敞开的 V 领在高度 y 处的半宽(身体局部):领口 0.09,往下收到 y 0.22 成尖
@@ -205,46 +204,24 @@ static func _belt_point(shapes: Array, axis: Vector3, t: float, lift: float) -> 
 	return MeshForge.blob_surface(BELT_FROM, d, shapes, PatronBuilder.BLOB_K) + d * lift
 
 
-static func _bandolier(f: MeshForge, pal: Dictionary, shapes: Array, side: float, extra: float) -> void:
-	# 从一侧肩头斜过胸口到另一侧胯,再从背后绕回来;胸前一段插一排铜弹(弹头朝外侧上方)
+static func _belt(f: MeshForge, pal: Dictionary, shapes: Array, side: float) -> void:
+	# 从一侧肩头斜过胸口到另一侧胯,再从背后绕回来的一条宽皮带,胸前一个大铜扣
 	var axis := Vector3(0.55 * side, 1.0, 0.0).normalized()
 	var path := PackedVector3Array()
 	var radii := PackedVector2Array()
-	var rows := 44
+	var rows := 32
 	for i in rows + 1:
-		path.append(_belt_point(shapes, axis, float(i) / rows, 0.012 + extra))
-		radii.append(Vector2(0.005, BELT_WIDTH * 0.5))
-	PatronBuilder.paint(f, pal, "leather", 0.6, PatronBuilder.LEATHER)
+		path.append(_belt_point(shapes, axis, float(i) / rows, 0.012))
+		radii.append(Vector2(0.007, BELT_WIDTH * 0.5))
+	PatronBuilder.paint(f, pal, "leather", 0.7, PatronBuilder.LEATHER)
 	var up := (path[0] - BELT_FROM).normalized()
 	f.loft(path, radii, 4, Vector2i(0, 0), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), up)
-	var across := axis.cross(Vector3(0, 0, -1)).normalized()
-	for k in 9:
-		var t := lerpf(0.1, 0.36, k / 8.0)
-		var p := _belt_point(shapes, axis, t, 0.02 + extra)
-		var out := (p - BELT_FROM).normalized()
-		var along := (across - out * across.dot(out)).normalized()
-		var basis := Basis(along.cross(out).normalized(), along, out)   # 弹壳轴 = 局部 y = 横跨带子
-		PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
-		f.cylinder(0.0055, 0.0055, 0.026, 6, MeshForge.CAPS_BOTH, Transform3D(basis, p))
-		PatronBuilder.paint(f, pal, "gold", 0.35, PatronBuilder.METAL, 0.9)
-		f.cylinder(0.0015, 0.0055, 0.009, 6, MeshForge.CAPS_BOTTOM, Transform3D(basis, p + along * 0.0175))
+	var p := _belt_point(shapes, axis, 0.22, 0.02)
+	PatronBuilder.paint(f, pal, "gold", 0.45, PatronBuilder.METAL, 1.0)
+	f.sphere(1.0, 12, Transform3D(Basis.looking_at(BELT_FROM - p, Vector3.UP).scaled(Vector3(0.026, 0.022, 0.008)), p))
 
 
-# —— 腿:破裤边、尾巴鳞脊 ——
-
-static func _torn_hems(f: MeshForge, pal: Dictionary) -> void:
-	# 裤脚一圈参差的破布条(尖朝下)
-	PatronBuilder.paint(f, pal, "pants", 0.9, PatronBuilder.CLOTH)
-	for side: float in [-1.0, 1.0]:
-		var c := Vector3(0.104 * side, 0.082, -0.155)
-		for k in 9:
-			var a := TAU * k / 9.0 + side * 0.3
-			var radial := Vector3(sin(a), 0, cos(a))
-			var length := 0.022 + 0.014 * fmod(k * 0.618 + (0.3 if side > 0.0 else 0.0), 1.0)
-			var basis := Basis(Vector3.DOWN.cross(radial).normalized(), Vector3.DOWN, radial)
-			var p := c + radial * 0.046 + Vector3(0, -length * 0.5 + 0.006, 0)
-			f.prism(Vector3(0.026, length, 0.005), Transform3D(basis, p))
-
+# —— 尾巴鳞脊 ——
 
 static func _tail_ridge(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	# 尾背一排三角鳞脊:沿尾巴放样路径取点,贴在上表面;尾尖会摆的那段不放
