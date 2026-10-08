@@ -26,6 +26,36 @@ func test_felt_matches_the_layout_constants():
 	assert_almost_eq(mesh.top_radius, SeatLayout.FELT_RADIUS, 0.00001)
 
 
+func test_only_the_clip_spins():
+	# 目标架:底座固定,只有立轴、叉形夹与目标牌在转;翻面回弹时牌底不低于夹子叶片下端
+	var world := TableWorld.new(null)
+	add_child_autofree(world)
+	var stand: Node3D = world.cards.get_node("TargetStand")
+	var spinner: Node3D = stand.get_node("Spinner")
+	var card: Card3D = world.cards._target_card
+	assert_true(spinner.is_ancestor_of(card), "目标牌挂在 Spinner 下")
+	var stand_rot := stand.rotation
+	var spin_rot := spinner.rotation.y
+	await wait_frames(10)
+	assert_eq(stand.rotation, stand_rot, "底座不转")
+	assert_ne(spinner.rotation.y, spin_rot, "夹子在转")
+	assert_almost_eq(world.cards.stand_position(), Vector3(0, SeatLayout.TABLE_TOP + CardTable.STAND_HEIGHT, 0), Vector3.ONE * 1e-5)
+	var lowest := INF
+	world.cards.call("set_target", Card.ACE)   # 协程:不等它,边播边取样
+	var elapsed := 0.0
+	while elapsed < CardTable.TARGET_FLIP_HALF * 2.0 + 0.35:
+		var bottom := stand.to_local(card.global_transform * Vector3(0, 0, Card3D.HEIGHT / 2.0))
+		lowest = minf(lowest, bottom.y)
+		await wait_frames(1)
+		elapsed += get_process_delta_time()
+	assert_gte(lowest, StandModel.CLIP_BOTTOM, "牌底始终在夹口里,不插进立轴")
+	var base: MeshInstance3D = stand.get_node("StandBase")
+	var aabb := base.mesh.get_aabb()
+	assert_almost_eq(aabb.position.y, SeatLayout.FELT_TOP - SeatLayout.TABLE_TOP, 0.0001, "底座坐在毡面上")
+	assert_lte(maxf(aabb.size.x, aabb.size.z) / 2.0, 0.045, "裙边半径")
+	assert_eq(spinner.get_node("Clip").cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "夹子不投影")
+
+
 func test_card_back_has_one_hole_per_chamber():
 	assert_eq(CardFaces.chamber_points(Vector2.ZERO, 44.0).size(), Revolver.CHAMBERS)
 
