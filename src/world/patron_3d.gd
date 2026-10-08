@@ -98,6 +98,7 @@ var _neck: Node3D
 var _neck_target := Vector3.ZERO     # 座位坐标的头部偏移目标
 var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
 var _neck_velocity := Vector3.ZERO
+var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
 
 
 func _init(p_species_index := 0) -> void:
@@ -112,6 +113,7 @@ func _process(delta: float) -> void:
 	if alive:
 		_animate_idle(delta)
 	_update_neck(delta)
+	_antics.tick(delta)
 
 
 # —— 构建 ——
@@ -146,6 +148,9 @@ func _build() -> void:
 		HIP + FAN_POS))
 	_resting = {_arm_l: true, _arm_r: true}
 	_plant_paws()
+	_antics = PatronAntics.new()
+	add_child(_antics)
+	_antics.setup(self)
 
 
 func _build_head(spec: Dictionary) -> void:
@@ -231,11 +236,11 @@ func _animate_idle(delta: float) -> void:
 		var local := body.to_local(_look_target) - head.position
 		yaw = clampf(atan2(-local.x, -local.z), -0.7, 0.7)
 		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), _look_data.get("anim", {}).get("look_pitch_min", -0.45), 0.35)
-	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08
-	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05
+	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08 + _antics.head_add.y
+	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
-	head.rotation.z = _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06
+	head.rotation.z = lerpf(head.rotation.z, _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 + _antics.head_add.z, minf(delta * 12.0, 1.0))
 	_update_look(delta)
 	_legs.position.y = maxf(body.position.y - HIP.y, 0.0)   # 腿跟着蹦跳,下沉时不入地
 	_blink_in -= delta
@@ -491,6 +496,7 @@ func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: f
 
 func relief() -> void:
 	set_expression("happy")
+	_antics.relief()
 	var tween := create_tween()
 	tween.tween_property(body, "position:y", HIP.y - 0.03, 0.25).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(body, "position:y", HIP.y, 0.4).set_trans(Tween.TRANS_SINE)
@@ -520,6 +526,7 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	if not _look_data.get("tail", {}).is_empty():
 		fall.tween_method(func(v: float): _legs.set_instance_shader_parameter("tail",
 			Vector4(_phase, _look_data["tail"].get("sway", 0.12), v, 0.0)), 0.0, 1.0, FADE_TIME)
+	_antics.die()
 
 
 func _set_fade(value: float) -> void:
@@ -558,6 +565,7 @@ func celebrate() -> void:
 	bounce.tween_property(body, "position:y", HIP.y, CHEER_BOUNCE_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_cheer_tweens = [bounce, pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3)]
+	_antics.celebrate()
 	await bounce.finished
 	_arms_locked = false
 
@@ -575,6 +583,12 @@ func reset_pose() -> void:
 	_set_fist(false)
 	body.position = HIP
 	rest_arms(false)
+	_antics.reset()
+
+
+func startle() -> void:
+	# 被吓一跳(有人喊「骗子!」拍桌、旁边有人中枪):原地一蹦、眼睛瞪圆、帽子弹起、耳朵炸开
+	_antics.startle()
 
 
 func appear() -> void:

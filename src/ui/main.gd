@@ -97,6 +97,7 @@ func _exit_tree() -> void:
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()
+	PatronAntics.clear_cache()
 
 
 static func resolve_species(path: String, args: PackedStringArray = OS.get_cmdline_user_args()) -> int:
