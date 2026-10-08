@@ -58,9 +58,12 @@ static func profile(radius: float) -> PackedVector2Array:
 	var top := SeatLayout.TABLE_TOP
 	var flat := radius + FLAT_REACH
 	var outer := flat + NOSE
-	var pts := PackedVector2Array([Vector2(0.0, top - THICKNESS), Vector2(radius - 0.06, top - THICKNESS),
-		Vector2(outer - 0.008, top - THICKNESS), Vector2(outer - 0.002, top - THICKNESS + 0.003),
-		Vector2(outer, top - THICKNESS + 0.009), Vector2(outer, top - NOSE)])
+	# 下沿也是 1.4 cm 圆角(动森式圆润的桌沿;外沿半径不变,酒客躯干离桌沿的净空不受影响)
+	var pts := PackedVector2Array([Vector2(0.0, top - THICKNESS), Vector2(radius - 0.06, top - THICKNESS)])
+	for k in 6:
+		var a := -PI / 2.0 + PI / 2.0 * k / 5.0
+		pts.append(Vector2(outer - 0.014 + cos(a) * 0.014, top - THICKNESS + 0.014 + sin(a) * 0.014))
+	pts.append(Vector2(outer, top - NOSE))
 	for k in range(1, 9):
 		var a := PI / 2.0 * k / 8.0
 		pts.append(Vector2(flat + cos(a) * NOSE, top - NOSE + sin(a) * NOSE))
@@ -116,8 +119,9 @@ static func base_recipe(f: MeshForge) -> void:
 		var dir := Vector3(sin(yaw), 0, cos(yaw))
 		var path := PackedVector3Array()
 		var radii := PackedVector2Array()
-		var stations := [[0.10, 0.17, 0.052], [0.17, 0.165, 0.05], [0.24, 0.14, 0.046], [0.29, 0.10, 0.036],
-			[0.33, 0.065, 0.027], [0.365, 0.045, 0.021], [0.395, 0.04, 0.02], [0.415, 0.045, 0.021]]
+		# 动森式:腿更粗更圆
+		var stations := [[0.10, 0.17, 0.062], [0.17, 0.165, 0.06], [0.24, 0.14, 0.055], [0.29, 0.10, 0.044],
+			[0.33, 0.067, 0.034], [0.365, 0.048, 0.027], [0.395, 0.042, 0.026], [0.415, 0.046, 0.026]]
 		for st in stations:
 			path.append(dir * st[0] + Vector3(0, st[1], 0))
 			radii.append(Vector2(st[2], st[2] * 0.8))
@@ -132,11 +136,11 @@ static func base_recipe(f: MeshForge) -> void:
 	for k in LEG_COUNT:
 		var yaw := PI / 4.0 + k * PI / 2.0
 		var dir := Vector3(sin(yaw), 0, cos(yaw))
-		var ball := dir * 0.418 + Vector3(0, 0.026, 0)
-		f.sphere(0.026, 16, MeshForge.xf(ball))
+		var ball := dir * 0.418 + Vector3(0, 0.032, 0)
+		f.sphere(0.032, 16, MeshForge.xf(ball))
 		# 三根爪趾扣住球顶
 		for toe in 3:
 			var side := (toe - 1) * 0.55
 			var toe_dir := (dir * cos(side) + Vector3(dir.z, 0, -dir.x) * sin(side)).normalized()
-			f.tube(PackedVector3Array([ball + Vector3(0, 0.03, 0) - dir * 0.01, ball + toe_dir * 0.02 + Vector3(0, 0.022, 0),
-				ball + toe_dir * 0.028 + Vector3(0, 0.006, 0)]), 0.0055, 6)
+			f.tube(PackedVector3Array([ball + Vector3(0, 0.036, 0) - dir * 0.01, ball + toe_dir * 0.025 + Vector3(0, 0.026, 0),
+				ball + toe_dir * 0.034 + Vector3(0, 0.007, 0)]), 0.007, 6)

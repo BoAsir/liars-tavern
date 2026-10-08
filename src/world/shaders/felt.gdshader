@@ -7,7 +7,7 @@ shader_type spatial;
 #define TOON_SHADOW_TINT vec3(0.86, 0.9, 1.0)
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
-uniform vec3 felt_color : source_color = vec3(0.09, 0.33, 0.29);
+uniform vec3 felt_color : source_color = vec3(0.08, 0.31, 0.30);
 uniform vec3 felt_edge : source_color = vec3(0.05, 0.22, 0.20);
 uniform vec3 thread_color : source_color = vec3(0.92, 0.74, 0.40);
 uniform float radius = 0.8;

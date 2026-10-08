@@ -86,7 +86,7 @@ const WOOD_PRESETS := {
 # 道具顶点色板(MeshForge 写进顶点,prop 着色器读):名字 -> [sRGB 颜色, 粗糙度, 金属度, glow(自发光, 透光)]。
 # albedo 封顶 0.8(自发光的灯泡除外)。动森式:哑光为主,金属件是缎面(粗糙度 ≥ 0.45),黄铜偏奶黄,钢偏蓝灰
 const PALETTE := {
-	"steel": [Color(0.56, 0.60, 0.68), 0.5, 0.45, Vector2.ZERO],   # 玩具枪的蓝灰缎面钢
+	"steel": [Color(0.46, 0.52, 0.64), 0.5, 0.4, Vector2.ZERO],   # 玩具枪的蓝灰缎面钢
 	"steel_dark": [Color(0.20, 0.20, 0.27), 0.8, 0.1, Vector2.ZERO],   # 膛口、槽底、弹膛孔:深靛,不是纯黑
 	"brass": [Color(0.80, 0.66, 0.36), 0.48, 0.65, Vector2.ZERO],
 	"iron": [Color(0.27, 0.26, 0.32), 0.62, 0.35, Vector2.ZERO],

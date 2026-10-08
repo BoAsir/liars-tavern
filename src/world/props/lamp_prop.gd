@@ -1,13 +1,13 @@
 class_name LampProp
-# 牌桌上方的吊灯:黄铜吊顶碗、链条(MultiMesh,一次 draw)、颈箍、钟形双层灯罩(外壁绿珐琅、内壁奶油色微微自发光)、
+# 牌桌上方的吊灯:黄铜吊顶碗、链条(MultiMesh,一次 draw)、颈箍、钟形双层灯罩(外壁柔红珐琅、内壁奶油色微微自发光)、
 # 罩口黄铜珠边、灯泡(自发光的球)。全部挂在 LampPivot 下(开枪踢灯时整盏摆动);灯罩与链条都不投影。
 # 两盏灯(投影的聚光与补光)是 LampPivot 的直接子节点:性能探针按这个名字找灯。
 
 
 const DROP := 1.3               # 颈部在枢轴下方
-const MOUTH_Y := -1.505         # 罩口(最低点 MOUTH_Y − BEAD,世界高度约 1.89,与原来的灯罩一样高)
+const MOUTH_Y := -1.499         # 罩口(最低点 MOUTH_Y − BEAD = −1.51,世界高度约 1.89,与原来的灯罩一样高)
 const MOUTH_RADIUS := 0.36
-const BEAD := 0.005             # 罩口珠边
+const BEAD := 0.011             # 罩口珠边(动森式:胖胖的一圈黄铜)
 const SPOT_Y := -1.45
 const FILL_Y := -1.35
 const LIARS_SPOT_ANGLE := 52.0  # Godot 的 spot_angle 是半角;骗子酒馆桌的聚光
@@ -80,8 +80,9 @@ static func _p(f: MeshForge, entry: String) -> void:
 
 static func shade_profile() -> PackedVector2Array:
 	# 钟形罩外壁 (r, y),自罩口往上到颈部
-	var radii := [MOUTH_RADIUS, 0.348, 0.31, 0.245, 0.175, 0.12, 0.088, 0.068, 0.06]
-	var heights := [0.0, 0.077, 0.24, 0.423, 0.596, 0.76, 0.89, 0.955, 1.0]   # 罩口到颈部的比例
+	# 更饱满的圆顶钟形(卡通)
+	var radii := [MOUTH_RADIUS, 0.353, 0.326, 0.272, 0.205, 0.145, 0.102, 0.076, 0.064]
+	var heights := [0.0, 0.07, 0.22, 0.41, 0.59, 0.75, 0.88, 0.95, 1.0]   # 罩口到颈部的比例
 	var out := PackedVector2Array()
 	for k in radii.size():
 		out.append(Vector2(radii[k], lerpf(MOUTH_Y, -DROP, heights[k])))
@@ -95,9 +96,9 @@ static func lamp_recipe(f: MeshForge) -> void:
 	_p(f, "brass")
 	f.lathe(PackedVector2Array([Vector2(0.0, -CANOPY_DEPTH), Vector2(0.03, -CANOPY_DEPTH + 0.002), Vector2(0.06, -0.016),
 		Vector2(0.075, -0.004), Vector2(0.075, 0.0)]), 32)
-	# 钟形罩:外壁绿珐琅、内壁奶油色(微微自发光,灯泡照亮的那一圈)
+	# 钟形罩:外壁柔红珐琅、内壁奶油色(微微自发光,灯泡照亮的那一圈)
 	var outer := shade_profile()
-	_p(f, "enamel_green")
+	_p(f, "enamel_red")
 	f.lathe(outer, 48)
 	var inner := PackedVector2Array()
 	for k in range(outer.size() - 1, -1, -1):
@@ -114,7 +115,7 @@ static func lamp_recipe(f: MeshForge) -> void:
 	f.cylinder(0.024, 0.024, 0.06, 20, MeshForge.CAPS_BOTH, xf.call(Vector3(0, -DROP - 0.06, 0)))
 	# 灯泡:自发光的球(能量 = prop 着色器的 emission_energy)
 	_p(f, "bulb")
-	f.sphere(0.05, 24, xf.call(Vector3(0, -DROP - 0.135, 0), Vector3.ZERO, Vector3(1, 1.1, 1)))
+	f.sphere(0.055, 24, xf.call(Vector3(0, -DROP - 0.13, 0), Vector3.ZERO, Vector3(1, 1.1, 1)))
 
 
 static func link_recipe(f: MeshForge) -> void:
@@ -124,5 +125,5 @@ static func link_recipe(f: MeshForge) -> void:
 	var path := PackedVector3Array()
 	for k in 11:
 		var a := TAU * k / 10.0
-		path.append(Vector3(sin(a) * 0.0085, cos(a) * 0.0165, 0))
-	f.tube(path, 0.0024, 4)
+		path.append(Vector3(sin(a) * 0.0095, cos(a) * 0.0175, 0))
+	f.tube(path, 0.0034, 5)

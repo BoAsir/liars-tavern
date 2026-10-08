@@ -6,8 +6,9 @@ class_name BarSet
 
 
 const PIVOT := Vector3(-RoomLayout.INNER, 0.0, -0.6)
-const BOTTLE_COLORS := [Color(0.15, 0.35, 0.12), Color(0.55, 0.3, 0.05), Color(0.45, 0.05, 0.05),
-	Color(0.75, 0.75, 0.7), Color(0.1, 0.15, 0.35)]
+# 粉彩玻璃色(动森式):薄荷绿、琥珀、柔红、奶白、天蓝
+const BOTTLE_COLORS := [Color(0.30, 0.58, 0.36), Color(0.82, 0.52, 0.18), Color(0.78, 0.28, 0.28),
+	Color(0.86, 0.86, 0.80), Color(0.30, 0.45, 0.78)]
 const GRAIN_ALONG_Y := Basis(Vector3.BACK, PI / 2.0)
 const SIGN_X := -3.8875   # 招牌底板中心(贴在檐口前缘 x −3.90 上)
 
@@ -82,7 +83,7 @@ static func _bottles_and_mugs(bar: Node3D) -> void:
 static func mug_mesh() -> ArrayMesh:
 	# 木桶状啤酒杯:车削杯身 + 两道铁箍 + 泡沫顶(不发光)+ 把手
 	return MeshForge.cached("bar:mug", func(f: MeshForge):
-		RoomKit.paint(f, [Color(0.42, 0.24, 0.11), 0.6, 0.0])
+		RoomKit.paint(f, [Color(0.64, 0.42, 0.24), 0.65, 0.0])
 		f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.043, 0.0), Vector2(0.046, 0.06), Vector2(0.044, 0.12),
 			Vector2(0.038, 0.12), Vector2(0.038, 0.11), Vector2(0.0, 0.11)]), 14, PackedInt32Array([1, 3, 4]))
 		RoomKit.paint(f, RoomKit.IRON)
@@ -277,12 +278,12 @@ static func _counter_recipe(f: MeshForge) -> void:
 		var z := tz - 0.1 + k * 0.1
 		RoomKit.paint(f, RoomKit.BRASS)
 		f.cylinder(0.008, 0.01, 0.06, 8, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(tx + 0.035, top + 0.24, z), Vector3(0, 0, 70)))
-		RoomKit.paint(f, [Color(0.06, 0.04, 0.03), 0.4, 0.0] if k != 1 else RoomKit.CREAM)
+		RoomKit.paint(f, RoomKit.BLACK if k != 1 else RoomKit.CREAM)
 		f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.009, 0.0), Vector2(0.014, 0.07), Vector2(0.011, 0.1), Vector2(0.0, 0.105)]),
 			8, PackedInt32Array(), MeshForge.xf(Vector3(tx, top + 0.285, z), Vector3(0, 0, -8)))
 	# 收银机:主体、斜面键盘、顶上的金额窗、侧摇把
 	var r := Vector3(-3.42, top, -1.75)
-	RoomKit.paint(f, [Color(0.40, 0.29, 0.14), 0.55, 0.85])   # 收银机用暗一点的青铜:吧台灯就在上方,亮黄铜会糊成一块发光的方块
+	RoomKit.paint(f, [Color(0.66, 0.50, 0.30), 0.55, 0.45])   # 收银机用暗一点的缎面青铜:吧台灯就在上方,亮黄铜会糊成一块发光的方块
 	f.box(Vector3(0.3, 0.18, 0.34), MeshForge.xf(r + Vector3(0, 0.09, 0)))
 	f.extrude_x(PackedVector2Array([Vector2(-0.15, 0.0), Vector2(0.15, 0.0), Vector2(0.15, 0.05), Vector2(-0.05, 0.14), Vector2(-0.15, 0.14)]),
 		0.32, Transform3D(Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0)), r + Vector3(0, 0.18, 0)))
@@ -305,7 +306,7 @@ static func _counter_recipe(f: MeshForge) -> void:
 	RoomKit.paint(f, RoomKit.BEER)
 	f.cylinder(0.019, 0.017, 0.03, 10, MeshForge.CAPS_TOP, MeshForge.xf(Vector3(-3.25, top + 0.028, -0.95)))
 	# 雪茄盒
-	RoomKit.paint(f, [Color(0.40, 0.20, 0.10), 0.5, 0.0])
+	RoomKit.paint(f, [Color(0.66, 0.38, 0.24), 0.6, 0.0])
 	f.box(Vector3(0.14, 0.05, 0.22), MeshForge.xf(Vector3(-3.5, top + 0.025, -0.35), Vector3(0, 8, 0)))
 	RoomKit.paint(f, RoomKit.CREAM)
 	f.box(Vector3(0.1, 0.003, 0.08), MeshForge.xf(Vector3(-3.5, top + 0.051, -0.35), Vector3(0, 8, 0)))
