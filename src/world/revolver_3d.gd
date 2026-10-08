@@ -7,7 +7,7 @@ const BARREL_LENGTH := 0.15
 const DRUM_POS := Vector3(0, 0.045, -0.035)
 const MUZZLE_POS := Vector3(0, 0.058, -0.235)
 # 合批:机身 / 转轮 / 击锤各一份共享网格(所有左轮共用);钢、铁、黄铜走顶点 PBR(prop 材质),木握把单独一个 surface
-const STEEL := [Color(0.16, 0.17, 0.2), 0.3, 0.92]    # [sRGB 颜色, 粗糙度, 金属度],枪钢
+const STEEL := [Color(0.30, 0.31, 0.34), 0.38, 0.70]  # [sRGB 颜色, 粗糙度, 金属度],枪钢:原来太黑,背景又暗,枪读成一团黑
 const BRASS := [Color(0.78, 0.56, 0.24), 0.32, 1.0]   # 同 WorldMaterials.brass()
 const IRON := [Color(0.09, 0.09, 0.1), 0.55, 0.8]     # 同 WorldMaterials.iron()
 

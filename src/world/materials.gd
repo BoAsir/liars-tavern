@@ -50,9 +50,10 @@ const WOOD_PRESETS := {
 		"plank_width": 0.09, "plank_length": 9.0, "roughness_base": 0.7, "wear": 0.6,
 	},
 	"grip": {
-		"color_dark": Color(0.16, 0.05, 0.02), "color_light": Color(0.45, 0.17, 0.07),
+		# 胡桃木握把:原来的红木在暖光里发粉
+		"color_dark": Color(0.10, 0.055, 0.03), "color_light": Color(0.32, 0.18, 0.09),
 		"scale": 4.0, "ring_frequency": 6.0, "grain_axis": 1, "across_axis": 0,
-		"roughness_base": 0.45, "varnish": 1.0,
+		"roughness_base": 0.45, "varnish": 0.6,
 	},
 	"log": {
 		"color_dark": Color(0.07, 0.04, 0.02), "color_light": Color(0.22, 0.12, 0.06),
@@ -161,6 +162,19 @@ static func glass(color: Color) -> StandardMaterial3D:
 		mat.emission_enabled = true
 		mat.emission = Color(color.r, color.g, color.b) * 0.08
 		return mat)
+
+
+static func enamel(color: Color) -> StandardMaterial3D:
+	# 珐琅(灯罩):不是金属,背景近乎全黑时金属会显成一块黑;无底圆锥要看得见内壁,双面渲染
+	return _cached("enamel:" + color.to_html(), func():
+		var mat := _standard(color, 0.0, 0.5)
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		return mat)
+
+
+static func beer() -> StandardMaterial3D:
+	# 啤酒液面:不自发光(原来在暗处像一块发亮的金片)
+	return _cached("beer", func(): return _standard(Color(0.78, 0.6, 0.28), 0.0, 0.25))
 
 
 static func emissive(color: Color, energy: float) -> StandardMaterial3D:

@@ -69,7 +69,7 @@ func test_paws_hats_and_cards_still_cast_shadows():
 func test_census_is_within_current_limits():
 	var census := SceneCensus.count(_tavern)
 	assert_lte(census["shadow_lights"], 3)
-	assert_lte(census["lights"], 18)
+	assert_lte(census["lights"], 16)
 
 
 func test_all_flames_share_one_material_with_distinct_seeds():
@@ -158,3 +158,11 @@ func test_moonlight_only_casts_shadows_from_the_window():
 	assert_eq(fire.shadow_caster_mask, MeshKit.LAYER_WORLD)
 	for patron in _tavern.find_children("*", "Patron", true, false):
 		assert_eq(patron.get_node("Body/BodyMesh").layers, MeshKit.LAYER_WORLD)
+
+
+func test_each_candle_holder_has_one_light():
+	# 每支蜡烛一盏灯时,烛光在近处的脸上叠出亮斑,还多花约 0.4 ms;每个烛台一盏就够
+	var holders := _tavern.get_children().filter(func(n): return String(n.name).begins_with("Candles"))
+	assert_eq(holders.size(), 2)
+	for holder in holders:
+		assert_eq(holder.find_children("*", "OmniLight3D", false, false).size(), 1, holder.name)

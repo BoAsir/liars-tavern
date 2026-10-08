@@ -14,6 +14,7 @@ const WINDOW_Z := -0.9
 const WINDOW_SIZE := Vector2(1.3, 1.25)
 const WINDOW_BOTTOM := 1.15
 const SCONCE_HEIGHT := 2.15
+const CANDLE_ENERGY := 0.42   # 一支蜡烛的光(烛台的灯按支数折算)
 # 壁灯:[墙内表面上的位置, 朝向房间的偏航角]。补亮房间四周,避免只有牌桌一圈亮
 const SCONCES := [
 	[Vector3(-1.7, SCONCE_HEIGHT, 4.4), 0.0], [Vector3(1.7, SCONCE_HEIGHT, 4.4), 0.0],
@@ -196,12 +197,7 @@ func _build_lamp() -> void:
 		Vector3(0, -LAMP_DROP / 2.0, 0))
 	var shade_y := -LAMP_DROP - 0.1
 	var shade_mesh := MeshKit.cylinder(0.07, 0.36, 0.2, 48, MeshKit.CAPS_TOP)
-	var shade_mat := StandardMaterial3D.new()
-	shade_mat.albedo_color = Color(0.12, 0.2, 0.14)
-	shade_mat.metallic = 0.6
-	shade_mat.roughness = 0.35
-	shade_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	MeshKit.add(_lamp_pivot, shade_mesh, shade_mat, Vector3(0, shade_y, 0))
+	MeshKit.add(_lamp_pivot, shade_mesh, WorldMaterials.enamel(Color(0.16, 0.27, 0.19)), Vector3(0, shade_y, 0))
 	MeshKit.add(_lamp_pivot, MeshKit.torus(0.355, 0.37, 48), WorldMaterials.brass(), Vector3(0, shade_y - 0.1, 0))
 	MeshKit.add(_lamp_pivot, MeshKit.sphere(0.055), WorldMaterials.emissive(Color(1.0, 0.82, 0.55), 4.0),
 		Vector3(0, shade_y - 0.06, 0))
@@ -233,14 +229,28 @@ func _build_lamp() -> void:
 func _build_candles() -> void:
 	var top_y := SeatLayout.TABLE_TOP
 	# 角度避开各座位的左轮摆放位置(3 人局 240° 座位的枪原本会穿过第二个烛台)
-	for spec in [[PI * 0.76, 3, 1.0], [PI * 1.31, 2, 7.0]]:
+	var specs := [[PI * 0.76, 3, 1.0], [PI * 1.31, 2, 7.0]]
+	for k in specs.size():
+		var spec: Array = specs[k]
 		var base := SeatLayout.direction(spec[0]) * 0.7 + Vector3(0, top_y, 0)
-		var holder := MeshKit.pivot(self, base, "Candles")
+		# 名字以 Candles 开头:性能探针按这个前缀找烛光;两个烛台各自命名,免得重名被自动改名
+		var holder := MeshKit.pivot(self, base, "Candles%d" % k)
 		MeshKit.add(holder, MeshKit.cylinder(0.07, 0.08, 0.012, 24), WorldMaterials.brass(), Vector3(0, 0.006, 0))
+		var total_height := 0.0
 		for i in spec[1]:
 			var offset := Vector3(cos(i * 2.1) * 0.035, 0, sin(i * 2.1) * 0.035) if spec[1] > 1 else Vector3.ZERO
 			var height: float = 0.07 + 0.045 * ((i * 37 + int(spec[2])) % 3)
 			_candle(holder, offset, height, spec[2] + i)
+			total_height += height
+		# 每个烛台一盏灯(每支一盏会在近处的脸上叠出亮斑):放在烛台中心、平均烛高之上,总亮度按支数折算
+		var light := OmniLight3D.new()
+		light.position = Vector3(0, 0.012 + total_height / spec[1] + 0.05, 0)
+		light.light_color = Color(1.0, 0.74, 0.48)
+		light.light_energy = CANDLE_ENERGY * spec[1] * 0.75
+		light.omni_range = 2.4
+		light.light_volumetric_fog_energy = 0.4
+		holder.add_child(light)
+		_flickers.append({"light": light, "base": light.light_energy, "speed": 6.0, "depth": 0.35, "seed": spec[2] * 13.0})
 
 
 func _flame(parent: Node3D, size: Vector2, pos: Vector3, intensity: float, seed: float) -> MeshInstance3D:
@@ -258,14 +268,6 @@ func _candle(parent: Node3D, offset: Vector3, height: float, seed: float) -> voi
 		Vector3.ZERO, Vector3(0.6, 1.4, 0.6))
 	var flame_y := 0.012 + height + 0.026
 	_flame(parent, Vector2(0.03, 0.06), offset + Vector3(0, flame_y, 0), 4.0, seed)
-	var light := OmniLight3D.new()
-	light.position = offset + Vector3(0, flame_y + 0.02, 0)
-	light.light_color = Color(1.0, 0.74, 0.48)
-	light.light_energy = 0.42
-	light.omni_range = 2.2
-	light.light_volumetric_fog_energy = 0.4
-	parent.add_child(light)
-	_flickers.append({"light": light, "base": light.light_energy, "speed": 6.0, "depth": 0.35, "seed": seed * 13.0})
 
 
 # —— 壁炉 ——
@@ -341,8 +343,7 @@ func _build_bar() -> void:
 
 func _mug(parent: Node3D, base: Vector3) -> void:
 	MeshKit.add(parent, MeshKit.cylinder(0.045, 0.042, 0.12, 16), WorldMaterials.wood("barrel"), base + Vector3(0, 0.06, 0))
-	MeshKit.add(parent, MeshKit.cylinder(0.04, 0.04, 0.005, 16), WorldMaterials.emissive(Color(0.95, 0.85, 0.6), 0.2),
-		base + Vector3(0, 0.118, 0))
+	MeshKit.add(parent, MeshKit.cylinder(0.04, 0.04, 0.005, 16), WorldMaterials.beer(), base + Vector3(0, 0.118, 0))
 	MeshKit.add(parent, MeshKit.torus(0.025, 0.035, 12), WorldMaterials.iron(), base + Vector3(0.05, 0.06, 0),
 		Vector3(90, 0, 0))
 
