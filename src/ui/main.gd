@@ -13,6 +13,7 @@ var world: TableWorld
 var post_fx: PostFx
 var labels: WorldLabels
 var toasts: ToastLayer
+var banter_view: BanterView   # 丢番茄与快捷语(等待厅、牌桌常驻一层)
 var flags: DebugFlags
 var settings_path := Settings.PATH   # 本机设置文件;测试换成临时文件
 var species := Species.UNASSIGNED    # 本机想要的形象:设置里的(首次启动随机一个并保存),--species 只覆盖本次运行
@@ -40,11 +41,15 @@ func _ready() -> void:
 	world = TableWorld.new(tavern)
 	tavern.table_root.add_child(world)
 	world.cards.sfx.connect(Sfx.play)
+	world.banter.sfx.connect(Sfx.play.bind(0.08))
 	post_fx = PostFx.new()
 	add_child(post_fx)
 	_ui = _ui_layer(5)
 	labels = WorldLabels.new(tavern.camera_rig.camera)
 	_ui.add_child(labels)
+	# 丢番茄与快捷语:压在屏幕之上(左侧小圆牌、快捷语面板),说明书之下
+	banter_view = BanterView.new(self)
+	_ui_layer(6).add_child(banter_view)
 	# 说明书单独一层:压在所有屏幕之上(切换屏幕也不会被盖住),提示条仍在它上面
 	_rules_root = _ui_layer(10)
 	toasts = ToastLayer.new()
@@ -99,6 +104,7 @@ func _exit_tree() -> void:
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()
 	PatronAntics.clear_cache()
+	AnimalVoice.clear_cache()
 	RoomTextures.clear()
 
 

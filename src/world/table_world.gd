@@ -43,6 +43,7 @@ const LOCAL_SPECIES := -2      # arrange 的物种计划里表示「不带 speci
 
 var tavern: Tavern
 var cards: CardTable
+var banter: BanterFx   # 丢番茄与说话的表现(等待厅与两种牌桌共用)
 var patrons := {}      # pid -> Patron
 var revolvers := {}    # pid -> Revolver3D
 var seat_angles := {}  # pid -> float
@@ -68,6 +69,8 @@ func _init(p_tavern: Tavern) -> void:
 func _ready() -> void:
 	cards = CardTable.new(self)
 	add_child(cards)
+	banter = BanterFx.new(self)
+	add_child(banter)
 	# 主菜单第一眼不再是一张光秃秃的桌子:没有酒客时摆上空椅子(共用酒客椅子的网格)
 	for i in EMPTY_CHAIRS:
 		var chair := MeshKit.add(self, PatronParts.chair_mesh(), null)
@@ -307,6 +310,8 @@ func clear() -> void:
 	_slides = {}
 	_spawned_frame = {}
 	cards.clear_all()
+	if banter != null:
+		banter.clear()
 	_clear_debris()
 	_show_empty_chairs(true)
 

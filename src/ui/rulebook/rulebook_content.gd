@@ -9,6 +9,12 @@ class_name RulebookContent
 const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys", "hands"]
 # 两本书的「操作」章都有这条:自选形象(子项目② §3.7)
 const SPECIES_NOTE := "主菜单名号旁的头像处挑选你的动物形象;同桌不撞脸,先选先得,被占时房主给你一个空着的;等待厅里点自己的头像还能换。"
+# 两本书的「操作」章都有这几条:丢番茄与快捷语(等待厅和牌局里都能用,出局、观战也行)
+const BANTER_KEYS := [
+	{"action": "朝光标所指的人丢番茄", "mouse": "右键", "keys": ["T"]},
+	{"action": "快捷语(按数字说出)", "mouse": "「Q」圆牌", "keys": ["Q", "1–8"]},
+]
+const BANTER_NOTE := "丢番茄(每人 3 秒一个)和快捷语纯属逗乐,不影响胜负和计时;你的动物会用自己的叫声把话念出来,头顶冒出气泡。快捷语面板开着时数字键只用来说话。"
 # 翻开说明书的快捷键。放在纯数据模块里,HUD 等引用它时不会把 Rulebook 依赖的自动加载单例拖进来
 const HOTKEY := KEY_F1
 
@@ -181,11 +187,14 @@ static func _controls() -> Dictionary:
 				{"action": "质疑上家", "mouse": "「质疑!」按钮", "keys": ["C", "空格"]},
 				{"action": "转头张望", "mouse": "移动鼠标", "keys": []},
 				{"action": "探头 / 缩回(脖子自动伸缩)", "mouse": "", "keys": ["W", "A", "S", "D"]},
+				BANTER_KEYS[0],
+				BANTER_KEYS[1],
 				{"action": "翻开说明书", "mouse": "「规则」按钮", "keys": [OS.get_keycode_string(HOTKEY)]},
 				{"action": "说明书翻页", "mouse": "左侧目录", "keys": ["←", "→"]},
 				{"action": "离开 / 合上", "mouse": "", "keys": ["Esc"]},
 			]},
 			{"type": "note", "text": "看说明书时对局不会暂停,回合计时照常进行;轮到你时屏幕上方会有提示。"},
+			{"type": "note", "text": BANTER_NOTE},
 			{"type": "note", "text": SPECIES_NOTE},
 		],
 	}

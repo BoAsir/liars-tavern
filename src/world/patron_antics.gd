@@ -7,6 +7,7 @@ extends Node
 # - 中弹出局:先转蚊香眼再定格成 ×、头顶一圈小星星一直转、舌头吐在嘴角(卡通、不见血);
 # - 赢了:先眯眼笑,再挑眉毛、得意地左右晃脑袋;
 # - 被吓一跳(有人喊骗子、旁边有人中枪):原地一蹦、眼睛瞪圆、帽子弹起、耳朵炸开;
+# - 被番茄砸中:眯眼嫌弃、皱眉、摇头、吐舌头「呸」;说快捷语:头随每个音节轻点一下;
 # - 待机小动作:每 4–9 秒随机一个(东张西望、歪头、抖耳朵、甩尾巴、小蹦一下、挑一下眉),每个酒客各自的随机种子。
 # 便宜为先:不加灯、特效不投影;汗珠和星星各是一个 MultiMesh(网格、材质全体共用),舌头一个小网格,平时都隐藏;
 # 补间优先,逐帧只在发抖、冒汗、转星星时更新几个变换。场景树暂停(截图 --freeze)时 tick 与补间都停,跟随 Engine.time_scale。
@@ -27,10 +28,16 @@ const FIDGET_EVERY := Vector2(4.0, 9.0)
 const DIZZY_TIME := 1.3        # 中弹后先转蚊香眼的时长,之后定格成 ×
 const TONGUE_COLOR := Color(0.86, 0.42, 0.48)
 const FX_SCALE := 1.4          # 汗珠、星星、舌头跟着动森式大头放大(Q 版 1.3 倍头时的尺寸 × 这个)
+const NOD := 0.075             # 说话时每个音节点头的幅度(弧度,往下)
+const NOD_DOWN := 0.04         # 点下去 / 抬回来的时长(秒)
+const NOD_UP := 0.07
+const DISGUST_TIME := 1.1      # 被番茄砸中后嫌弃的表情停多久
+const SHAKE := 0.17            # 嫌弃地摇头的幅度(弧度)
 
 static var _cache := {}        # 共享的汗珠 / 星星网格与材质(main.gd 退出时 clear_cache)
 
 var head_add := Vector3.ZERO   # 加到头部目标角度上的偏移(俯仰 x、转头 y、歪头 z),Patron._animate_idle 读取
+var nod := 0.0                 # 说话点头(加到俯仰上;和 head_add 分开,吓一跳的补间不会把它冲掉)
 
 var _patron: Patron
 var _rng := RandomNumberGenerator.new()
@@ -47,6 +54,8 @@ var _sweat_side := -1.0        # 汗冒在不拿枪的那一侧(左)
 var _sweat_from := Vector3.ZERO
 var _sweat_to := Vector3.ZERO
 var _tweens: Array[Tween] = []
+var _talk_tween: Tween = null
+var _disgust_serial := 0
 
 
 func setup(patron: Patron) -> void:
@@ -181,6 +190,7 @@ func die() -> void:
 		_set_aiming(false)
 	_kill_tweens()
 	head_add = Vector3.ZERO
+	nod = 0.0
 	_eye("joy", 0.0)
 	_eye("shock", 0.0)
 	_eye("dizzy", 1.0)
@@ -243,9 +253,51 @@ func startle() -> void:
 			_tail_fright(false))
 
 
+func talk(syllable_times: PackedFloat32Array) -> void:
+	# 每个音节开始时点一下头(时刻相对现在);新的一句顶掉还没点完的上一句
+	if _talk_tween != null and _talk_tween.is_valid():
+		_talk_tween.kill()
+	nod = 0.0
+	if syllable_times.is_empty():
+		return
+	var tween := _track(create_tween())
+	_talk_tween = tween
+	var at := 0.0
+	for t in syllable_times:
+		tween.tween_interval(maxf(t - at, 0.0))
+		tween.tween_property(self, "nod", NOD, NOD_DOWN).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(self, "nod", 0.0, NOD_UP).set_trans(Tween.TRANS_SINE)
+		at = maxf(t, at) + NOD_DOWN + NOD_UP
+
+
+func disgust() -> void:
+	# 被番茄砸中:眼睛挤成 ^ ^、眉毛皱起来、左右摇两下头、吐舌头「呸」,然后复原
+	var p := _patron
+	if not p.alive:
+		return
+	_disgust_serial += 1
+	var serial := _disgust_serial
+	p.set_expression("angry")
+	_eye_to("joy", 0.85, 0.08)
+	_after(DISGUST_TIME, func():
+		if serial == _disgust_serial and p.alive:
+			_eye_to("joy", 0.0, 0.25)
+			p.set_expression("neutral"))
+	var shake := _track(create_tween())
+	shake.tween_interval(0.12)
+	for i in 4:
+		shake.tween_property(self, "head_add:y", SHAKE * (1.0 if i % 2 == 0 else -1.0), 0.09).set_trans(Tween.TRANS_SINE)
+	shake.tween_property(self, "head_add:y", 0.0, 0.15).set_trans(Tween.TRANS_SINE)
+	_after(0.25, func(): _tongue_out(0.12))
+	_after(0.95, func():
+		if _tongue.visible and p.alive:
+			_tongue_in(0.15))
+
+
 func reset() -> void:
 	# 回到等待厅 / 新一局:收起所有特效,眼睛、耳朵、头复原
 	_kill_tweens()
+	nod = 0.0
 	_dead = false
 	_relieved = false
 	if _aiming:

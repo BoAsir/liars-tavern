@@ -48,6 +48,7 @@ var _join_timer: Timer = null
 var _anim_left := 0.0              # 仅房主:客户端还要演多久(按 Pacing 预算估),随时间递减
 var _species_asked_at := {}        # 仅房主:peer_id -> 上次换形象请求的时刻(毫秒),冷却用
 var _species_wanted := Species.UNASSIGNED   # 仅客户端:等待房主确认的换形象请求
+var banter: Banter = null          # 丢番茄与快捷语(子节点 /root/Net/Banter,RPC 在它身上,本类的 RPC 表不变)
 
 
 func _ready() -> void:
@@ -59,6 +60,9 @@ func _ready() -> void:
 	_turn_timer = _make_timer(_on_turn_timeout)
 	_hand_timer = _make_timer(_on_hand_timer)
 	_join_timer = _make_timer(_on_join_timeout)
+	banter = Banter.new()
+	banter.name = "Banter"
+	add_child(banter)
 
 
 func _process(delta: float) -> void:
