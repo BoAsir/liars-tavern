@@ -241,13 +241,21 @@ func _build_candles() -> void:
 			_candle(holder, offset, height, spec[2] + i)
 
 
+func _flame(parent: Node3D, size: Vector2, pos: Vector3, intensity: float, seed: float) -> MeshInstance3D:
+	# 火焰公告板:共用一份材质,强度与种子按实例设定
+	var flame := MeshKit.add(parent, MeshKit.quad(size), WorldMaterials.flame(), pos)
+	flame.set_instance_shader_parameter("intensity", intensity)
+	flame.set_instance_shader_parameter("seed", seed)
+	return flame
+
+
 func _candle(parent: Node3D, offset: Vector3, height: float, seed: float) -> void:
 	var wax := WorldMaterials.emissive(Color(0.9, 0.84, 0.72), 0.03)
 	MeshKit.add(parent, MeshKit.cylinder(0.016, 0.018, height, 16), wax, offset + Vector3(0, 0.012 + height / 2.0, 0))
 	MeshKit.add(parent, MeshKit.sphere(0.012, 10), wax, offset + Vector3(0.012, 0.012 + height * 0.8, 0),
 		Vector3.ZERO, Vector3(0.6, 1.4, 0.6))
 	var flame_y := 0.012 + height + 0.026
-	MeshKit.add(parent, MeshKit.quad(Vector2(0.03, 0.06)), WorldMaterials.flame(4.0, seed), offset + Vector3(0, flame_y, 0))
+	_flame(parent, Vector2(0.03, 0.06), offset + Vector3(0, flame_y, 0), 4.0, seed)
 	var light := OmniLight3D.new()
 	light.position = offset + Vector3(0, flame_y + 0.02, 0)
 	light.light_color = Color(1.0, 0.74, 0.48)
@@ -278,8 +286,7 @@ func _build_fireplace() -> void:
 		Vector3(0, 0.05, 0.3), Vector3.ZERO, Vector3(1.6, 0.25, 0.8))
 	for i in 6:
 		var h := 0.36 + 0.14 * ((i * 7) % 3)
-		MeshKit.add(fp, MeshKit.quad(Vector2(h * 0.75, h)), WorldMaterials.flame(3.0, 20.0 + i),
-			Vector3(-0.3 + i * 0.12, 0.08 + h / 2.0, 0.32 + (i % 2) * 0.04))
+		_flame(fp, Vector2(h * 0.75, h), Vector3(-0.3 + i * 0.12, 0.08 + h / 2.0, 0.32 + (i % 2) * 0.04), 3.0, 20.0 + i)
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 0.5, 0.75)
 	light.light_color = Color(1.0, 0.56, 0.3)
@@ -408,7 +415,7 @@ func _sconce(wall_point: Vector3, yaw: float, seed: float) -> void:
 	MeshKit.add(root, MeshKit.cylinder(0.04, 0.022, 0.035, 16), WorldMaterials.brass(), Vector3(0, -0.03, -0.15))
 	MeshKit.add(root, MeshKit.cylinder(0.032, 0.036, 0.12, 16), WorldMaterials.glass(Color(1.0, 0.92, 0.8)),
 		Vector3(0, 0.045, -0.15))
-	MeshKit.add(root, MeshKit.quad(Vector2(0.035, 0.07)), WorldMaterials.flame(3.5, seed), Vector3(0, 0.03, -0.15))
+	_flame(root, Vector2(0.035, 0.07), Vector3(0, 0.03, -0.15), 3.5, seed)
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 0.05, -0.2)
 	light.light_color = Color(1.0, 0.74, 0.48)

@@ -95,13 +95,12 @@ static func stone(kind: String) -> ShaderMaterial:
 		return mat)
 
 
-static func flame(intensity: float, seed: float) -> ShaderMaterial:
-	# 每簇火焰独立实例,seed 让相邻火苗不同步
-	var mat := ShaderMaterial.new()
-	mat.shader = FLAME_SHADER
-	mat.set_shader_parameter("intensity", intensity)
-	mat.set_shader_parameter("seed", seed)
-	return mat
+static func flame() -> ShaderMaterial:
+	# 所有火焰共用这一份;强度与种子是实例参数(set_instance_shader_parameter),见 Tavern._flame
+	return _cached("flame", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = FLAME_SHADER
+		return mat)
 
 
 static func particle(additive: bool, boost: float, softness: float) -> ShaderMaterial:

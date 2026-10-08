@@ -70,3 +70,16 @@ func test_census_is_within_current_limits():
 	var census := SceneCensus.count(_tavern)
 	assert_lte(census["shadow_lights"], 3)
 	assert_lte(census["lights"], 18)
+
+
+func test_all_flames_share_one_material_with_distinct_seeds():
+	var flames := _meshes().filter(func(m: MeshInstance3D):
+		return m.material_override is ShaderMaterial and m.material_override.shader == WorldMaterials.FLAME_SHADER)
+	assert_gt(flames.size(), 10)
+	var materials := {}
+	var seeds := {}
+	for flame: MeshInstance3D in flames:
+		materials[flame.material_override] = true
+		seeds[flame.get_instance_shader_parameter("seed")] = true
+	assert_eq(materials.size(), 1, "火焰共用一份材质")
+	assert_eq(seeds.size(), flames.size(), "每簇火焰的种子不同,相邻火苗不同步")
