@@ -5,11 +5,13 @@ extends Node
 #   --species=物种id     本次运行想要的形象(fox/bear/…/crocodile),只覆盖本次、不写设置;
 #                        每次名单更新与开局时打印 [debug] species {pid: id}(冒烟测试比对各进程)
 #   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
+#   --mode=玩法id        房主开房的玩法(liars / bomb_cat / holdem / short_deck,默认骗子酒馆)
 #   --port=端口          房主优先绑定的游戏端口(并行测试互不串房)
 #   --room=房名          房主的房间名
 #   --autojoin=IP[:端口] 自动直连
 #   --discover[=房名]    自动加入局域网发现的(指定名字的)房间
-#   --bot                自动准备/选牌/出牌/质疑(走真实界面路径);开局后朝别人丢一个番茄、按 Q 说一句快捷语
+#   --bot                自动准备/选牌/出牌/质疑(走真实界面路径);开局后朝别人丢一个番茄、按 Q 说一句快捷语;
+#                        炸弹猫里由 BombCatBot 出牌、偶尔不行!、摸牌、塞回、给牌(同样走牌桌的公开入口)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
@@ -37,6 +39,7 @@ var _fidget_timer := BOT_FIDGET
 var _fidget_step := 0
 var _tomato_from := {}   # 收到过谁丢的番茄(冒烟测试据此确认丢番茄走通)
 var _said_from := {}     # 收到过谁说的快捷语
+var _bomb_bot: BombCatBot = null
 
 
 func _init(p_app: Node) -> void:
@@ -105,7 +108,7 @@ func _ready() -> void:
 	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
 	if opts.has("autohost"):
 		var room: String = opts.get("room", "%s 的酒馆" % player_name)
-		var err := Net.host_game(player_name, room, int(opts.get("port", "0")), GameMode.DEFAULT, _species())
+		var err := Net.host_game(player_name, room, int(opts.get("port", "0")), host_mode(opts), _species())
 		print("[debug] host_game -> ", error_string(err))
 		if err != OK:
 			_fail("host_failed")
@@ -126,6 +129,15 @@ func _join_discovered(rooms: Array, player_name: String) -> void:
 			return
 
 
+static func host_mode(flags: Dictionary) -> String:
+	# --mode=<玩法 id>;没给或不认识时用默认玩法(后者告警)
+	var mode: String = flags.get("mode", GameMode.DEFAULT)
+	if not GameMode.is_valid(mode):
+		push_warning("--mode=%s 不是已知玩法(可选:%s),用默认玩法" % [mode, ", ".join(GameMode.ALL)])
+		return GameMode.DEFAULT
+	return mode
+
+
 func _species() -> int:
 	# 本机想要的形象:main 已经按设置解析好,--species 覆盖本次运行
 	return Species.sanitize(app.get("species"))
@@ -136,6 +148,9 @@ func _process(delta: float) -> void:
 		return
 	_fidget(delta)
 	var screen: Node = app.current_screen()
+	if screen != null and screen.get("state") is BombCatScreenState:
+		_bomb_bot_tick(screen, delta)
+		return
 	if screen == null or not screen.has_method("_my_turn") or not screen._my_turn():
 		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
 		return
@@ -192,6 +207,19 @@ func _bot_act(screen: Node) -> void:
 	for i in indices.slice(0, randi_range(1, mini(3, hand_size))):
 		screen._toggle(i)
 	screen._submit_play()
+
+
+func _bomb_bot_tick(screen: Node, delta: float) -> void:
+	# 炸弹猫:想一会儿再走一步;这一刻没事可做就过一小会儿再看(反应窗口只有 3 秒)
+	if _bomb_bot == null:
+		_bomb_bot = BombCatBot.new()
+	_think_timer -= delta
+	if _think_timer > 0.0:
+		return
+	if _bomb_bot.act(screen):
+		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
+	else:
+		_think_timer = 0.25
 
 
 func _bot_banter(seats: Array) -> void:
@@ -262,7 +290,7 @@ func _on_game_started(seats: Array) -> void:
 	await get_tree().process_frame
 	var screen: Node = app.current_screen()
 	var director = screen.get("director") if screen != null else null
-	if director is TableDirector:
+	if director is TableDirector or director is BombCatDirector:
 		director.event_started.connect(_on_director_event)
 		if opts.has("camera"):
 			director.seat_camera.set_first_person(opts["camera"] == "first", false)
@@ -280,6 +308,12 @@ func _on_director_event(ev: Dictionary) -> void:
 		"gunshot":
 			_capture_once("suspense", 2.0)
 			_capture_once("shot_result", 3.0)
+		"bomb_drawn":
+			_capture_once("bomb", 1.0)
+		"exploded":
+			_capture_once("exploded", 1.6)
+		"defused":
+			_capture_once("defused", 1.2)
 		"match_over":
 			_capture_once("victory", 1.5)
 			_capture_once("settlement", 3.3)
