@@ -2,7 +2,8 @@ class_name Patron
 extends Node3D
 # 酒客角色:坐在椅子上的卡通动物。原点在座位地面,面朝 -Z(牌桌中心)。
 # 坐姿:身体前倾趴在牌桌上,双手搭在桌面——拿着牌也一样,牌扇自己立在胸前(爪子去扶牌会挡住牌面)。
-# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直)。
+# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直);
+# 结算时胜者跳舞、旁人鼓掌、出局的人抽一下手(PatronDance,规格 2026-10-09-winner-celebration)。
 
 
 const ARM_LENGTH := 0.45   # 动森式大头离肩更远:举枪时手要离头心 ≈0.64 m 才能把枪口抵在太阳穴(Q 版 0.4)
@@ -138,6 +139,7 @@ var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
 var _neck_velocity := Vector3.ZERO
 var _wipe_tween: Tween = null      # 被番茄砸中后抹脸的补间(出局、复位时中止)
 var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
+var _dance: PatronDance = null     # 结算庆祝:跳舞 / 鼓掌 / 出局抽手(只在庆祝期间存在),见 patron_dance.gd
 
 
 func _init(p_species_index := 0) -> void:
@@ -788,6 +790,7 @@ func relief() -> void:
 # —— 出局 / 庆祝 / 进出场 ——
 
 func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
+	stop_dance()
 	alive = false
 	_arms_locked = true
 	_stop_wipe()
@@ -864,11 +867,9 @@ func celebrate() -> void:
 
 
 func reset_pose() -> void:
-	# 回到等待厅 / 新一局开始:停下庆祝,解除动作锁,恢复中性表情、前倾坐姿、双手搭回桌上
-	for tween in _cheer_tweens:
-		if tween.is_valid():
-			tween.kill()
-	_cheer_tweens = []
+	# 回到等待厅 / 新一局开始:停下庆祝与舞步,解除动作锁,恢复中性表情、前倾坐姿、双手搭回桌上
+	stop_dance()
+	_kill_cheer()
 	_stop_wipe()
 	_arms_locked = false
 	_sitting_up = false
@@ -884,6 +885,86 @@ func reset_pose() -> void:
 		_fan_alive = null
 	rest_arms(false)
 	_antics.reset()
+
+
+func _kill_cheer() -> void:
+	for tween in _cheer_tweens:
+		if tween.is_valid():
+			tween.kill()
+	_cheer_tweens = []
+
+
+# —— 结算庆祝(规格 2026-10-09-winner-celebration)——
+
+func dance(routine := -1, seed_value := 0) -> void:
+	# 胜者跳舞,一直跳到 stop_dance / reset_pose;routine < 0 时按物种与种子挑一支(PatronDance.pick)。
+	# 坐直、眯眼笑(^ ^)、挑眉,手臂、身体、头、帽子由 PatronDance 逐帧接管
+	if not alive:
+		return
+	if routine < 0:
+		routine = PatronDance.pick(species_index, seed_value)
+	_start_dance(routine, seed_value)
+	set_expression("happy")
+	_antics._eye_to("joy", 1.0, 0.15)
+	_antics._ears_to(-0.3, 0.08, 0.3)
+
+
+func clap(seed_value := 0) -> void:
+	# 没赢的人坐直了鼓掌(一阵一阵地拍,歇的时候偶尔挥拳),笑着看胜者
+	if not alive:
+		return
+	_start_dance(PatronDance.CLAP, seed_value)
+	set_expression("happy")
+
+
+func twitch(seed_value := 0) -> void:
+	# 出局倒着的人:隔一会儿抽一下手(仍然倒着、褪着色)
+	if alive:
+		return
+	stop_dance()
+	_dance = PatronDance.new()
+	_dance.setup(self, PatronDance.TWITCH, seed_value)
+	add_child(_dance)
+
+
+func _start_dance(routine: int, seed_value: int) -> void:
+	stop_dance()
+	_kill_cheer()
+	_stop_wipe()
+	_arms_locked = true
+	_sitting_up = true
+	_arm_serial += 1   # 还没走完的歇手补间不再把手标成「搭在桌上」
+	_dance = PatronDance.new()
+	_dance.setup(self, routine, seed_value)
+	add_child(_dance)
+
+
+func stop_dance() -> void:
+	# 收起舞步 / 鼓掌 / 抽手:帽子、腿、身体、耳朵、尾巴、牌扇复原;活着的人坐回去、双手搭回桌上。没在跳时什么也不做
+	if _dance == null:
+		return
+	var was := _dance
+	_dance = null
+	if is_instance_valid(was):
+		was.restore()
+		remove_child(was)
+		was.queue_free()
+	if alive:
+		_arms_locked = false
+		_sitting_up = false
+		_antics._eye("joy", 0.0)
+		set_expression("neutral")
+		rest_arms(false)
+
+
+func is_dancing() -> bool:
+	# 正在跳舞(胜者);鼓掌、抽手不算
+	return _dance != null and _dance.is_dance()
+
+
+func dance_routine() -> int:
+	# 当前的庆祝动作(PatronDance 的枚举);没有时 -1
+	return _dance.routine if _dance != null else -1
 
 
 func startle() -> void:
