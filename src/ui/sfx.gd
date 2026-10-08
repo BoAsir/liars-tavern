@@ -15,6 +15,8 @@ const VOLUMES := {
 	"win": -6.0, "join": -10.0, "thud": -4.0,
 	"chips": -9.0, "chips_push": -7.0, "fold": -14.0,   # 德州:筹码碰撞 / 全下推筹码 / 轻推牌(规格 §6.7)
 	"tomato_throw": -12.0, "tomato_splat": -4.0,        # 丢番茄:出手的短 whoosh / 湿的「啪叽」
+	# 炸弹猫:导火索嘶嘶 / 爆炸(比枪声更闷更大)/ 剪线咔嚓 / 「不行!」拍桌 / 洗牌哗哗
+	"fuse": -9.0, "boom": 0.0, "snip": -4.0, "nope_slap": -3.0, "riffle": -9.0,
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -165,6 +167,16 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_whoosh_up(0.24))
 		"tomato_splat":
 			return _wav(_splat())
+		"fuse":
+			return _wav(_fuse(1.4))
+		"boom":
+			return _wav(_explosion())
+		"snip":
+			return _wav(_mix([_metal_click(0.9), _offset(_noise_burst(0.05, 0.75, 0.001), 0.012), _offset(_metal_click(0.5), 0.07)]))
+		"nope_slap":
+			return _wav(_mix([_noise_burst(0.06, 0.6, 0.001), _thump(105.0, 0.14, 1.0), _rattle(0.28)]))
+		"riffle":
+			return _wav(_riffle(0.75))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -308,6 +320,62 @@ func _gunshot() -> PackedFloat32Array:
 		var rumble := tail * exp(-t * 2.2) * 2.2
 		y = crack * 1.1 + boom + rumble
 		out[i] = clampf(y, -1.0, 1.0)
+	return out
+
+
+func _fuse(duration: float) -> PackedFloat32Array:
+	# 导火索:高通的嘶嘶声,夹着随机的噼啪
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var low := 0.0
+	var crackle := 0.0
+	for i in n:
+		var t := float(i) / n
+		var white := _rng.randf_range(-1.0, 1.0)
+		low += 0.08 * (white - low)
+		if _rng.randf() < 0.004:
+			crackle = _rng.randf_range(0.5, 1.0)
+		crackle *= 0.985
+		var env := minf(t / 0.05, 1.0) * (1.0 - t * 0.4)
+		out[i] = ((white - low) * 0.45 + white * crackle * 0.8) * env
+	return out
+
+
+func _explosion() -> PackedFloat32Array:
+	# 爆炸:比枪声低、闷、长——起头一记重低音往下滑,接着翻滚的低通隆隆声,几乎没有清脆的爆裂
+	var n := int(2.4 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	var rumble := 0.0
+	var mid := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		phase += TAU * (28.0 + 70.0 * exp(-t * 5.0)) / RATE
+		var boom := sin(phase) * exp(-t * 2.2) * 1.1
+		var white := _rng.randf_range(-1.0, 1.0)
+		rumble += 0.025 * (white - rumble)
+		mid += 0.12 * (white - mid)
+		var noise := rumble * exp(-t * 1.3) * 3.2 + mid * exp(-t * 9.0) * 0.9
+		out[i] = clampf((boom + noise) * minf(t / 0.004, 1.0), -1.0, 1.0)
+	return out
+
+
+func _riffle(duration: float) -> PackedFloat32Array:
+	# 洗牌:一串越来越密的纸牌拍打声
+	var out := PackedFloat32Array()
+	out.resize(int(duration * RATE))
+	var t := 0.0
+	var gap := 0.05
+	while t < duration - 0.03:
+		var burst := _noise_burst(0.018, 0.55, 0.001)
+		var start := int(t * RATE)
+		for i in burst.size():
+			if start + i < out.size():
+				out[start + i] += burst[i] * _rng.randf_range(0.4, 0.8)
+		t += gap * _rng.randf_range(0.7, 1.3)
+		gap = maxf(gap * 0.9, 0.012)
 	return out
 
 

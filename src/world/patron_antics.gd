@@ -56,6 +56,7 @@ var _sweat_to := Vector3.ZERO
 var _tweens: Array[Tween] = []
 var _talk_tween: Tween = null
 var _disgust_serial := 0
+var _sweat_left := 0.0         # 炸弹猫拆弹:不举枪也冒汗的剩余秒数
 
 
 func setup(patron: Patron) -> void:
@@ -117,6 +118,11 @@ func tick(delta: float) -> void:
 		_set_aiming(aiming)
 	if _aiming:
 		_tremble()
+	elif _sweat_left > 0.0:
+		_sweat_left -= delta
+		_drip()
+		if _sweat_left <= 0.0:
+			_sweat.visible = false
 	if _dead:
 		_spin_stars()
 	elif p.alive and not p._arms_locked and not p._sitting_up:
@@ -146,7 +152,12 @@ func _tremble() -> void:
 	body.position.z = Patron.HIP.z + sin(t * 37.0) * TREMBLE * 0.5
 	if not _patron._ears.is_empty():   # 只颤不拿枪那一侧(左)的耳朵:右耳紧挨着枪管
 		_patron._ears[0].rotation.z = _ear_rest[0] + sin(t * 41.0) * EAR_JITTER
+	_drip()
+
+
+func _drip() -> void:
 	# 冷汗:几滴错开相位往下滑,滑到底变小消失再从额角冒出来
+	var t := _time
 	var mm := _sweat.multimesh
 	for i in SWEAT_DROPS:
 		var k := fposmod(t / SWEAT_CYCLE + float(i) / SWEAT_DROPS, 1.0)
@@ -183,9 +194,36 @@ func relief() -> void:
 	_ears_to(0.35, 0.2, 0.6)
 
 
+func sweat(duration: float) -> void:
+	# 炸弹猫拆弹:不举枪也满头冷汗、眼睛瞪圆,duration 秒后收起
+	if not _patron.alive:
+		return
+	_sweat_left = maxf(_sweat_left, duration)
+	_sweat.visible = true
+	_eye_to("shock", 1.0, 0.1)
+	_after(duration, func():
+		if not _aiming:
+			_eye_to("shock", 0.0, 0.3))
+	_tail_fright(true)
+	_after(duration, func():
+		if not _aiming:
+			_tail_fright(false))
+
+
+func giggle(hold: float) -> void:
+	# 炸弹猫偷看:眯眼偷乐、耳朵一抖
+	if not _patron.alive:
+		return
+	_eye_to("joy", 1.0, 0.12)
+	_after(hold + 0.15, func(): _eye_to("joy", 0.0, 0.2))
+	_ears_to(0.3, 0.1, 0.4)
+
+
 func die() -> void:
 	# 出局:先转蚊香眼再定格 ×,星星在头顶一圈圈转,舌头吐在嘴角
 	_dead = true
+	_sweat_left = 0.0
+	_sweat.visible = false
 	if _aiming:
 		_set_aiming(false)
 	_kill_tweens()
@@ -298,6 +336,7 @@ func reset() -> void:
 	# 回到等待厅 / 新一局:收起所有特效,眼睛、耳朵、头复原
 	_kill_tweens()
 	nod = 0.0
+	_sweat_left = 0.0
 	_dead = false
 	_relieved = false
 	if _aiming:

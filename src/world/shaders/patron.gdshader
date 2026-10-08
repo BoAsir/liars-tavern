@@ -16,9 +16,11 @@ render_mode diffuse_burley, specular_schlick_ggx;
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
 instance uniform float fade = 0.0;          // 0 正常 → 1 褪成灰
+instance uniform float soot = 0.0;          // 炸弹猫:被炸得一脸黑灰(0 干净 → 1 一片斑驳的黑),只设在头上的部件
 instance uniform vec4 tail = vec4(0.0);     // x 相位、y 摆幅(弧度)、z 下垂(0..1,出局)
 instance uniform vec3 tail_root = vec3(0.0);
 const vec3 GREY = vec3(0.42);               // = Patron.GREY(sRGB)
+const vec3 SOOT = vec3(0.12, 0.1, 0.09);    // 黑灰(sRGB,略带暖棕,不是死黑)
 
 varying vec3 local_pos;
 varying float mat_class;
@@ -87,6 +89,12 @@ void fragment() {
 	} else if (kind == 8) {
 		// 针织:粗的竖直罗纹
 		c *= 0.93 + 0.07 * stripes(p.x * 40.0 + p.z * 40.0, 0.5);
+	}
+	if (soot > 0.0) {
+		// 一块块的黑灰:大尺度噪声决定哪里黑,soot 越大黑的范围越大;边缘柔和
+		float n = value_noise3(p * 9.0 + vec3(3.1, 1.7, 5.3));
+		float m = 1.0 - smoothstep(0.3, 0.55, n - soot * 0.45);
+		c = mix(c, SOOT, m * clamp(soot, 0.0, 1.0) * 0.92);
 	}
 	float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));             // = Color.get_luminance()
 	c = mix(c, GREY * lum * 1.6, 0.85 * fade * step(metal, 0.5)); // 金属件(铜扣)不褪色,与旧版一致

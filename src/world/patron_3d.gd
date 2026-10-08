@@ -83,6 +83,13 @@ const THROW_FLING := 0.1
 const THROW_RECOVER := 0.32     # 甩完之后停多久再把手搭回桌上
 const WIPE_FACE := Vector3(-0.06, -0.04, -0.36)
 const SPEECH_ABOVE_HEAD := 0.34 # 快捷语气泡挂在头心之上这么高(没有铭牌时)
+# 炸弹猫:偷看时左爪捂嘴(身体局部坐标,相对头的位置);拆弹时两只爪子在胸前比划(座位坐标),每步这么久
+const COVER_MOUTH := Vector3(0.02, -0.1, -0.34)
+const COVER_MOUTH_HOLD := 0.7
+const SNIP_LEFT := Vector3(-0.08, SeatLayout.TABLE_TOP + 0.24, -0.5)
+const SNIP_RIGHT := Vector3(0.09, SeatLayout.TABLE_TOP + 0.27, -0.48)
+const SNIP_STEP := 0.09
+const SNIP_TIME := 0.9
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
@@ -606,6 +613,67 @@ func _finish_slam() -> void:
 	await get_tree().create_timer(0.35).timeout
 	_arms_locked = false
 	rest_arms()
+
+
+func cover_mouth(hold := COVER_MOUTH_HOLD) -> void:
+	# 炸弹猫「偷看」:左爪捂着嘴偷乐一下再放回桌上;手被别的动作占着时只换个表情
+	if not alive:
+		return
+	set_expression("smug")
+	_antics.giggle(hold)
+	if _arms_locked:
+		return
+	_arms_locked = true
+	var tween := create_tween()
+	_tween_arm(tween, _arm_l, head.position + COVER_MOUTH, 0.16)
+	tween.tween_interval(hold)
+	var serial := _arm_serial
+	await tween.finished
+	if alive and serial == _arm_serial:
+		_arms_locked = false
+		set_expression("neutral")
+		rest_arms()
+
+
+func snip_wires(duration := SNIP_TIME) -> void:
+	# 炸弹猫「拆弹」:两只爪子在胸前手忙脚乱地比划(剪线),满头大汗;duration 之后在原地停住,
+	# 由调用方接着 relief()(咔嚓,松一口气)。期间手不搭桌
+	if not alive:
+		return
+	_arms_locked = true
+	set_expression("worried")
+	_antics.sweat(duration + 0.6)
+	var tween := create_tween()
+	var steps := maxi(int(duration / SNIP_STEP), 2)
+	for i in steps:
+		var side := 1.0 if i % 2 == 0 else -1.0
+		var left := _to_body(SNIP_LEFT + Vector3(0.025 * side, 0.03 * side, 0.0))
+		var right := _to_body(SNIP_RIGHT + Vector3(-0.03 * side, -0.025 * side, 0.01 * side))
+		# 每一步左右手同时动(并行加进同一步),步与步之间用 0 秒的间隔隔开
+		tween.set_parallel(true)
+		_tween_arm(tween, _arm_l, left, SNIP_STEP, Tween.TRANS_SINE)
+		_tween_arm(tween, _arm_r, right, SNIP_STEP, Tween.TRANS_SINE)
+		tween.set_parallel(false)
+		tween.tween_interval(0.0)
+	var serial := _arm_serial
+	await tween.finished
+	if alive and serial == _arm_serial:
+		_arms_locked = false
+		rest_arms()
+
+
+func set_soot(amount: float, duration := 0.0) -> void:
+	# 炸弹猫「爆炸」:头上的部件(脸、耳、吻……)盖上一层斑驳的黑灰(patron.gdshader 的实例参数 soot);0 = 干净
+	var parts := _fade_targets.filter(func(t: GeometryInstance3D) -> bool: return is_instance_valid(t) and head.is_ancestor_of(t))
+	if duration <= 0.0:
+		for part in parts:
+			part.set_instance_shader_parameter("soot", amount)
+		return
+	var tween := create_tween()
+	tween.tween_method(func(v: float) -> void:
+		for part in parts:
+			if is_instance_valid(part):
+				part.set_instance_shader_parameter("soot", v), 0.0, amount, duration)
 
 
 func pick_up(gun: Node3D, duration: float) -> void:
