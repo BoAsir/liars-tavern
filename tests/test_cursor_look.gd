@@ -66,14 +66,14 @@ func test_neck_input_back_key_stops_at_rest():
 	assert_gt(input.x, 0.0, "横向位置保留")
 
 
-func test_neck_input_does_not_go_backward():
+func test_neck_input_moves_forward_at_once_after_retracting():
 	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, 1), 0.5)
 	assert_eq(input, Vector3.ZERO, "在原位按 S 不往后探")
 	input = SeatGaze.next_neck_input(input, Vector3(0, 0, -1), 0.1)
 	assert_almost_eq(input.z, -SeatGaze.NECK_SPEED * 0.1, 0.0001, "随后按 W 立刻往前,不用先抵消攒下的后退量")
 
 
-func test_neck_input_back_key_stops_at_rest():
+func test_neck_input_back_key_stops_at_rest_from_sideways():
 	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(1, 0, -1), 0.4)
 	input = SeatGaze.next_neck_input(input, Vector3(0, 0, 1), 2.0)
 	assert_almost_eq(input.z, 0.0, 0.0001, "按 S 收回到原位就停")

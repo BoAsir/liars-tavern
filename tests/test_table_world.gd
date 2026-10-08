@@ -158,7 +158,8 @@ func test_liars_table_keeps_its_camera_views():
 	_arrange([1, 2, 3])
 	world.configure_table(POKER_R)
 	world.configure_table(SeatLayout.TABLE_RADIUS)
-	_assert_view(world.third_person_view(1), Vector3(0.55, 1.92, 2.1), Vector3(0, 0.78, -0.12), "越肩")
+	_assert_view(world.third_person_view(1), Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT,
+		SeatLayout.SEAT_RADIUS + TableWorld.THIRD_PERSON_BEHIND), Vector3(0, 0.78, -0.12), "越肩")
 	_assert_view(world.overview_view(), Vector3(0, 2.3, 2.7), Vector3(0, 0.78, -0.25), "观战")
 	_assert_view(world.lobby_view(), Vector3(0.95, 2.6, 2.5), Vector3(0.95, 0.75, -0.1), "等待厅")
 	var orbit := world.table_orbit()

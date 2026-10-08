@@ -370,7 +370,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 ### 5.5 机位(德州的确切数值;骗子酒馆的数值不变)
 
-- 越肩:`pos = dir·(seat_radius + THIRD_PERSON_BACK − SEAT_RADIUS) + right·THIRD_PERSON_SIDE + (0, THIRD_PERSON_HEIGHT, 0)`,`target = −dir·0.12 + (0, 0.78, 0)`;常量取 `TableWorld` 现值(上游已把越肩镜头拉远到 2.45 / 2.05 / 0.6,手牌举到右肩外侧),半径 0.95 时正好是骗子酒馆现在的机位。德州按同一公式推远,铭牌不重叠与公共牌大小以无头布局测试和截图为准。
+- 越肩:`pos = dir·(seat_radius + THIRD_PERSON_BACK − SEAT_RADIUS) + right·THIRD_PERSON_SIDE + (0, THIRD_PERSON_HEIGHT, 0)`,`target = −dir·0.12 + (0, 0.78, 0)`;骗子酒馆用上游拉远后的 BEHIND 1.2 / HEIGHT 2.05 / SIDE 0.6(半径 0.95 时正好是现在的机位);德州桌用 `TableWorld.POKER_THIRD_PERSON`(右移 0.55、高 1.92、座位外 0.85;再远再高 8 个铭牌会重叠,见 test_poker_view_layout),即 (0.55, 1.92, 2.6) → (0, 0.78, −0.12)。
 - 观战(德州):(0, 2.00, 2.60) → (0, 0.78, 0.00)。
 - 等待厅(德州):(1.65, 2.75, 3.35) → (1.35, 0.75, 0.10)。
 - 散局环绕:半径 ≥ 3.0,镜头高约 2.0(现在 2.4 米的环绕会擦过 2.11 米处的椅背)。

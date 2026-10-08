@@ -10,6 +10,9 @@ const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
 # 越肩机位(规格 §5.5):座位外 BEHIND 米、右移 SIDE、高 HEIGHT;骗子酒馆桌(座位半径 1.25)正好是上游拉远后的 2.45 米
 const THIRD_PERSON_BEHIND := 1.2
+# 德州桌(半径 1.45)沿用拉远之前的那组越肩参数:上游拉远、抬高是为了骗子酒馆的牌扇不被探头挡住,
+# 德州的牌扇位置由 PokerLayout 另定;再远、再高 8 个铭牌就会在越肩机位下重叠(test_poker_view_layout)
+const POKER_THIRD_PERSON := Vector3(0.55, 1.92, 0.85)   # (右移, 高, 座位外)
 const THIRD_PERSON_HEIGHT := 2.05
 const THIRD_PERSON_SIDE := 0.6
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
@@ -268,8 +271,9 @@ func third_person_view(pid: int) -> Transform3D:
 	# 越过右肩看向桌心:自己的角色在画面左下,牌扇在其右侧,对手与桌面在画面中央
 	var angle: float = seat_angles.get(pid, 0.0)
 	var dir := SeatLayout.direction(angle)
-	var pos := dir * (seat_radius + THIRD_PERSON_BEHIND) + seat_right(pid) * THIRD_PERSON_SIDE \
-		+ Vector3(0, THIRD_PERSON_HEIGHT, 0)
+	var offset := Vector3(THIRD_PERSON_SIDE, THIRD_PERSON_HEIGHT, THIRD_PERSON_BEHIND) \
+		if table_radius <= SeatLayout.TABLE_RADIUS else POKER_THIRD_PERSON
+	var pos := dir * (seat_radius + offset.z) + seat_right(pid) * offset.x + Vector3(0, offset.y, 0)
 	var target := -dir * 0.12 + Vector3(0, SeatLayout.TABLE_TOP, 0)
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
