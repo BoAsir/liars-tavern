@@ -501,6 +501,36 @@ func blob(center: Vector3, shapes: Array, seg := 40, rings := 24, k := 0.03, t :
 	return _append(points, normals, indices, t, colors)
 
 
+static func blob_surface(center: Vector3, d: Vector3, shapes: Array, k := 0.03) -> Vector3:
+	# 平滑并集表面上沿射线 center + d·t 的那一点(扣子、斑纹、胡须挂点贴在表面上用);坐标与 blob 相同,不含变换
+	var list := _expand_shapes(shapes)
+	d = d.normalized()
+	var lo := 0.0
+	for shape in list:
+		lo = maxf(lo, _ray_ellipsoid_far(center, d, shape[0], shape[1]))
+	var hi := lo + k
+	for _step in 10:
+		var mid := (lo + hi) * 0.5
+		if _blob_sdf(center + d * mid, list, k) < 0.0:
+			lo = mid
+		else:
+			hi = mid
+	return center + d * ((lo + hi) * 0.5)
+
+
+func mark() -> int:
+	# 当前 surface 已有的顶点数:配合 displace 只改之后加入的部件
+	return _current.vertices.size()
+
+
+func displace(from: int, fn: Callable) -> MeshForge:
+	# 把当前 surface 第 from 个之后的顶点逐个换成 fn(位置) 的结果(帽檐卷边、压痕);法线不重算,只适合小幅变形
+	var s := _current
+	for i in range(from, s.vertices.size()):
+		s.vertices[i] = fn.call(s.vertices[i])
+	return self
+
+
 static func _expand_shapes(shapes: Array) -> Array:
 	var out := []
 	for shape in shapes:

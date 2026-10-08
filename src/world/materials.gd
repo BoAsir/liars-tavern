@@ -9,6 +9,7 @@ const FLAME_SHADER := preload("res://src/world/shaders/flame.gdshader")
 const PARTICLE_SHADER := preload("res://src/world/shaders/soft_particle.gdshader")
 const PARTICLE_ADD_SHADER := preload("res://src/world/shaders/soft_particle_add.gdshader")
 const PATRON_SHADER := preload("res://src/world/shaders/patron.gdshader")
+const PATRON_EYE_SHADER := preload("res://src/world/shaders/patron_eye.gdshader")
 const PROP_SHADER := preload("res://src/world/shaders/prop.gdshader")
 const BOTTLE_SHADER := preload("res://src/world/shaders/bottle_glass.gdshader")
 
@@ -91,6 +92,14 @@ static func bottle_glass() -> ShaderMaterial:
 	return _cached("bottle_glass", func():
 		var mat := ShaderMaterial.new()
 		mat.shader = BOTTLE_SHADER
+		return mat)
+
+
+static func patron_eye() -> ShaderMaterial:
+	# 所有酒客眼睛共用(眨眼、看向、表情、出局都走实例参数)
+	return _cached("patron_eye", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = PATRON_EYE_SHADER
 		return mat)
 
 

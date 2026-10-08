@@ -2,7 +2,8 @@ extends RefCounted
 # 截图工具与性能探针共用的机位表:seat 与游戏里的越肩机位(TableWorld.third_person_view,本机座位)一致。
 # tools/ 不进导出包,所以不声明 class_name,用 preload 取用。
 
-const NAMES := ["seat", "selfshot", "gun", "menu", "overhead", "fireplace", "bar", "window", "closeup", "opponent"]
+const NAMES := ["seat", "selfshot", "gun", "menu", "overhead", "fireplace", "bar", "window", "closeup", "opponent",
+	"lineup_front", "lineup_back", "lineup_heads", "lineup_left", "lineup_right"]
 
 
 static func place(rig: CameraRig, view: String) -> bool:
@@ -33,6 +34,17 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(0.0, 1.05, 0.55), Vector3(0, top, -0.2))
 		"opponent":
 			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
+		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73],面朝 +Z
+		"lineup_front":
+			rig.snap(Vector3(0, 1.35, 4.6), Vector3(0, 0.85, 0))
+		"lineup_back":
+			rig.snap(Vector3(0, 1.4, -4.2), Vector3(0, 0.8, 0))
+		"lineup_heads":
+			rig.snap(Vector3(0, 1.45, 3.2), Vector3(0, 1.35, 0))
+		"lineup_left":
+			rig.snap(Vector3(-1.56, 1.35, 1.6), Vector3(-1.56, 1.0, 0))
+		"lineup_right":
+			rig.snap(Vector3(1.56, 1.35, 1.6), Vector3(1.56, 1.0, 0))
 		_:
 			return false
 	return true

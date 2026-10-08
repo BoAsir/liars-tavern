@@ -51,6 +51,7 @@ const CHEER_JUMP := 0.08
 const DEBRIS_GROUP := &"patron_debris"
 const GREY := Color(0.42, 0.42, 0.42)   # 褪色的灰(patron.gdshader 里同值)
 const FADE_TIME := 1.4
+const DIE_BODY_ROT := Vector3(0.55, 0.15, -0.5)
 
 var species_index := 0
 var alive := true
@@ -61,7 +62,15 @@ var right_hand: Node3D
 
 var _arm_l: Node3D
 var _arm_r: Node3D
-var _eyes: Array = []      # [{"pivot", "pupil", "marks"}]
+var _eye: MeshInstance3D       # 两只眼一个网格,patron_eye.gdshader 画眼睑/虹膜/高光/×
+var _look := Vector4.ZERO      # 左右瞳孔偏移(眼面坐标),写进眼睛的实例参数
+var _paw_r: MeshInstance3D
+var _fist: MeshInstance3D      # 握枪时右手换成拳头
+var _legs: MeshInstance3D      # 腿、鞋、尾巴(座位坐标,跟着蹦跳)
+var _look_data: Dictionary     # 物种外观(species/*.gd 的 LOOK)
+var _neck_base := NECK_BASE
+var _neck_reach := NECK_REACH
+var _brow_y := 0.222
 var _brows: Array = []
 var _ears: Array = []
 var _hat: Node3D
@@ -103,13 +112,22 @@ func _process(delta: float) -> void:
 
 func _build() -> void:
 	# 每个动画枢轴下的静态零件合成一份共享网格(按「物种:部件」缓存,所有酒客共用一份酒客材质);
-	# 枢轴的名字、层级、变换都和合并前一样,动画代码不变
+	# 枢轴的名字、层级、变换都和合并前一样,动画代码不变。脖子根、眉、耳、帽的位置按物种外观
 	var spec := PatronParts.species(species_index)
+	_look_data = SpeciesLooks.look(species_index)
+	_neck_base = _look_data["neck"].get("base", NECK_BASE)
+	_neck_reach = minf(NECK_REACH, _look_data.get("anim", {}).get("neck_reach", NECK_REACH))
 	MeshKit.add(self, PatronParts.chair_mesh(), null).name = "Chair"
+	_legs = _add_part(self, PatronParts.part_mesh(spec, "legs"), "Legs")
+	_legs.extra_cull_margin = 0.12   # 尾巴在顶点着色器里摆,会超出包围盒
+	var tail: Dictionary = _look_data.get("tail", {})
+	if not tail.is_empty():
+		_legs.set_instance_shader_parameter("tail", Vector4(_phase, tail.get("sway", 0.12), 0.0, 0.0))
+		_legs.set_instance_shader_parameter("tail_root", tail["path"][0])
 	body = MeshKit.pivot(self, HIP, "Body")
 	body.rotation.x = -SEATED_LEAN
 	_add_part(body, PatronParts.part_mesh(spec, "body"), "BodyMesh")
-	_neck = MeshKit.pivot(body, NECK_BASE, "Neck")
+	_neck = MeshKit.pivot(body, _neck_base, "Neck")
 	_add_part(_neck, PatronParts.part_mesh(spec, "neck"), "NeckMesh")
 	_build_head(spec)
 	_fit_neck()
@@ -126,30 +144,41 @@ func _build() -> void:
 func _build_head(spec: Dictionary) -> void:
 	head = MeshKit.pivot(body, HEAD_PIVOT, "Head")
 	_add_part(head, PatronParts.part_mesh(spec, "head"), "HeadMesh")
-	var white := PatronParts.part_mesh(spec, "eye")
-	var pupil_mesh := PatronParts.part_mesh(spec, "pupil")
-	var marks_mesh := PatronParts.part_mesh(spec, "marks")
+	_eye = _add_part(head, PatronParts.part_mesh(spec, "eyes"), "Eyes")
+	_eye.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var eyes: Dictionary = _look_data["eyes"]
+	var iris: Color = eyes.get("iris", Color(0.4, 0.28, 0.12))
+	var lid_color: Color = PatronParts.palette(spec)["fur"]
+	_eye.set_instance_shader_parameter("iris_color", Vector3(iris.r, iris.g, iris.b))
+	_eye.set_instance_shader_parameter("lid_color", Vector3(lid_color.r, lid_color.g, lid_color.b))
+	_eye.set_instance_shader_parameter("lid_rest", eyes.get("lid_rest", 0.12))
+	_eye.set_instance_shader_parameter("pupil_shape", float(eyes.get("pupil", 0)))
+	_eye.set_instance_shader_parameter("lashes", 1.0 if eyes.get("lashes", false) else 0.0)
+	_eye.set_instance_shader_parameter("lid", 0.0)
+	_eye.set_instance_shader_parameter("lid_tilt", 0.0)
+	_eye.set_instance_shader_parameter("dead", 0.0)
+	_eye.set_instance_shader_parameter("look", Vector4.ZERO)
+	var brows: Dictionary = _look_data["brows"]
+	var brow_pos: Vector3 = brows["pos"]
+	_brow_y = brow_pos.y
 	var brow_mesh := PatronParts.part_mesh(spec, "brow")
 	for side in [-1.0, 1.0]:
-		var pivot := MeshKit.pivot(head, Vector3(0.062 * side, 0.165, -0.13))
-		_add_part(pivot, white, "EyeMesh")
-		var pupil := _add_part(pivot, pupil_mesh, "Pupil")
-		pupil.position = Vector3(0, 0, -0.03)
-		var marks := _add_part(pivot, marks_mesh, "MarksMesh")
-		marks.position = Vector3(0, 0, -0.036)
-		marks.visible = false
-		_eyes.append({"pivot": pivot, "pupil": pupil, "marks": marks})
-		var brow := MeshKit.pivot(head, Vector3(0.064 * side, 0.222, -0.142))
+		var brow := MeshKit.pivot(head, Vector3(brow_pos.x * side, brow_pos.y, brow_pos.z))
 		_add_part(brow, brow_mesh, "BrowMesh")
 		_brows.append(brow)
-	var ear_mesh := PatronParts.part_mesh(spec, "ear")
-	for side in [-1.0, 1.0]:
-		var ear := MeshKit.pivot(head)
-		ear.transform = PatronParts.ear_pivot(spec["ears"], side)
-		_add_part(ear, ear_mesh, "EarMesh")
-		_ears.append(ear)
+	var ears: Dictionary = _look_data.get("ears", {})
+	if ears.get("kind", "none") != "none":
+		var ear_mesh := PatronParts.part_mesh(spec, "ear")
+		var pivot: Vector3 = ears["pivot"]
+		var rot: Vector3 = ears.get("rot", Vector3.ZERO)
+		for side in [-1.0, 1.0]:
+			var ear := MeshKit.pivot(head)
+			ear.transform = MeshForge.xf(Vector3(pivot.x * side, pivot.y, pivot.z), Vector3(rot.x, rot.y * side, rot.z * side))
+			_add_part(ear, ear_mesh, "EarMesh")
+			_ears.append(ear)
+	var hat: Dictionary = _look_data.get("hat", {})
 	_hat = MeshKit.pivot(head, Vector3.ZERO, "Hat")
-	_hat.transform = PatronParts.hat_pivot(spec["hat"])
+	_hat.transform = MeshForge.xf(hat.get("pivot", Vector3(0, 0.255, 0.01)), hat.get("rot", Vector3(-6, 0, 9)))
 	_add_part(_hat, PatronParts.part_mesh(spec, "hat"), "HatMesh")
 
 
@@ -157,8 +186,20 @@ func _build_arm(side: float, spec: Dictionary) -> Node3D:
 	var pivot := MeshKit.pivot(body, _mirror(SHOULDER, side), "ArmR" if side > 0 else "ArmL")
 	_add_part(pivot, PatronParts.part_mesh(spec, "arm"), "ArmMesh")
 	var hand := MeshKit.pivot(pivot, Vector3(0, 0, -ARM_LENGTH), "Hand")
-	_add_part(hand, PatronParts.part_mesh(spec, "paw"), "PawMesh")
+	var paw := _add_part(hand, PatronParts.part_mesh(spec, "paw_r" if side > 0 else "paw_l"), "PawMesh")
+	if side > 0:
+		_paw_r = paw
+		_fist = _add_part(hand, PatronParts.part_mesh(spec, "fist"), "FistMesh")
+		_fist.visible = false
 	return pivot
+
+
+func _set_fist(on: bool) -> void:
+	# 握枪时右手换成拳头(枪挂在 Hand 上,张开的爪会把握把吞进掌心)
+	if _fist == null:
+		return
+	_fist.visible = on
+	_paw_r.visible = not on
 
 
 func _add_part(parent: Node3D, mesh: ArrayMesh, node_name: String) -> MeshInstance3D:
@@ -182,31 +223,50 @@ func _animate_idle(delta: float) -> void:
 	if _has_look:
 		var local := body.to_local(_look_target) - head.position
 		yaw = clampf(atan2(-local.x, -local.z), -0.7, 0.7)
-		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), -0.45, 0.35)
+		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), _look_data.get("anim", {}).get("look_pitch_min", -0.45), 0.35)
 	yaw += _noise.get_noise_1d(_time * 0.4) * 0.08
 	pitch += _noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
 	head.rotation.z = _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06
-	for eye in _eyes:
-		var target_offset := Vector3.ZERO
-		if _has_look:
-			var dir: Vector3 = eye["pivot"].to_local(_look_target).normalized()
-			target_offset = Vector3(dir.x, dir.y, 0.0) * 0.012
-		eye["pupil"].position = eye["pupil"].position.lerp(Vector3(0, 0, -0.03) + target_offset, minf(delta * 8.0, 1.0))
+	_update_look(delta)
+	_legs.position.y = maxf(body.position.y - HIP.y, 0.0)   # 腿跟着蹦跳,下沉时不入地
 	_blink_in -= delta
 	if _blink_in <= 0.0:
 		_blink_in = randf_range(1.8, 5.5)
 		_blink()
 
 
+func _update_look(delta: float) -> void:
+	# 瞳孔看向目标:按两只眼各自的位置算方向,换成眼面坐标的偏移;变化很小时不写实例参数
+	var target := Vector4.ZERO
+	if _has_look:
+		var eye_pos: Vector3 = _look_data["eyes"]["pos"]
+		var local := head.to_local(_look_target)
+		for side in [-1.0, 1.0]:
+			var dir := (local - Vector3(eye_pos.x * side, eye_pos.y, eye_pos.z)).normalized()
+			var offset := Vector2(dir.x, dir.y) * 0.45
+			if side < 0.0:
+				target.x = offset.x
+				target.y = offset.y
+			else:
+				target.z = offset.x
+				target.w = offset.y
+	var next := _look.lerp(target, minf(delta * 8.0, 1.0))
+	if (next - _look).length() > 0.002:
+		_look = next
+		_eye.set_instance_shader_parameter("look", _look)
+
+
+func _set_lid(value: float) -> void:
+	_eye.set_instance_shader_parameter("lid", value)
+
+
 func _blink() -> void:
-	var tween := create_tween().set_parallel()
-	for eye in _eyes:
-		tween.tween_property(eye["pivot"], "scale:y", 0.1, 0.06)
-	tween.chain()
-	for eye in _eyes:
-		tween.parallel().tween_property(eye["pivot"], "scale:y", 1.0, 0.08)
+	var speed: float = _look_data.get("anim", {}).get("blink_speed", 1.0)
+	var tween := create_tween()
+	tween.tween_method(_set_lid, 0.0, 1.0, 0.06 / speed)
+	tween.tween_method(_set_lid, 1.0, 0.0, 0.08 / speed)
 	if randf() < 0.4 and not _ears.is_empty():
 		var ear: Node3D = _ears[randi() % _ears.size()]
 		var base := ear.rotation.x
@@ -218,7 +278,12 @@ func _blink() -> void:
 # —— 弹簧脖子 ——
 
 func set_neck_target(seat_offset: Vector3) -> void:
-	_neck_target = clamp_neck(seat_offset)
+	# 长吻的物种(鳄鱼)伸得近一点:4 人同时探向桌心,吻尖也不互穿
+	_neck_target = clamp_neck(seat_offset).limit_length(_neck_reach)
+
+
+func neck_reach() -> float:
+	return _neck_reach
 
 
 static func clamp_neck(seat_offset: Vector3) -> Vector3:
@@ -245,9 +310,9 @@ func _update_neck(delta: float) -> void:
 
 
 func _fit_neck() -> void:
-	var span := head.position - NECK_BASE
+	var span := head.position - _neck_base
 	var length := maxf(span.length(), 0.001)
-	var thickness := clampf(sqrt((HEAD_PIVOT - NECK_BASE).length() / length), NECK_MIN_THICKNESS, 1.0)
+	var thickness := clampf(sqrt((HEAD_PIVOT - _neck_base).length() / length), NECK_MIN_THICKNESS, 1.0)
 	_neck.basis = Basis(Quaternion(Vector3.UP, span / length)) * Basis.from_scale(Vector3(thickness, length, thickness))
 
 
@@ -276,7 +341,10 @@ func set_expression(kind: String) -> void:
 	for i in _brows.size():
 		var side := -1.0 if i == 0 else 1.0
 		tween.tween_property(_brows[i], "rotation:z", angles.get(kind, 0.0) * -side, 0.18)
-		tween.tween_property(_brows[i], "position:y", 0.222 + lift, 0.18)
+		tween.tween_property(_brows[i], "position:y", _brow_y + lift, 0.18)
+	var tilts := {"angry": 0.25, "worried": -0.2}
+	tween.tween_method(func(v: float): _eye.set_instance_shader_parameter("lid_tilt", v),
+		float(_eye.get_instance_shader_parameter("lid_tilt")), tilts.get(kind, 0.0), 0.18)
 
 
 # —— 手臂 ——
@@ -370,6 +438,7 @@ func pick_up(gun: Node3D, duration: float) -> void:
 	var gun_local := body.to_local(gun.global_position)
 	await pose_right(gun_local + Vector3(0, 0.03, 0), duration).finished
 	gun.reparent(right_hand, true)
+	_set_fist(true)
 	var tween := create_tween()
 	tween.tween_property(gun, "transform", Transform3D(Basis(), Vector3(0, -0.01, -0.02)), 0.12)
 	await tween.finished
@@ -392,6 +461,7 @@ func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: f
 	set_expression("neutral")
 	await pose_right(body.to_local(rest.origin) + Vector3(0, 0.03, 0), duration).finished
 	gun.reparent(table_parent, true)
+	_set_fist(false)
 	var tween := create_tween()
 	tween.tween_property(gun, "global_transform", rest, 0.15)
 	await tween.finished
@@ -411,9 +481,8 @@ func relief() -> void:
 func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	alive = false
 	_arms_locked = true
-	for eye in _eyes:
-		eye["pupil"].visible = false
-		eye["marks"].visible = true
+	_eye.set_instance_shader_parameter("dead", 1.0)
+	_set_fist(false)
 	if gun != null and table_parent != null:
 		gun.reparent(table_parent, true)
 		var drop := create_tween()
@@ -421,12 +490,16 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 		drop.tween_property(gun, "global_position", landing, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 		drop.parallel().tween_property(gun, "rotation", Vector3(0, gun.rotation.y + 1.8, PI / 2.0), 0.45)
 	var fall := create_tween().set_parallel()
-	fall.tween_property(body, "rotation", Vector3(0.55, 0.15, -0.5), 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var body_rot: Vector3 = _look_data.get("anim", {}).get("die_body_rot", DIE_BODY_ROT)   # 乌龟侧倒,龟壳不穿椅背
+	fall.tween_property(body, "rotation", body_rot, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	fall.tween_property(head, "rotation", Vector3(-0.5, 0.3, -0.45), 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_tween_arm(fall, _arm_l, _mirror(HAND_DEAD, -1.0), 0.5, Tween.TRANS_BOUNCE)
 	_tween_arm(fall, _arm_r, HAND_DEAD, 0.5, Tween.TRANS_BOUNCE)
 	_knock_hat_off()
 	fall.tween_method(_set_fade, 0.0, 1.0, FADE_TIME)
+	if not _look_data.get("tail", {}).is_empty():
+		fall.tween_method(func(v: float): _legs.set_instance_shader_parameter("tail",
+			Vector4(_phase, _look_data["tail"].get("sway", 0.12), v, 0.0)), 0.0, 1.0, FADE_TIME)
 
 
 func _set_fade(value: float) -> void:
@@ -479,6 +552,7 @@ func reset_pose() -> void:
 	_sitting_up = false
 	_neck_target = Vector3.ZERO
 	set_expression("neutral")
+	_set_fist(false)
 	body.position = HIP
 	rest_arms(false)
 

@@ -22,14 +22,14 @@ func test_palettes_are_capped_so_faces_do_not_wash_out():
 	for i in PatronParts.SPECIES.size():
 		var pal := PatronParts.palette(PatronParts.species(i))
 		for key in ["fur", "muzzle", "dark", "coat", "accent", "hat", "lapel", "paw"]:
-			var c: Color = pal[key][0]
+			var c: Color = pal[key]
 			assert_lte(maxf(c.r, maxf(c.g, c.b)), PatronParts.ALBEDO_CAP + 0.0001, "%d %s" % [i, key])
 
 
 func test_capping_keeps_the_hue():
 	var pig := PatronParts.palette(PatronParts.species(2))
 	var raw: Color = PatronParts.SPECIES[2]["fur"]
-	var capped: Color = pig["fur"][0]
+	var capped: Color = pig["fur"]
 	assert_almost_eq(capped.r / capped.g, raw.r / raw.g, 0.01)
 
 

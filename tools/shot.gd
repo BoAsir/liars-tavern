@@ -17,6 +17,7 @@ const ImageStats := preload("res://tools/image_stats.gd")
 const WARMUP_FRAMES := 45
 const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
 const POKER_ME := 1
+const LINEUP_SPACING := 0.78   # --lineup 时酒客之间的间距(米)
 const FACE_RADIUS := 0.17   # 酒客头的半径(米),--stats 按它在画面上框出脸
 const PAW_RADIUS := 0.06    # 爪子的半径(米)
 # --stats 的灰泥取样区域(按画面比例):只有能看到大片墙面的机位才有
@@ -55,6 +56,14 @@ func _run() -> void:
 	RenderBudget.apply(root)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
+	if opts.has("lineup"):
+		# 8 个物种一字排开(面朝镜头),配 lineup_front / lineup_back / lineup_heads 机位
+		for i in Species.count():
+			var patron := Patron.new(i)
+			patron.position = Vector3((i - (Species.count() - 1) * 0.5) * LINEUP_SPACING, 0, 0)
+			patron.rotation.y = PI
+			tavern.table_root.add_child(patron)
+			patron.look_at_point(Vector3(0, 1.2, 3.0))
 	if opts.get("scene", "") == "menu":
 		var world := TableWorld.new(tavern)
 		tavern.table_root.add_child(world)
