@@ -2,7 +2,8 @@ class_name GameSession
 extends RefCounted
 # 房主端会话的共同接口(规格 §4.2):NetworkManager 只管连接、等待厅、RPC 收发与计时器,
 # 玩法逻辑在会话对象里。LiarsSession / PokerSession 覆盖这些方法;这里的默认值是「没有下一手、不收新人」。
-# 意图字典:骗子酒馆 {"kind": "play", "indices": [...]} / {"kind": "challenge"};德州 {"kind": action, "amount": int}。
+# 意图字典:骗子酒馆 {"kind": "play", "indices": [...]} / {"kind": "challenge"};德州 {"kind": action, "amount": int};
+# 炸弹猫见 BombCatSession(play / nope / draw / reinsert / give)。
 
 
 func start(_seat_order: Array, _names: Dictionary, _rng: RandomNumberGenerator) -> Array:

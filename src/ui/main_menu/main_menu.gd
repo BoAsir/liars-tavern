@@ -161,6 +161,8 @@ func _build_identity(box: VBoxContainer) -> void:
 func _mode_section() -> Control:
 	# 「开一桌」小节标题那一行放玩法三段切换:不另占一行,1280×720 下面板不用滚动
 	_mode = Settings.last_mode()
+	if not GameMode.menu_modes().has(_mode):
+		_mode = GameMode.DEFAULT   # 上次选的玩法暂时不在菜单里(GameMode.BOMB_CAT_ENABLED)
 	var row := _section("开一桌")
 	row.add_child(ModePicker.build(_mode, _select_mode))
 	return row
@@ -326,7 +328,9 @@ func _on_host_pressed() -> void:
 
 
 static func default_room_name(pname: String, mode: String) -> String:
-	# 没填房名时:骗子酒馆「X 的酒馆」,德州「X 的牌局」
+	# 没填房名时:骗子酒馆「X 的酒馆」,德州「X 的牌局」,炸弹猫「X 的猫窝」
+	if GameMode.is_bomb_cat(mode):
+		return "%s 的猫窝" % pname
 	return ("%s 的牌局" if GameMode.is_poker(mode) else "%s 的酒馆") % pname
 
 

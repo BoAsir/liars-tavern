@@ -60,6 +60,11 @@ func test_species_chip_does_not_make_the_panel_taller():
 	assert_eq(menu._species_chip.tooltip_text, "挑选形象:猫 · 独行枪手")
 
 
+func test_mode_buttons_fit_in_the_panel_width():
+	# 「开一桌」标题行挤着每种玩法一个按钮(加了炸弹猫是四个):不能把侧栏面板撑宽
+	assert_lte(menu._panel.get_combined_minimum_size().x, MainMenuScreen.PANEL_WIDTH)
+
+
 func test_menu_shows_the_preview_on_entry():
 	assert_eq(app.world.previews, [3], "0 号椅上坐着自己的形象")
 
