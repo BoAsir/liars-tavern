@@ -2,7 +2,10 @@ class_name TableWorld
 extends Node3D
 # 牌桌上的角色层:按座位摆放酒客与左轮,提供座位几何与机位查询。卡牌交给 CardTable;
 # 德州的 3D 节点(筹码、公共牌架与牌、亮牌、弃牌堆、庄家按钮)都挂在 poker_root 下,拆台时一起清空。
-# 等待厅与对局共用:都显示全部玩家(含自己);对局中镜头在自己角色身后越肩(第三人称)。
+# 等待厅与对局共用:都显示全部玩家(含自己);对局中镜头在自己角色身后越肩(第三人称),按 V 可换成第一人称(first_person)。
+
+
+signal first_person_changed(on: bool)   # 本机视角换了:德州牌层据此重摆自己的底牌
 
 
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
@@ -19,6 +22,11 @@ const POKER_THIRD_PERSON := Vector3(0.6, 2.05, 0.8)   # (右移, 高, 座位外)
 const THIRD_PERSON_HEIGHT := 2.2
 const THIRD_PERSON_SIDE := 0.72
 const SEAT_FILL_LIGHT := 0.9   # 越肩机位的补光强度(CameraRig.fill_light)
+# 第一人称(规格 2026-10-08-first-person-toggle):眼睛见 Patron.FP_EYE_OFFSET;看向桌心再往对面挪一点、略高于桌面,
+# 对面的脸落在画面上半、桌面与出牌区在中间。视角放宽一点;补光跟着镜头贴在脸前,手里的牌离它只有半米,减弱
+const FIRST_PERSON_FOV := 72.0
+const FIRST_PERSON_TARGET := Vector2(0.15, 0.08)   # (越过桌心往对面, 高出桌面)
+const FIRST_PERSON_FILL := 0.4
 const LOBBY_SHIFT := 0.95      # 等待厅机位向右平移(米)
 # 观战与等待厅机位 [位置, 看向]:骗子酒馆的数值不变;德州桌放大后另用一组(规格 §5.5),
 # 都让最远的头与 1.70 米高的头顶(动森式大头;Q 版按 1.60)避开吊灯罩(见 test_poker_view_layout)
@@ -55,6 +63,7 @@ var _empty_chairs: Array[MeshInstance3D] = []
 var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
 var _spawned_frame := {} # pid -> 建出这个酒客的帧号:同一帧里物种又变了,直接收走刚建的、不再冒一次烟
 var _menu_preview: Patron = null   # 主菜单上自己选的形象,坐在 0 号椅
+var first_person := false          # 本机牌桌视角(只影响本机):seat_view / rest_view 据此给机位
 
 
 func _init(p_tavern: Tavern) -> void:
@@ -401,6 +410,46 @@ func third_person_view(pid: int) -> Transform3D:
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
 
+func first_person_rest_view(pid: int) -> Transform3D:
+	# 第一人称的静止机位:眼睛在坐好、没探头时的位置(Patron.rest_eye),看向桌心对面。镜头朝向与手里牌扇都按它定
+	var seat := seat_transform(seat_angles.get(pid, 0.0))
+	var eye := seat * Patron.rest_eye()
+	var target := seat * Vector3(0, SeatLayout.TABLE_TOP + FIRST_PERSON_TARGET.y, -(seat_radius + FIRST_PERSON_TARGET.x))
+	return Transform3D(Basis.looking_at(target - eye, Vector3.UP), eye)
+
+
+func first_person_view(pid: int) -> Transform3D:
+	# 第一人称的实时机位:朝向同静止机位,位置跟着自己的眼睛(前倾、WASD 探头都会挪);不跟转头(光标看哪儿镜头不跟着转)
+	var rest := first_person_rest_view(pid)
+	if patrons.has(pid):
+		rest.origin = patrons[pid].eye_position()
+	return rest
+
+
+func seat_view(pid: int) -> Transform3D:
+	# 自己座位上的常驻机位:按本机视角给越肩或第一人称
+	return first_person_view(pid) if first_person else third_person_view(pid)
+
+
+func set_first_person(on: bool) -> void:
+	# 换本机视角:骗子酒馆的手牌由自己的角色重新举好(德州由牌层收到信号后重摆)
+	first_person = on
+	present_my_hand()
+	first_person_changed.emit(on)
+
+
+func present_my_hand() -> void:
+	# 骗子酒馆:自己的牌扇按视角举到越肩镜头前或第一人称的右下方;德州桌由 PokerCards 摆。
+	# 出局了不动(牌扇扣在大腿上)
+	if is_poker_table() or not patrons.has(my_pid) or not seat_angles.has(my_pid) or not patrons[my_pid].alive:
+		return
+	var me: Patron = patrons[my_pid]
+	if first_person:
+		me.present_hand_first_person(seat_transform(seat_angles[my_pid]), first_person_rest_view(my_pid))
+	else:
+		me.present_hand_to(third_person_view(my_pid).origin)
+
+
 func focus_view(pid: int) -> Transform3D:
 	# 聚焦某位酒客的特写机位:从桌心斜上方看向其头部
 	var angle: float = seat_angles.get(pid, 0.0)
@@ -442,7 +491,8 @@ static func uses_overview(in_seats: bool, status: String) -> bool:
 
 
 func rest_view(pid: int, in_seats: bool, status: String) -> Transform3D:
-	return overview_view() if uses_overview(in_seats, status) else third_person_view(pid)
+	# 观战机位,或按本机视角的座位机位
+	return overview_view() if uses_overview(in_seats, status) else seat_view(pid)
 
 
 static func _look(pos: Vector3, target: Vector3) -> Transform3D:

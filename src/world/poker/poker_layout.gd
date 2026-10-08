@@ -34,6 +34,9 @@ const MUCK_STEP := 0.0012          # 每张弃牌叠高
 # —— 自己的牌扇(规格 §5.3):座位坐标,相对髋部;落在公共牌与下注控件之间。
 # 动森式大头(2026-10-08)会整个挡住原来的 (0.30, 0.74, -0.30),往右前方挪到大头旁边 ——
 const FAN_OFFSET := Vector3(0.48, 0.72, -0.36)
+# —— 第一人称(V 切换)时自己的底牌:按镜头坐标拿在画面右下(右、下、前),比骗子酒馆的牌扇更靠右:让开下注面板、右下角的记录与公共牌 ——
+const FP_FAN_CAM := Vector3(0.4, -0.1, -0.6)
+const FP_FAN_SCALE := 0.95
 
 
 static func board_slot(index: int) -> Transform3D:
@@ -127,6 +130,12 @@ static func fan_transform(seat: Transform3D, viewer: Vector3) -> Transform3D:
 	var world_basis := Basis(normal.cross(bottom), normal, bottom)
 	var in_seat := Transform3D((seat_basis.inverse() * world_basis).scaled(Vector3.ONE * Patron.SELF_FAN_SCALE), fan_seat)
 	return Transform3D(Basis(Vector3.RIGHT, -Patron.SEATED_LEAN), Patron.HIP).affine_inverse() * in_seat
+
+
+static func first_person_fan_transform(seat: Transform3D, view: Transform3D) -> Transform3D:
+	# 第一人称时自己的牌扇(座位坐标,Patron 每帧按眼睛平移后换到身体局部):同 Patron.first_person_fan,
+	# view 是脖子没探出时的第一人称机位
+	return Patron.first_person_fan(seat, view, FP_FAN_CAM, FP_FAN_SCALE)
 
 
 static func _on_table(angle: float, radial: float, side: float) -> Vector3:
