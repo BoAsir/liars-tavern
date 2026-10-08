@@ -3,9 +3,18 @@ extends GutTest
 
 
 func test_pile_and_reveal_cards_sit_above_the_felt():
-	for i in 21:
-		assert_gte(CardTable.pile_y(i) - Card3D.GAP, SeatLayout.FELT_TOP + 0.0003, "牌堆第 %d 张的背面" % i)
-	assert_gte(CardTable.REVEAL_Y - Card3D.GAP, SeatLayout.FELT_TOP + 0.0003, "翻牌行")
+	# 牌底(中面 − 半个牌厚)高出毡面,相邻两层不相交
+	for seed in 20:
+		for i in 30:
+			var bottom := CardTable.pile_transform(i, seed).origin.y - Card3D.THICKNESS / 2.0
+			assert_gte(bottom, SeatLayout.FELT_TOP + 0.0002, "牌堆第 %d 张的牌底" % i)
+			if i > 0:
+				var below := CardTable.pile_transform(i - 1, seed).origin.y + Card3D.THICKNESS / 2.0
+				assert_gt(bottom, below, "第 %d 张不和下面那张相交" % i)
+	for n in [1, 2, 3, 4]:
+		for i in n:
+			var bottom := CardTable.reveal_transform(i, n).origin.y - Card3D.THICKNESS / 2.0
+			assert_gte(bottom, SeatLayout.FELT_TOP + 0.0002, "翻牌行")
 
 
 func test_felt_matches_the_layout_constants():

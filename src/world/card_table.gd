@@ -17,9 +17,9 @@ const SWEEP_FLIGHT := 0.4
 const LIFT_HOVER := 0.012
 const LIFT_SELECTED := 0.032
 const REVEAL_Z := 0.44
-# 平放在桌上的牌:背面也要高出毡面(FELT_TOP)一点,否则和毡面抢深度,时隐时现
+# 平放在桌上的牌:牌底也要高出毡面(FELT_TOP)一点,否则和毡面抢深度,时隐时现;每层比牌厚多 0.3 mm,相邻两层不相交
 const PILE_STEP := 0.0011
-const REVEAL_Y := SeatLayout.FELT_TOP + Card3D.GAP + 0.0004
+const REVEAL_Y := SeatLayout.FELT_TOP + Card3D.THICKNESS / 2.0 + 0.0003
 const STAND_HEIGHT := 0.1
 const STAND_SPIN := 0.45
 # 卡牌本地系(+Y 法线, -Z 牌顶)→ 竖立面向持牌者:X→右,Y→朝向持牌者,Z→向下
@@ -144,6 +144,19 @@ static func pile_y(index: int) -> float:
 	return REVEAL_Y + index * PILE_STEP
 
 
+static func pile_transform(index: int, seed: int) -> Transform3D:
+	# 出牌区第 index 张牌:确定性散落(所有客户端一致),背面朝上
+	var off := SeatLayout.pile_offset(index, seed)
+	var pos := Vector3(off["pos"].x, pile_y(index), off["pos"].y)
+	return Transform3D(Basis(Vector3.UP, off["rot"]) * Basis(Vector3.BACK, PI), pos)
+
+
+static func reveal_transform(index: int, count: int) -> Transform3D:
+	# 翻牌行第 index 张(共 count 张):本机座位前一排,背面朝上
+	var xs := SeatLayout.reveal_slots(count)
+	return Transform3D(Basis(Vector3.BACK, PI), Vector3(xs[index], REVEAL_Y, REVEAL_Z))
+
+
 static func fan_slot(i: int, count: int, lift: float) -> Transform3D:
 	var slot: Dictionary = SeatLayout.fan_slots(count)[i]
 	var basis := Basis(Vector3.UP, slot["rot"])
@@ -204,12 +217,10 @@ func play(pid: int, count: int, my_indices: Array) -> void:
 	var flights := []
 	for card in nodes:
 		card.reparent(self, true)
-		var off := SeatLayout.pile_offset(pile.size(), _pile_seed)
-		var pos := Vector3(off["pos"].x, pile_y(pile.size()), off["pos"].y)
-		var basis := Basis(Vector3.UP, off["rot"]) * Basis(Vector3.BACK, PI)
+		var target := pile_transform(pile.size(), _pile_seed)
 		pile.append(card)
 		card.set_glow(0.0)
-		flights.append(card.fly_to(Transform3D(basis, pos), PLAY_FLIGHT, 0.14, 0.6))
+		flights.append(card.fly_to(target, PLAY_FLIGHT, 0.14, 0.6))
 	sfx.emit("slide")
 	if pid == world.my_pid:
 		selected = {}
@@ -259,13 +270,11 @@ func gather_for_reveal(count: int) -> void:
 		card.global_transform = Transform3D(Basis(Vector3.BACK, PI), Vector3(0, SeatLayout.TABLE_TOP + 0.01, 0))
 		nodes.append(card)
 	revealed = nodes.slice(0, count)
-	var xs := SeatLayout.reveal_slots(revealed.size())
 	var tween: Tween = null
 	for i in revealed.size():
 		var card: Card3D = revealed[i]
 		pile.erase(card)
-		var pos := Vector3(xs[i], REVEAL_Y, REVEAL_Z)
-		tween = card.fly_to(Transform3D(Basis(Vector3.BACK, PI), pos), 0.38, 0.1)
+		tween = card.fly_to(reveal_transform(i, revealed.size()), 0.38, 0.1)
 	sfx.emit("slide")
 	if tween != null:
 		await tween.finished
