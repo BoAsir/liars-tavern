@@ -1,6 +1,8 @@
 class_name PatronHeadBuilder
 # 酒客的头、眼、眉、耳(合批配方)。头部坐标都在 Head 枢轴局部,头心固定在 (0, 0.12, 0)(瞄准点与机位目标)。
 # 头雕是椭球平滑并集(颅骨、腮、口鼻),长吻另放样一段;斑纹靠形体颜色混合;眼睛由 patron_eye.gdshader 画。
+# Q 版:LOOK 里的坐标按原尺寸写,配方开头 push 一个绕头心的放大(PatronParts.head_xform),整颗头连特件一起变大;
+# 眉、耳挂在各自枢轴上,网格绕原点放大(pivot_scale),枢轴位置由 Patron 用 PatronParts.head_point 换算。
 
 const HEAD_CENTER := Vector3(0, 0.12, 0)
 
@@ -11,6 +13,7 @@ static func skull_shapes(look: Dictionary, pal: Dictionary) -> Array:
 
 static func head(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
 	PatronBuilder.start(f, 0.6)
+	f.push(PatronParts.head_xform(look))
 	var h: Dictionary = look["head"]
 	var shapes := skull_shapes(look, pal)
 	PatronBuilder.paint(f, pal, "fur", 0.75, h.get("material", PatronBuilder.FUR))
@@ -38,6 +41,7 @@ static func head(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScrip
 				var b := a + Vector3(0.09 * side, 0.012 - k * 0.018, 0.02)
 				f.tube(PackedVector3Array([a, (a + b) * 0.5 + Vector3(0, 0.006, 0), b]), 0.0014, 4)
 	hooks.extras(f, "head", look, pal)
+	f.pop()
 
 
 static func _mouth(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
@@ -66,9 +70,12 @@ static func _mouth(f: MeshForge, pal: Dictionary, h: Dictionary) -> void:
 
 static func eyes(f: MeshForge, look: Dictionary) -> void:
 	# 两只眼一个网格:每只是贴在颅骨上的扁半椭球,CUSTOM0 写眼面坐标 (u, v, 左右, 0) 给 patron_eye.gdshader
+	# Q 版:位置随头放大,眼珠本身再大 EYE_SCALE 倍、更鼓一点;眼心往颅骨里埋一点,放大后的眼缘不悬空
 	var e: Dictionary = look["eyes"]
-	var pos: Vector3 = e["pos"]
-	var size: Vector3 = e.get("size", Vector3(0.04, 0.045, 0.02))
+	var pos: Vector3 = PatronParts.head_point(look, e["pos"])
+	var size: Vector3 = e.get("size", Vector3(0.04, 0.045, 0.02)) * PatronParts.HEAD_SCALE * PatronParts.EYE_SCALE
+	size.z *= 1.15
+	pos.z += size.z * 0.25
 	f.paint(Color(0.66, 0.65, 0.62), 0.15)
 	for side: float in [-1.0, 1.0]:
 		var center := Vector3(pos.x * side, pos.y, pos.z)
@@ -101,6 +108,7 @@ static func eyes(f: MeshForge, look: Dictionary) -> void:
 static func brow(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	# 一条内粗外细、沿额头微弯的短眉;枢轴在眉心位置(表情动画转它)
 	PatronBuilder.start(f, 0.7)
+	f.push(PatronParts.pivot_scale())
 	var br: Dictionary = look["brows"]
 	var w: float = br.get("width", 0.062)
 	var t: float = br.get("thickness", 0.011)
@@ -108,12 +116,14 @@ static func brow(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	f.loft(PackedVector3Array([Vector3(-w * 0.5, -0.003, 0.004), Vector3(0, 0.004, -0.002), Vector3(w * 0.5, 0.0, 0.006)]),
 		PackedVector2Array([Vector2(t, t * 0.8), Vector2(t * 0.9, t * 0.7), Vector2(t * 0.45, t * 0.4)]), 8, Vector2i(1, 1),
 		Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(0, 0, -1))
+	f.pop()
 
 
 # —— 耳朵(枢轴在耳根,左右共用一份;薄片透光)——
 
 static func ear(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	PatronBuilder.start(f, 0.8)
+	f.push(PatronParts.pivot_scale())
 	var e: Dictionary = look.get("ears", {})
 	var kind: String = e.get("kind", "none")
 	var size: Vector3 = e.get("size", Vector3(0.05, 0.15, 0.02))
@@ -163,6 +173,7 @@ static func ear(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 				PackedVector2Array([Vector2(size.z * 0.3, size.x * 0.55), Vector2(size.z * 0.3, size.x * 0.5), Vector2(0.002, 0.003)]), 8,
 				Vector2i(1, 1), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(0, 0, -1))
 	f.custom.w = 0.0
+	f.pop()
 
 
 static func _tip_colors(pal: Dictionary, base: String, tip: String, count: int) -> PackedColorArray:

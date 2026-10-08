@@ -26,6 +26,7 @@ const LOOK := {
 		],
 		"blend": 0.04,
 		"material": 4.0,
+		"scale_z": 0.85,   # Q 版放大时前后方向少放一点:长吻不至于捅到桌心,伸脖子也不至于短太多
 	},
 	"eyes": {"pos": Vector3(0.058, 0.222, -0.112), "size": Vector3(0.032, 0.03, 0.016), "iris": Color(0.72, 0.62, 0.12),
 		"pupil": 1, "lid_rest": 0.28, "lashes": false, "yaw": 18.0},

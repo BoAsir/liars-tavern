@@ -1,12 +1,14 @@
 class_name PatronHatBuilder
 # 酒客的帽子(合批配方,Hat 枢轴局部;帽子是一个子树,出局时整顶打飞成一个散落物)。
 # 帽冠与帽檐都是车削轮廓,卷边、压痕、前捏靠 displace 小幅变形;帽带是单独一圈车削。
-# 两侧卷起的帽檐给太阳穴处的枪管让路(|x| ≥ 0.15 处帽檐 y ≥ 0.2,在 Head 局部量)。
+# 两侧卷起的帽檐给太阳穴处的枪管让路(|x| ≥ 0.15 处帽檐 y ≥ 0.2,在 Head 局部、放大前量)。
 
 
 
 static func hat(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
 	PatronBuilder.start(f, 0.9)
+	# Q 版:帽子跟头一起放大(枢轴位置由 Patron 换算)。帽檐卷边用 displace 按原尺寸写,所以先按原尺寸建好再整体缩放
+	var from := f.mark()
 	var h: Dictionary = look.get("hat", {})
 	match h.get("kind", "none"):
 		"top":
@@ -26,6 +28,7 @@ static func hat(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript
 		"flat":
 			_flat(f, pal, h)
 	hooks.extras(f, "hat", look, pal)
+	f.displace(from, func(p: Vector3) -> Vector3: return p * Vector3(PatronParts.HEAD_SCALE, PatronParts.HAT_SCALE_Y, PatronParts.HEAD_SCALE))
 
 
 static func _brim(f: MeshForge, inner: float, outer: float, thick: float, segs := 40) -> int:

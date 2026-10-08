@@ -20,7 +20,11 @@ const SMOOTH := 9.0
 const BODY_CENTER := Vector3(0, 0.25, 0)
 const SLEEVE_END := -0.35     # 袖口压住爪腕(Hand 在 -ARM_LENGTH = -0.4)
 const PAW_PITCH := 27.0       # 坐着时手臂俯 ≈27°,张开的爪反向烘焙这个角度,掌面才平贴桌面
+const FIST_CHUBBY := 1.12     # Q 版拳头胖一圈(握把仍包在拳里)
 const BLOB_K := 0.035
+# Q 版大肚子:体型表里的腹部椭球再放大、往前挪一点
+const BELLY_SCALE := Vector3(1.1, 1.05, 1.14)
+const BELLY_SHIFT := Vector3(0, -0.005, -0.018)
 
 # 体型:pelvis / belly / chest 三个椭球 [中心, 半径]
 const BUILDS := {
@@ -72,9 +76,10 @@ static func shapes_colored(shapes: Array, pal: Dictionary) -> Array:
 static func body_shapes(look: Dictionary, pal: Dictionary) -> Array:
 	var body: Dictionary = look["body"]
 	var build: Array = BUILDS[body.get("build", "slim")]
+	# Q 版:肚子更圆更挺(往前、往两侧鼓),骨盆略宽;胸口不动(胸前要给对手的牌扇让位)
 	var shapes := [
-		[build[0][0], build[0][1], color(pal, body.get("pants", "pants"))],
-		[build[1][0], build[1][1], color(pal, body.get("belly", "coat"))],
+		[build[0][0], build[0][1] * Vector3(1.06, 1.0, 1.04), color(pal, body.get("pants", "pants"))],
+		[build[1][0] + BELLY_SHIFT, build[1][1] * BELLY_SCALE, color(pal, body.get("belly", "coat"))],
 		[build[2][0], build[2][1], color(pal, body.get("coat", "coat"))],
 		[Vector3(0.14, 0.47, -0.01), Vector3(0.11, 0.075, 0.1), color(pal, body.get("coat", "coat")), "mirror"],
 		[Vector3(0, 0.53, -0.02), Vector3(0.1, 0.05, 0.09), color(pal, body.get("collar", body.get("coat", "coat")))],
@@ -94,6 +99,7 @@ static func body_shapes(look: Dictionary, pal: Dictionary) -> Array:
 
 static func body(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScript) -> void:
 	start(f, 0.1)
+	f.push(xf(Vector3.ZERO, Vector3.ZERO, Vector3(1.0, PatronParts.BODY_SQUASH, 1.0)))   # Q 版:躯干连衣片一起压扁
 	var b: Dictionary = look["body"]
 	var shapes := body_shapes(look, pal)
 	paint(f, pal, b.get("coat", "coat"), 0.85, b.get("material", CLOTH))
@@ -122,6 +128,7 @@ static func body(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScrip
 			chain.append(p)
 		f.tube(chain, 0.0028, 5)
 	hooks.extras(f, "body", look, pal)
+	f.pop()
 
 
 static func _lapels(f: MeshForge, pal: Dictionary, b: Dictionary, shapes: Array) -> void:
@@ -230,6 +237,9 @@ static func paw(f: MeshForge, look: Dictionary, pal: Dictionary, side: float) ->
 		var x := t * (0.07 if fingers > 3 else 0.06)
 		shapes.append([Vector3(x, -0.012, -0.05 - length * 0.5), Vector3(0.016 if fingers > 3 else 0.021, 0.016, length * 0.75), fur])
 	shapes.append([Vector3(0.052 * side, -0.006, -0.012), Vector3(0.018, 0.016, 0.026), fur])   # 拇指朝身体内侧
+	# Q 版胖爪:绕掌底着桌的那一点放大,掌底高度不变(手照样平贴桌面)
+	var sole := Basis.from_euler(Vector3(deg_to_rad(PAW_PITCH), 0, 0)) * Vector3(0, -0.038, -0.01)
+	f.push(Transform3D(Basis.from_scale(Vector3.ONE * PatronParts.PAW_CHUBBY), sole - sole * PatronParts.PAW_CHUBBY))
 	paint(f, pal, p.get("color", "paw"), 0.75, FUR)
 	f.blob(Vector3(0, -0.004, -0.01), shapes, 24, 14, 0.014, xf(Vector3.ZERO, Vector3(PAW_PITCH, 0, 0)))
 	if p.get("claws", "") != "":
@@ -238,6 +248,7 @@ static func paw(f: MeshForge, look: Dictionary, pal: Dictionary, side: float) ->
 			var t := (i - (fingers - 1) * 0.5) / maxf(fingers - 1, 1)
 			f.cylinder(0.0, 0.006, 0.014, 6, MeshForge.CAPS_BOTH,
 				xf(Vector3(t * 0.07, -0.016, -0.05 - length * 1.25), Vector3(PAW_PITCH - 90, 0, 0)))
+	f.pop()
 
 
 static func fist(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
@@ -249,7 +260,7 @@ static func fist(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 		shapes.append([Vector3(-0.03 + i * 0.02, 0.012, -0.044), Vector3(0.014, 0.016, 0.014), fur])
 	shapes.append([Vector3(-0.045, 0.02, -0.01), Vector3(0.016, 0.02, 0.022), fur])
 	paint(f, pal, look["paws"].get("color", "paw"), 0.75, FUR)
-	f.blob(Vector3.ZERO, shapes, 20, 12, 0.012)
+	f.blob(Vector3.ZERO, shapes, 20, 12, 0.012, xf(Vector3.ZERO, Vector3.ZERO, Vector3.ONE * FIST_CHUBBY))
 
 
 # —— 腿、鞋、尾巴(座位坐标)——
@@ -272,6 +283,13 @@ static func legs(f: MeshForge, look: Dictionary, pal: Dictionary, hooks: GDScrip
 
 
 static func _shoe(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3, side: float) -> void:
+	# Q 版胖脚:绕鞋底中心放大(鞋底仍贴地)
+	f.push(Transform3D(Basis.from_scale(Vector3.ONE * PatronParts.FOOT_CHUBBY), at - at * PatronParts.FOOT_CHUBBY))
+	_shoe_shape(f, pal, l, at)
+	f.pop()
+
+
+static func _shoe_shape(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3) -> void:
 	var kind: String = l.get("foot", "oxford")
 	match kind:
 		"bare", "hoof", "claws":
