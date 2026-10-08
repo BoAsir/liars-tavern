@@ -13,7 +13,7 @@ render_mode cull_disabled;
 #include "res://src/world/shaders/surface.gdshaderinc"
 // 柔和卡通光照(见 toon_light.gdshaderinc)
 #define TOON_RIM 0.12
-#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#define TOON_SHADOW_TINT vec3(0.86, 0.82, 1.0)
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform sampler2D atlas : source_color, filter_linear_mipmap_anisotropic;
@@ -118,17 +118,18 @@ void fragment() {
 		float edge = min(d.x, d.y);
 		float smoke = n_lo(UV * 3.0 + 11.0) * 0.7 + n_lo(UV * 9.0) * 0.3;
 		float vignette = smoothstep(0.0, 0.45, edge);
-		albedo = vec3(0.02, 0.022, 0.025);
-		metal = 0.85;
-		rough = 0.12 + 0.25 * smoke + (1.0 - vignette) * 0.2;
+		// 卡通:深青玻璃色的镜面(不是近黑的金属),缎面
+		albedo = vec3(0.07, 0.12, 0.13);
+		metal = 0.4;
+		rough = 0.3 + 0.2 * smoke + (1.0 - vignette) * 0.15;
 		float gold = 1.0 - smoothstep(0.0075, 0.0075 + max(max(fwidth(UV.x), fwidth(UV.y)), 0.001), abs(edge - 0.04 - 0.0075));
-		albedo = mix(albedo * (0.6 + 0.4 * vignette), vec3(0.62, 0.45, 0.2), gold);
-		rough = mix(rough, 0.3, gold);
-		metal = mix(metal, 1.0, gold);
+		albedo = mix(albedo * (0.75 + 0.25 * vignette), vec3(0.62, 0.45, 0.2), gold);
+		rough = mix(rough, 0.45, gold);
+		metal = mix(metal, 0.65, gold);
 		float warm = (1.0 - smoothstep(0.0, mirror_size.y, UV.y)) * vignette * (0.6 + 0.4 * smoke);
 		// 假反光:几道斜向的柔和亮带,读得出是镜面
 		float streak = smoothstep(0.35, 0.0, abs(fract((UV.x + UV.y * 0.7) / 1.3) - 0.5)) * 0.5 + 0.5;
-		emission = vec3(0.10, 0.055, 0.025) * warm * 0.55 * streak * (1.0 - gold);
+		emission = vec3(0.10, 0.07, 0.04) * warm * 0.7 * streak * (1.0 - gold);
 	} else if (mode == 3) {
 		int id = int(param + 0.5);
 		vec4 rs = rug_sizes[id];

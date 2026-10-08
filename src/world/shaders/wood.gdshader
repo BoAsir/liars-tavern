@@ -7,7 +7,7 @@ shader_type spatial;
 #include "res://src/world/shaders/surface.gdshaderinc"
 // 柔和卡通光照(见 toon_light.gdshaderinc)
 #define TOON_NO_RIM
-#define TOON_SHADOW_TINT vec3(0.92, 0.86, 1.0)
+#define TOON_SHADOW_TINT vec3(0.86, 0.82, 1.0)
 #include "res://src/world/shaders/toon_light.gdshaderinc"
 
 uniform vec3 color_dark : source_color = vec3(0.16, 0.08, 0.04);
@@ -132,8 +132,9 @@ void fragment() {
 	vec2 ring_p = vec2(across + rnd * 13.0, depth * 0.6 + rnd * 7.0);
 	float rings = fract(length(ring_p) * ring_frequency + warp * 1.1);
 	rings = smoothstep(0.0, 0.75, rings) * (1.0 - smoothstep(0.75, 1.0, rings));
-	float grain = n_hi(vec2(along * 1.8, across * 80.0 + rnd * 20.0));
-	float fibre = n_hi(vec2(along * 6.0 + 31.0, across * 400.0));
+	// 卡通降噪:纤维尺度放大、幅度减小(远看是干净的色块,近看留一点手绘的笔触)
+	float grain = n_hi(vec2(along * 1.2, across * 28.0 + rnd * 20.0));
+	float fibre = n_hi(vec2(along * 3.0 + 31.0, across * 120.0));
 	// 磨损:环形与走道;斑驳一层,磨过的地方木纹淡、颜色亮、更粗糙
 	float worn = 0.0;
 	vec2 xz = obj_pos.xz;
@@ -148,10 +149,10 @@ void fragment() {
 	}
 	worn *= smoothstep(0.35, 0.65, n_lo(xz * 2.3 + 7.0));
 	float grain_mix = grain_strength * (1.0 - worn * 0.6);
-	float t = clamp(rings * 0.32 + grain * grain_mix + fibre * 0.15 + (rnd - 0.5) * 0.3, 0.0, 1.0);
+	float t = clamp(0.15 + rings * 0.22 + grain * grain_mix + fibre * 0.05 + (rnd - 0.5) * 0.16, 0.0, 1.0);
 	vec3 col = mix(color_dark, color_light, t);
 	float blotch = n_lo(vec2(along, across) * 1.7 + 4.0);
-	col *= mix(1.0, 0.7 + 0.6 * blotch, wear);
+	col *= mix(1.0, 0.85 + 0.3 * blotch, wear);
 	// 逐板色差(明度 ± plank_tint,色相略偏红或偏黄)
 	float tint_r = hash12(vec2(plank_id, 8.1) + part_seed);
 	col *= 1.0 + (tint_r - 0.5) * 2.0 * plank_tint;
@@ -169,11 +170,11 @@ void fragment() {
 		stain = inside * focus * stains;
 		col *= 1.0 - stain * 0.35 - rim * focus * stains * 0.3;
 	}
-	col *= mix(1.0, 0.2, seam);
-	col *= 1.0 - junction * 0.4;
+	col *= mix(1.0, 0.5, seam);         // 板缝是柔和的深线,不是黑缝
+	col *= 1.0 - junction * 0.25;
 	col = mix(col, vec3(0.045, 0.043, 0.042), nail);
 	ALBEDO = col;
-	float rough = roughness_base - varnish * 0.45 + grain * 0.18 + seam * 0.3;
+	float rough = roughness_base - varnish * 0.45 + grain * 0.08 + seam * 0.2;
 	rough += (tint_r - 0.5) * 0.08 * step(0.001, plank_tint) + worn * 0.12 - stain * 0.3;
 	ROUGHNESS = clamp(mix(rough, 0.35, nail), 0.06, 1.0);
 	METALLIC = nail * 0.6;
