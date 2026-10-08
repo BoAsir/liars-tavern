@@ -1,5 +1,5 @@
 extends GutTest
-# 玩法常量:id 校验(来自不可信报文)、德州判定、人数上限、中途加入、桌子尺寸。
+# 玩法常量:id 校验(来自不可信报文)、德州 / 炸弹猫判定、人数上限、中途加入、桌子尺寸、主菜单顺序。
 
 
 func test_known_modes_are_valid():
@@ -25,8 +25,28 @@ func test_poker_modes():
 	assert_false(GameMode.is_short_deck(GameMode.HOLDEM))
 
 
+func test_bomb_cat_mode():
+	assert_true(GameMode.is_valid(GameMode.BOMB_CAT))
+	assert_true(GameMode.is_bomb_cat(GameMode.BOMB_CAT))
+	assert_false(GameMode.is_poker(GameMode.BOMB_CAT))
+	assert_false(GameMode.is_bomb_cat(GameMode.LIARS))
+	assert_eq(GameMode.label(GameMode.BOMB_CAT), "炸弹猫")
+	assert_eq(GameMode.short_label(GameMode.BOMB_CAT), "炸弹猫")
+	assert_eq(GameMode.summary(GameMode.BOMB_CAT), "炸弹猫 · 2–6 人")
+	assert_false(GameMode.allows_late_join(GameMode.BOMB_CAT), "一局打到底,不收中途加入")
+
+
+func test_mode_order_puts_bomb_cat_before_the_two_poker_modes():
+	assert_eq(GameMode.ALL, [GameMode.LIARS, GameMode.BOMB_CAT, GameMode.HOLDEM, GameMode.SHORT_DECK])
+	if GameMode.BOMB_CAT_ENABLED:
+		assert_eq(GameMode.menu_modes(), GameMode.ALL)
+	else:
+		assert_false(GameMode.menu_modes().has(GameMode.BOMB_CAT))
+
+
 func test_player_caps_per_mode():
 	assert_eq(GameMode.max_players(GameMode.LIARS), 4)
+	assert_eq(GameMode.max_players(GameMode.BOMB_CAT), 6)
 	assert_eq(GameMode.max_players(GameMode.HOLDEM), 8)
 	assert_eq(GameMode.max_players(GameMode.SHORT_DECK), 8)
 	for mode in GameMode.ALL:
@@ -55,6 +75,16 @@ func test_summary_names_the_mode_and_its_player_range():
 	assert_eq(GameMode.summary(GameMode.SHORT_DECK), "德州扑克·短牌 · 2–8 人")
 	assert_eq(GameMode.summary(GameMode.HOLDEM), "德州扑克·长牌 · 2–8 人")
 	assert_eq(GameMode.summary(GameMode.LIARS), "骗子酒馆 · 2–4 人")
+
+
+func test_bomb_cat_uses_the_small_table_up_to_four_and_the_big_one_from_five():
+	assert_eq(SeatLayout.table_radius_for(GameMode.BOMB_CAT), SeatLayout.TABLE_RADIUS, "人数未知(等待厅)用小桌")
+	for players in [2, 3, 4]:
+		assert_eq(SeatLayout.table_radius_for(GameMode.BOMB_CAT, players), SeatLayout.TABLE_RADIUS, str(players))
+	for players in [5, 6]:
+		assert_eq(SeatLayout.table_radius_for(GameMode.BOMB_CAT, players), SeatLayout.POKER_TABLE_RADIUS, str(players))
+	assert_eq(SeatLayout.table_radius_for(GameMode.LIARS, 4), SeatLayout.TABLE_RADIUS, "骗子酒馆不看人数")
+	assert_eq(SeatLayout.table_radius_for(GameMode.HOLDEM, 2), SeatLayout.POKER_TABLE_RADIUS, "德州不看人数")
 
 
 func test_poker_table_is_bigger_and_keeps_the_seat_gap():
