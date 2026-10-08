@@ -80,4 +80,6 @@ func test_muzzle_rests_against_the_temple_not_inside_the_head():
 		await patron.pick_up(gun, 0.05)
 		await patron.raise_gun_to_head(gun, 0.05)
 		var gap := gun.muzzle_transform().origin.distance_to(patron.head_position())
-		assert_between(gap, 0.172, 0.2, "%s 枪口到头心" % PatronParts.species(patron.species_index)["id"])
+		# Q 版大头:原来 0.172–0.2(头半径 0.17)按 PatronParts.HEAD_SCALE 一起放大,枪口仍贴在太阳穴外
+		assert_between(gap, 0.172 * PatronParts.HEAD_SCALE, 0.2 * PatronParts.HEAD_SCALE,
+			"%s 枪口到头心" % PatronParts.species(patron.species_index)["id"])
