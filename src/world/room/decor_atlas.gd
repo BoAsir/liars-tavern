@@ -308,13 +308,14 @@ class DecorPainter:
 		var frame := Rect2(Vector2(30, 78), Vector2(size.x - 60, 104))
 		draw_rect(frame, Color(DecorAtlas.PAPER.darkened(0.06)))
 		draw_rect(frame, ink, false, 2.0)
-		draw_set_transform(Vector2(DecorAtlas.poster_rect_px(index).position) + frame.get_center() + Vector2(0, 6))
+		# 头像缩到 0.8 倍、略往下放:礼帽、羊驼耳朵这类高个子也收在框里
+		draw_set_transform(Vector2(DecorAtlas.poster_rect_px(index).position) + frame.get_center() + Vector2(0, 12), 0.0, Vector2(0.8, 0.8))
 		_portrait(id, ink)
 		_region(DecorAtlas.poster_rect_px(index))
-		_cn_or("通缉 " + Species.LABELS[index], id.to_upper(), Vector2(size.x / 2.0, 202), 26, ink, size.x - 36)
+		_cn_or("通缉 " + Species.LABELS[index], id.to_upper(), Vector2(size.x / 2.0, 200), 26, ink, size.x - 36)
 		var b: Array = DecorAtlas.bounty(id)
-		_cn_or(b[0], b[1], Vector2(size.x / 2.0, 228), 15, ink, size.x - 34)
-		_text(_latin, b[1], Vector2(size.x / 2.0, 243), 8, Color(ink, 0.85), size.x - 34)
+		_cn_or(b[0], b[1], Vector2(size.x / 2.0, 223), 15, ink, size.x - 34)
+		_text(_latin, b[1], Vector2(size.x / 2.0, 235), 8, Color(ink, 0.85), size.x - 40)
 
 	func _portrait(id: String, ink: Color) -> void:
 		# 单色木刻头像(局部坐标:头心在原点,头半径约 34 px);只用墨色,和角色毛色解耦
@@ -577,9 +578,9 @@ class DecorPainter:
 			draw_circle(p, _rng.randf_range(0.6, 1.6), Color(0.9, 0.92, 1.0, _rng.randf_range(0.35, 0.95)))
 		var moon := RoomLayout.moon_uv() * s
 		var r := 0.13
-		for k in 10:
-			var g := 1.0 + k * 0.35
-			_filled_ellipse(moon, Vector2(r * px.x, r * px.y) * g, Color(0.75, 0.82, 1.0, 0.05))
+		for k in 28:
+			var g := 4.5 - k * 0.125
+			_filled_ellipse(moon, Vector2(r * px.x, r * px.y) * g, Color(0.75, 0.82, 1.0, 0.022))
 		_filled_ellipse(moon, Vector2(r * px.x, r * px.y), Color(0.97, 0.96, 0.88))
 		_filled_ellipse(moon + Vector2(-6, 4), Vector2(5, 6), Color(0.86, 0.85, 0.78))
 		_filled_ellipse(moon + Vector2(7, -5), Vector2(4, 4), Color(0.88, 0.87, 0.8))
@@ -758,7 +759,7 @@ class DecorPainter:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.10, 0.13, 0.11))
 		_rng.seed = 404
 		for i in 40:
-			var p := Vector2(_rng.randf() * size.x, _rng.randf() * size.y)
+			var p := Vector2(_rng.randf_range(8, size.x - 50), _rng.randf_range(8, size.y - 8))
 			draw_line(p, p + Vector2(_rng.randf_range(10, 40), _rng.randf_range(-3, 3)), Color(0.8, 0.8, 0.75, 0.04), 6.0)
 		var chalk := Color(0.86, 0.84, 0.76)
 		_cn_or("今日供应", "TODAY", Vector2(size.x / 2.0, 30), 28, chalk, size.x - 30)

@@ -254,7 +254,7 @@ static func _counter_recipe(f: MeshForge) -> void:
 			8, PackedInt32Array(), MeshForge.xf(Vector3(tx, top + 0.285, z), Vector3(0, 0, -8)))
 	# 收银机:主体、斜面键盘、顶上的金额窗、侧摇把
 	var r := Vector3(-3.42, top, -1.75)
-	RoomKit.paint(f, RoomKit.OLD_BRASS)
+	RoomKit.paint(f, [Color(0.40, 0.29, 0.14), 0.55, 0.85])   # 收银机用暗一点的青铜:吧台灯就在上方,亮黄铜会糊成一块发光的方块
 	f.box(Vector3(0.3, 0.18, 0.34), MeshForge.xf(r + Vector3(0, 0.09, 0)))
 	f.extrude(PackedVector2Array([Vector2(-0.15, 0.0), Vector2(0.15, 0.0), Vector2(0.15, 0.05), Vector2(-0.05, 0.14), Vector2(-0.15, 0.14)]),
 		0.32, Transform3D(Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0)), r + Vector3(0, 0.18, 0)))

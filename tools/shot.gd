@@ -7,6 +7,7 @@ extends SceneTree
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
 # --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
 # 文件名带状态,同一机位可以拍几种底部区域。
+# --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
@@ -58,6 +59,10 @@ func _run() -> void:
 	var tavern := Tavern.new()
 	root.add_child(tavern)
 	await RoomTextures.build(root)   # 墙地噪声与墙饰图集:不等的话截图里是回退色
+	if opts.has("atlas"):
+		# 顺手存一份墙饰图集与噪声贴图,检查通缉令、招牌与外景
+		DecorAtlas.texture().get_image().save_png(out_dir + "/decor_atlas.png")
+		SurfaceNoise.texture().get_image().save_png(out_dir + "/surface_noise.png")
 	if opts.has("lineup"):
 		# 8 个物种一字排开(面朝镜头),配 lineup_front / lineup_back / lineup_heads 机位
 		for i in Species.count():

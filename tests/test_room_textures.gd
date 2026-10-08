@@ -2,8 +2,10 @@ extends GutTest
 # 房间的运行时贴图(无头):SurfaceNoise 回退 4×4 灰、倍频周期;DecorAtlas 回退纸色、区域表、通缉令与赏金文案。
 
 
-func after_each():
-	RoomTextures.clear()
+func after_all():
+	# 换过贴图之后,材质缓存与合批网格缓存一起重建:网格的 surface 上挂着旧材质,别的测试按身份比较材质
+	WorldMaterials.clear_cache()
+	MeshForge.clear_cache()
 
 
 func test_surface_noise_falls_back_to_mid_grey_headless():
@@ -31,14 +33,14 @@ func test_build_and_clear_headless():
 	assert_false(SurfaceNoise.is_built())
 	assert_false(DecorAtlas.is_built())
 	assert_not_same(SurfaceNoise.texture(), noise, "clear 之后重新建")
+	WorldMaterials.clear_cache()   # 已建的材质还绑着旧贴图(游戏里只在退出时 clear)
+	MeshForge.clear_cache()
 
 
 func test_materials_bind_the_shared_textures():
-	WorldMaterials.clear_cache()
 	assert_same(WorldMaterials.wood("floor").get_shader_parameter("surface_noise"), SurfaceNoise.texture())
 	assert_same(WorldMaterials.stone("plaster").get_shader_parameter("surface_noise"), SurfaceNoise.texture())
 	assert_same(WorldMaterials.decor().get_shader_parameter("atlas"), DecorAtlas.texture())
-	WorldMaterials.clear_cache()
 
 
 func test_atlas_falls_back_to_parchment_headless():
