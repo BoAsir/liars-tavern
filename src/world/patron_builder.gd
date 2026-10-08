@@ -290,7 +290,7 @@ static func _shoe(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3, sid
 					var t := (i - (toes - 1) * 0.5) / maxf(toes - 1, 1)
 					f.cylinder(0.0, 0.007, 0.018, 6, MeshForge.CAPS_BOTH, xf(at + Vector3(t * 0.045, 0.015, -0.115), Vector3(-90, 0, 0)))
 		_:
-			# 鞋 / 靴:鞋身扁椭球 + 鞋底;靴子多一截靴筒
+			# 鞋 / 靴:鞋身扁椭球 + 鞋底;靴子多一截靴筒(牛仔靴的尖头和马刺由物种 extras 画)
 			var shoe := color(pal, l.get("shoe", "shoe"))
 			paint(f, pal, l.get("shoe", "shoe"), 0.45, LEATHER)
 			f.blob(at + Vector3(0, 0.04, -0.03), [[at + Vector3(0, 0.04, -0.03), Vector3(0.05, 0.04, 0.085), shoe],
@@ -303,10 +303,6 @@ static func _shoe(f: MeshForge, pal: Dictionary, l: Dictionary, at: Vector3, sid
 			if kind == "spats":
 				paint(f, pal, l.get("spats", "cream"), 0.8, CLOTH)
 				f.cylinder(0.05, 0.052, 0.07, 12, MeshForge.CAPS_BOTH, xf(at + Vector3(0, 0.075, -0.005)))
-			if kind == "cowboy":
-				# 马刺
-				paint(f, pal, "silver", 0.3, METAL, 1.0)
-				f.torus(0.012, 0.02, 10, xf(at + Vector3(0, 0.045, 0.07), Vector3(0, 90, 0)))
 
 
 static func _tail(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
