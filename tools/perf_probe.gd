@@ -42,6 +42,7 @@ func _run() -> void:
 	root.add_child(_viewport)
 	_tavern = Tavern.new()
 	_viewport.add_child(_tavern)
+	await RoomTextures.build(_viewport)   # 墙地噪声与墙饰图集:不等的话测的是回退贴图
 	_post_fx = PostFx.new()
 	_viewport.add_child(_post_fx)
 	var kind: String = opts.get("showcase", "liars")

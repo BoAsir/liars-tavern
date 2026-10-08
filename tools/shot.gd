@@ -57,6 +57,7 @@ func _run() -> void:
 	RenderBudget.apply(root)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
+	await RoomTextures.build(root)   # 墙地噪声与墙饰图集:不等的话截图里是回退色
 	if opts.has("lineup"):
 		# 8 个物种一字排开(面朝镜头),配 lineup_front / lineup_back / lineup_heads 机位
 		for i in Species.count():

@@ -1,0 +1,517 @@
+class_name RoomProps
+# 房间陈设:四面墙的墙饰(8 张通缉令、3 幅鎏金框画、摆钟与钟摆、马蹄铁、套索、「不许出老千」告示)、
+# 钢琴与琴凳、衣帽架、角落杂物(共享车削木桶 + 桶箍、货箱、麻袋、小酒桶架)、两块纳瓦霍地毯、接地贴花、黄铜蜡烛壁灯,
+# 以及氛围(暖色 LUT、分层体积雾)。墙饰与地毯、外景都用 decor 材质;布景件一律不投影。
+
+
+const GRAIN_ALONG_Y := Basis(Vector3.BACK, PI / 2.0)
+const BARREL_SPOTS := [Vector3(3.7, 0, -3.6), Vector3(3.1, 0, -3.9), Vector3(3.85, 0, -2.9)]
+const LYING_BARREL := [Vector3(3.0, 0.29, -2.95), Vector3(90, 15, 0)]
+const KEGS := [[Vector3(-3.92, 0.2, -3.96), Vector3(0, 0, 90)], [Vector3(-3.9, 0.53, -3.95), Vector3(0, 12, 90)]]
+const CRATES := [[Vector3(3.85, 0.0, 3.85), 0.6, 8.0], [Vector3(3.8, 0.6, 3.9), 0.45, -14.0], [Vector3(3.15, 0.0, 4.0), 0.5, 21.0]]
+const SACKS := [Vector3(3.35, 0, 3.45), Vector3(4.0, 0, 3.2), Vector3(4.0, 0, -2.25), Vector3(3.6, 0, -2.35)]
+const PIANO := {"x": Vector2(-3.45, -2.05), "z": Vector2(3.78, 4.33), "height": 1.25}
+const PIANO_BENCH := Vector3(-2.75, 0.0, 3.15)
+const COAT_RACK := Vector3(2.55, 0.0, 4.12)
+const PENDULUM_PIVOT := Vector3(2.30, 1.80, -4.33)
+const PENDULUM_SWING := 6.0      # 度
+const PENDULUM_PERIOD := 2.4     # 秒(来回一趟)
+const BURLAP := Color(0.52, 0.42, 0.28)
+
+
+static func build(tavern: Node3D) -> Array:
+	# 返回要闪烁的灯(壁灯)
+	for wall in ["back", "front", "left", "right"]:
+		var items := RoomLayout.DECOR.filter(func(d): return d["wall"] == wall)
+		RoomKit.add(tavern, "Decor_" + wall, "decor:" + wall, _decor_recipe.bind(items), {&"main": WorldMaterials.decor()},
+			MeshKit.LAYER_SCENERY, false)
+		RoomKit.add(tavern, "WallProps_" + wall, "wallprops:" + wall, _wall_props_recipe.bind(items), {&"main": WorldMaterials.prop()},
+			MeshKit.LAYER_SCENERY, false)
+	_clock(tavern)
+	RoomKit.add(tavern, "Piano", "piano", _piano_recipe, {&"wood": WorldMaterials.wood("table", true), &"prop": WorldMaterials.prop(),
+		&"decor": WorldMaterials.decor()}, MeshKit.LAYER_SCENERY, false)
+	var bench := MeshKit.add(tavern, BarSet.stool_mesh(), null, PIANO_BENCH, Vector3(0, 20, 0), Vector3(1, 0.68, 1), MeshKit.SHADOW_ON)
+	bench.name = "PianoBench"
+	RoomKit.add(tavern, "CoatRack", "coat_rack", _coat_rack_recipe, {&"wood": WorldMaterials.wood("dark", true),
+		&"prop": WorldMaterials.prop()}, MeshKit.LAYER_SCENERY, false)
+	_clutter(tavern)
+	RoomKit.add(tavern, "Rugs", "rugs", _rugs_recipe, {&"main": WorldMaterials.decor()}, MeshKit.LAYER_SCENERY, false)
+	_decals(tavern)
+	return _sconces(tavern)
+
+
+# —— 墙饰 ——
+
+static func _decor_recipe(f: MeshForge, items: Array) -> void:
+	for item in items:
+		var size: Vector2 = item["size"]
+		var wall: String = item["wall"]
+		match item["kind"]:
+			"poster":
+				RoomKit.decor_paint(f, 0, 0.0, Color(1, 1, 1))
+				var xf := RoomLayout.wall_xform(wall, item["u"], item["y"], RoomLayout.FLAT_OFFSET, item["tilt"])
+				f.quad(size, DecorAtlas.rect("poster%d" % item["species"]), xf, item.get("curl", 0.0), 6)
+			"painting":
+				RoomKit.decor_paint(f, 0, 0.0, Color(0.95, 0.92, 0.86))
+				var inner := size - Vector2(0.08, 0.08)
+				f.quad(inner, DecorAtlas.rect("painting_" + item["art"]),
+					RoomLayout.wall_xform(wall, item["u"], item["y"], RoomLayout.FLAT_OFFSET + 0.008))
+			"sign":
+				RoomKit.decor_paint(f, 0, 0.0, Color(1, 1, 1))
+				f.quad(size, DecorAtlas.rect("sign_cheat"), RoomLayout.wall_xform(wall, item["u"], item["y"], RoomLayout.FLAT_OFFSET))
+			"clock":
+				RoomKit.decor_paint(f, 0, 0.0, Color(1, 1, 1))
+				f.quad(Vector2(0.26, 0.26), DecorAtlas.rect("clock"), RoomLayout.wall_xform(wall, item["u"], 1.95, 0.121))
+				# 钟摆窗的暗底
+				RoomKit.decor_paint(f, 0, 0.0, Color(0.08, 0.06, 0.05), 0.6)
+				f.quad(Vector2(0.2, 0.3), Rect2(0.99, 0.99, 0.005, 0.005), RoomLayout.wall_xform(wall, item["u"], 1.55, 0.022))
+
+
+static func _wall_props_recipe(f: MeshForge, items: Array) -> void:
+	for item in items:
+		var size: Vector2 = item["size"]
+		var wall: String = item["wall"]
+		var b := RoomLayout.wall_basis(wall)
+		match item["kind"]:
+			"poster", "sign":
+				# 顶上两颗钉子
+				RoomKit.paint(f, RoomKit.IRON)
+				for s in [-1, 1]:
+					var p := RoomLayout.wall_xform(wall, item["u"], item["y"], RoomLayout.FLAT_OFFSET, item["tilt"]) \
+						* Vector3(s * (size.x / 2.0 - 0.025), size.y / 2.0 - 0.025, 0.004)
+					f.sphere(0.007, 8, Transform3D(b, p))
+			"painting":
+				# 鎏金画框:四根倒角框条
+				RoomKit.paint(f, RoomKit.GILT)
+				var xf := RoomLayout.wall_xform(wall, item["u"], item["y"], 0.0)
+				var w := 0.05
+				for k in 4:
+					var horizontal := k < 2
+					var len: float = size.x if horizontal else size.y
+					var off := Vector3(0, (size.y - w) / 2.0 * (1 if k == 0 else -1), 0) if horizontal \
+						else Vector3((size.x - w) / 2.0 * (1 if k == 2 else -1), 0, 0)
+					var rot := Basis.IDENTITY if horizontal else Basis(Vector3(0, 0, 1), PI / 2.0)
+					f.extrude(PackedVector2Array([Vector2(0.0, -w / 2.0), Vector2(0.02, -w / 2.0), Vector2(0.03, -w / 4.0),
+						Vector2(0.03, w / 4.0), Vector2(0.02, w / 2.0), Vector2(0.0, w / 2.0)]), len,
+						xf * Transform3D(rot, off))
+			"horseshoe":
+				RoomKit.paint(f, RoomKit.IRON)
+				var xf := RoomLayout.wall_xform(wall, item["u"], item["y"], 0.012)
+				var path := PackedVector3Array()
+				for k in 15:
+					var a := deg_to_rad(160.0 + k * (220.0 / 14.0))   # 开口朝上的 U
+					path.append(xf * Vector3(cos(a) * 0.055, sin(a) * 0.06 - 0.005, 0))
+				f.tube(path, 0.011, 6)
+				RoomKit.paint(f, RoomKit.BRASS)
+				f.sphere(0.008, 8, Transform3D(b, xf * Vector3(0, 0.065, -0.004)))
+			"lasso":
+				# 挂钉上盘三圈的绳子,下面垂一截绳头
+				RoomKit.paint(f, RoomKit.ROPE)
+				var xf := RoomLayout.wall_xform(wall, item["u"], item["y"], 0.03)
+				for loop in 3:
+					var path := PackedVector3Array()
+					for k in 25:
+						var a := TAU * k / 24.0
+						path.append(xf * Vector3(cos(a) * (0.14 - loop * 0.01) + loop * 0.012, sin(a) * 0.17 - 0.16 + loop * 0.008, loop * 0.012))
+					f.tube(path, 0.009, 6)
+				var tail := PackedVector3Array([xf * Vector3(0.1, -0.28, 0.03), xf * Vector3(0.12, -0.4, 0.04), xf * Vector3(0.09, -0.5, 0.03)])
+				f.tube(tail, 0.009, 6)
+				RoomKit.paint(f, RoomKit.IRON)
+				f.cylinder(0.01, 0.01, 0.06, 8, MeshForge.CAPS_BOTH, Transform3D(b * Basis(Vector3.RIGHT, PI / 2.0), xf * Vector3(0, 0, 0)))
+
+
+static func _clock(tavern: Node3D) -> void:
+	var item: Dictionary = RoomLayout.DECOR.filter(func(d): return d["kind"] == "clock")[0]
+	var size: Vector2 = item["size"]
+	RoomKit.add(tavern, "Clock", "clock_case", func(f: MeshForge): _clock_case(f, item), {&"main": WorldMaterials.wood("dark", true),
+		&"prop": WorldMaterials.prop()}, MeshKit.LAYER_SCENERY, false)
+	var pivot := MeshKit.pivot(tavern, PENDULUM_PIVOT, "Pendulum")
+	var mesh := MeshForge.cached("clock_pendulum", func(f: MeshForge):
+		RoomKit.paint(f, RoomKit.BRASS)
+		f.box(Vector3(0.008, 0.3, 0.004), MeshForge.xf(Vector3(0, -0.15, 0)))
+		f.cylinder(0.04, 0.04, 0.008, 18, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(0, -0.31, 0), Vector3(90, 0, 0))),
+		{&"main": WorldMaterials.prop()})
+	MeshKit.add(pivot, mesh, null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_OFF).layers = MeshKit.LAYER_SCENERY
+	if pivot.is_inside_tree():
+		pivot.rotation.z = deg_to_rad(-PENDULUM_SWING)
+		var tween := pivot.create_tween().set_loops()
+		tween.tween_property(pivot, "rotation:z", deg_to_rad(PENDULUM_SWING), PENDULUM_PERIOD / 2.0) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_property(pivot, "rotation:z", deg_to_rad(-PENDULUM_SWING), PENDULUM_PERIOD / 2.0) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+static func _clock_case(f: MeshForge, item: Dictionary) -> void:
+	# 摆钟壳 0.34 × 0.85 × 0.12:背板、侧板、顶帽与尖饰、底座;前脸上半是钟面板,下半开 0.20 × 0.30 的钟摆窗
+	var u: float = item["u"]
+	var cy: float = item["y"]
+	var size: Vector2 = item["size"]
+	var y0 := cy - size.y / 2.0
+	var y1 := cy + size.y / 2.0
+	var d := 0.12
+	f.surface(&"main")
+	f.part_space = true
+	f.paint(Color.WHITE, 0.6)
+	var wall := "back"
+	f.part_basis = GRAIN_ALONG_Y
+	f.seed = 1.0
+	RoomShell.wall_box(f, wall, u - size.x / 2.0, u + size.x / 2.0, y0, y1, 0.0, 0.015)
+	for s in [-1, 1]:
+		RoomShell.wall_box(f, wall, u + s * (size.x / 2.0 - 0.01), u + s * size.x / 2.0, y0, y1, 0.0, d)
+	f.part_basis = Basis.IDENTITY
+	f.seed = 2.0
+	RoomShell.wall_box(f, wall, u - size.x / 2.0, u + size.x / 2.0, 1.70, y1, d - 0.02, d)
+	RoomShell.wall_box(f, wall, u - size.x / 2.0, u + size.x / 2.0, y0, 1.40, d - 0.02, d)
+	for s in [-1, 1]:
+		RoomShell.wall_box(f, wall, u + s * 0.10, u + s * size.x / 2.0, 1.40, 1.70, d - 0.02, d)
+	RoomShell.wall_box(f, wall, u - size.x / 2.0 - 0.025, u + size.x / 2.0 + 0.025, y1, y1 + 0.05, 0.0, d + 0.025)
+	RoomShell.wall_box(f, wall, u - size.x / 2.0 - 0.015, u + size.x / 2.0 + 0.015, y0 - 0.04, y0, 0.0, d + 0.015)
+	f.part_space = false
+	f.surface(&"prop")
+	RoomKit.paint(f, RoomKit.BRASS)
+	f.sphere(0.022, 10, RoomShell.wall_frame(wall, u) * Transform3D(Basis.IDENTITY, Vector3(0, y1 + 0.075, d / 2.0)))
+	f.torus(0.128, 0.142, 28, RoomShell.wall_frame(wall, u) * Transform3D(Basis(Vector3.RIGHT, PI / 2.0), Vector3(0, 1.95, d + 0.002)))
+
+
+# —— 钢琴与衣帽架 ——
+
+static func _piano_recipe(f: MeshForge) -> void:
+	var x0: float = PIANO["x"].x
+	var x1: float = PIANO["x"].y
+	var z0: float = PIANO["z"].x
+	var z1: float = PIANO["z"].y
+	var h: float = PIANO["height"]
+	var cx := (x0 + x1) / 2.0
+	f.surface(&"wood")
+	f.part_space = true
+	f.paint(Color.WHITE, 0.45)
+	f.seed = 1.0
+	# 上半琴身、下半琴身(膝下内凹)、顶盖、键床、两侧颊板与前腿、踢脚
+	f.box(Vector3(x1 - x0, h - 0.74, z1 - z0), MeshForge.xf(Vector3(cx, (h + 0.74) / 2.0, (z0 + z1) / 2.0)))
+	f.box(Vector3(x1 - x0, 0.66, z1 - z0 - 0.15), MeshForge.xf(Vector3(cx, 0.04 + 0.33, (z0 + 0.15 + z1) / 2.0)))
+	f.extrude(RoomShell.chamfer_rect(z1 - z0 + 0.04, 0.035, 0.01), x1 - x0 + 0.04,
+		Transform3D(Basis.IDENTITY, Vector3(cx, h + 0.0175, (z0 + z1) / 2.0 - 0.01)))
+	f.seed = 2.0
+	f.box(Vector3(x1 - x0 - 0.1, 0.04, z0 - 3.55 + 0.02), MeshForge.xf(Vector3(cx, 0.72, (3.55 + z0) / 2.0)))
+	f.box(Vector3(x1 - x0 - 0.1, 0.12, 0.03), MeshForge.xf(Vector3(cx, 0.80, z0 - 0.015)))
+	for s in [-1, 1]:
+		var x: float = cx + s * ((x1 - x0) / 2.0 - 0.025)
+		f.box(Vector3(0.05, 0.16, z0 - 3.55 + 0.02), MeshForge.xf(Vector3(x, 0.80, (3.55 + z0) / 2.0)))
+		f.part_basis = GRAIN_ALONG_Y
+		f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.035, 0.0), Vector2(0.03, 0.08), Vector2(0.04, 0.3),
+			Vector2(0.026, 0.62), Vector2(0.034, 0.7), Vector2(0.0, 0.7)]), 10, PackedInt32Array([1, 5]),
+			MeshForge.xf(Vector3(x - s * 0.02, 0.0, 3.62)))
+		f.part_basis = Basis.IDENTITY
+	f.box(Vector3(x1 - x0, 0.05, 0.02), MeshForge.xf(Vector3(cx, 0.025, z0 + 0.14)))
+	# 乐谱架
+	f.box(Vector3(0.5, 0.03, 0.03), MeshForge.xf(Vector3(cx, 0.94, z0 - 0.04)))
+	f.part_space = false
+	# 正面两只黄铜烛台(未点燃)
+	f.surface(&"prop")
+	for s in [-1, 1]:
+		var p := Vector3(cx + s * 0.55, 1.0, z0 - 0.06)
+		RoomKit.paint(f, RoomKit.BRASS)
+		f.box(Vector3(0.012, 0.08, 0.06), MeshForge.xf(p + Vector3(0, 0, 0.03)))
+		f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.03, 0.0), Vector2(0.034, 0.012), Vector2(0.012, 0.02), Vector2(0.0, 0.02)]),
+			12, PackedInt32Array([1, 2]), MeshForge.xf(p))
+		RoomKit.paint(f, RoomKit.WAX)
+		f.cylinder(0.011, 0.012, 0.11, 10, MeshForge.CAPS_BOTH, MeshForge.xf(p + Vector3(0, 0.075, 0)))
+	# 琴键与乐谱(decor 纸面)
+	f.surface(&"decor")
+	RoomKit.decor_paint(f, 0, 0.0, Color(1, 1, 1))
+	f.quad(Vector2(1.22, 0.16), DecorAtlas.rect("keys"), Transform3D(Basis(Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)),
+		Vector3(cx, 0.7405, 3.65)))
+	var lean := Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)) * Basis(Vector3.RIGHT, deg_to_rad(-12))
+	f.quad(Vector2(0.21, 0.27), DecorAtlas.rect("music"), Transform3D(lean, Vector3(cx - 0.05, 1.08, z0 - 0.045)))
+	f.quad(Vector2(0.21, 0.27), DecorAtlas.rect("music"), Transform3D(lean * Basis(Vector3(0, 0, 1), 0.04), Vector3(cx + 0.17, 1.08, z0 - 0.05)))
+
+
+static func _coat_rack_recipe(f: MeshForge) -> void:
+	var p := COAT_RACK
+	f.surface(&"wood")
+	f.part_space = true
+	f.paint(Color.WHITE, 0.7)
+	f.part_basis = GRAIN_ALONG_Y
+	f.seed = 1.0
+	f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.03, 0.0), Vector2(0.024, 0.1), Vector2(0.02, 1.6), Vector2(0.028, 1.66),
+		Vector2(0.02, 1.72), Vector2(0.035, 1.76), Vector2(0.0, 1.8)]), 12, PackedInt32Array([1]), MeshForge.xf(p))
+	# 三条脚
+	for k in 3:
+		var a := TAU * k / 3.0 + 0.4
+		var foot := p + Vector3(cos(a), 0, sin(a)) * 0.24
+		var top := p + Vector3(cos(a), 0, sin(a)) * 0.02 + Vector3(0, 0.22, 0)
+		var d := top - foot
+		f.seed = 2.0 + k
+		f.cylinder(0.014, 0.018, d.length(), 8, MeshForge.CAPS_BOTH, Transform3D(Basis(Quaternion(Vector3.UP, d.normalized())), (top + foot) / 2.0))
+	# 四根挂钉
+	for k in 4:
+		var a := TAU * k / 4.0 + 0.3
+		var base := p + Vector3(0, 1.62, 0)
+		var tip := base + Vector3(cos(a) * 0.14, 0.08, sin(a) * 0.14)
+		var d := tip - base
+		f.seed = 6.0 + k
+		f.cylinder(0.009, 0.012, d.length(), 8, MeshForge.CAPS_BOTH, Transform3D(Basis(Quaternion(Vector3.UP, d.normalized())), (tip + base) / 2.0))
+	f.part_space = false
+	f.part_basis = Basis.IDENTITY
+	f.surface(&"prop")
+	# 牛仔帽挂在一根钉上
+	var hat := p + Vector3(cos(0.3) * 0.15, 1.66, sin(0.3) * 0.15)
+	RoomKit.paint(f, RoomKit.FELT_HAT)
+	var tilt := MeshForge.xf(hat, Vector3(-12, 20, 70))
+	f.cylinder(0.17, 0.17, 0.012, 22, MeshForge.CAPS_BOTH, tilt)
+	f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.075, 0.0), Vector2(0.07, 0.09), Vector2(0.04, 0.11), Vector2(0.0, 0.1)]),
+		16, PackedInt32Array([1]), tilt)
+	RoomKit.paint(f, RoomKit.LEATHER)
+	f.cylinder(0.077, 0.077, 0.018, 16, MeshForge.CAPS_NONE, tilt * MeshForge.xf(Vector3(0, 0.015, 0)))
+	# 圆顶礼帽戴在杆顶
+	RoomKit.paint(f, RoomKit.BLACK)
+	var bowler := MeshForge.xf(p + Vector3(0, 1.78, 0), Vector3(0, 30, 6))
+	f.cylinder(0.12, 0.12, 0.01, 20, MeshForge.CAPS_BOTH, bowler)
+	f.hemisphere(0.08, 16, bowler * MeshForge.xf(Vector3(0, 0.0, 0), Vector3.ZERO, Vector3(1, 1.15, 1)))
+	# 风衣:从一根钉上垂下的长衣(上窄下宽的扁筒)
+	RoomKit.paint(f, RoomKit.COAT)
+	var a := TAU * 2.0 / 4.0 + 0.3
+	var hook := p + Vector3(cos(a) * 0.13, 1.68, sin(a) * 0.13)
+	var path := PackedVector3Array()
+	var radii := PackedVector2Array()
+	for k in 7:
+		var t := k / 6.0
+		path.append(hook + Vector3(cos(a) * (0.05 + t * 0.06), -t * 1.0, sin(a) * (0.05 + t * 0.06)))
+		radii.append(Vector2(lerpf(0.06, 0.12, t), lerpf(0.10, 0.24, t)))
+	f.loft(path, radii, 14, Vector2i(1, 1), Transform3D.IDENTITY, PackedColorArray(), Vector2(-1, -1), Vector3(cos(a), 0, sin(a)))
+
+
+# —— 角落杂物 ——
+
+static func barrel_radius(y: float) -> float:
+	# 桶身半径:两端 0.27,鼓肚 +0.04
+	var t := (y - 0.43) / 0.43
+	return 0.27 + 0.04 * (1.0 - t * t)
+
+
+static func barrel_mesh() -> ArrayMesh:
+	# 共享车削桶身:20 弧段、15 个轮廓点(底部内陷桶底、鼓肚、桶口凹槽、内陷桶盖)
+	return MeshForge.cached("barrel", func(f: MeshForge):
+		f.part_space = true
+		f.paint(Color.WHITE, 0.7)
+		var profile := PackedVector2Array([Vector2(0.0, 0.03), Vector2(0.25, 0.03), Vector2(0.25, 0.0)])
+		for y in [0.0, 0.1, 0.22, 0.34, 0.43, 0.52, 0.64, 0.76, 0.86]:
+			profile.append(Vector2(barrel_radius(y), y))
+		profile.append_array([Vector2(0.25, 0.86), Vector2(0.25, 0.83), Vector2(0.0, 0.83)])
+		f.lathe(profile, 20, PackedInt32Array([1, 2, 3, 11, 12, 13])),
+		{&"main": WorldMaterials.wood("barrel", true)})
+
+
+static func hoops_mesh() -> ArrayMesh:
+	# 共享桶箍:4 道铁箍
+	return MeshForge.cached("barrel_hoops", func(f: MeshForge):
+		RoomKit.paint(f, RoomKit.IRON)
+		for y in [0.09, 0.27, 0.59, 0.77]:
+			var r := barrel_radius(y) + 0.004
+			f.lathe(PackedVector2Array([Vector2(r - 0.004, y - 0.022), Vector2(r, y - 0.02), Vector2(r, y + 0.02), Vector2(r - 0.004, y + 0.022)]),
+				20, PackedInt32Array([1, 2])),
+		{&"main": WorldMaterials.prop()})
+
+
+static func crate_mesh() -> ArrayMesh:
+	# 共享货箱(单位立方体,实例按尺寸缩放):箱体 + 12 根边条 + 侧面斜撑
+	return MeshForge.cached("crate", func(f: MeshForge):
+		f.part_space = true
+		f.paint(Color.WHITE, 0.8)
+		f.seed = 1.0
+		f.box(Vector3(0.96, 0.96, 0.96), MeshForge.xf(Vector3(0, 0.5, 0)))
+		var e := 0.09
+		for axis in 3:
+			for a in [-1, 1]:
+				for b in [-1, 1]:
+					var size := Vector3(e, e, e)
+					var pos := Vector3(0, 0.5, 0)
+					size[axis] = 1.0
+					var o1 := (axis + 1) % 3
+					var o2 := (axis + 2) % 3
+					pos[o1] += a * (0.5 - e / 2.0)
+					pos[o2] += b * (0.5 - e / 2.0)
+					f.seed = 2.0 + axis + a * 0.3 + b * 0.7
+					f.box(size, MeshForge.xf(pos))
+		for s in [-1, 1]:
+			f.box(Vector3(0.07, 1.15, 0.02), MeshForge.xf(Vector3(0, 0.5, s * 0.49), Vector3(0, 0, 45)))
+		f.part_space = false,
+		{&"main": WorldMaterials.wood("barrel", true)})
+
+
+static func _clutter(tavern: Node3D) -> void:
+	var barrel := barrel_mesh()
+	var hoops := hoops_mesh()
+	var spots := []
+	for i in BARREL_SPOTS.size():
+		spots.append([BARREL_SPOTS[i], Vector3(0, rad_to_deg(i * 1.3), 0), Vector3.ONE])
+	spots.append([LYING_BARREL[0] - Basis.from_euler(LYING_BARREL[1] * PI / 180.0) * Vector3(0, 0.43, 0), LYING_BARREL[1], Vector3.ONE])
+	for keg in KEGS:
+		spots.append([keg[0] - Basis.from_euler(keg[1] * PI / 180.0) * Vector3(0, 0.43 * 0.55, 0), keg[1], Vector3.ONE * 0.55])
+	for i in spots.size():
+		var s: Array = spots[i]
+		var body := MeshKit.add(tavern, barrel, null, s[0], s[1], s[2], MeshKit.SHADOW_ON)
+		body.name = "Barrel%d" % i
+		var ring := MeshKit.add(tavern, hoops, null, s[0], s[1], s[2], MeshKit.SHADOW_ON)
+		ring.name = "BarrelHoops%d" % i
+	var crate := crate_mesh()
+	for i in CRATES.size():
+		var c: Array = CRATES[i]
+		var inst := MeshKit.add(tavern, crate, null, c[0], Vector3(0, c[2], 0), Vector3.ONE * c[1], MeshKit.SHADOW_ON)
+		inst.name = "Crate%d" % i
+	RoomKit.add(tavern, "Clutter", "clutter", _clutter_recipe, {&"wood": WorldMaterials.wood("dark", true),
+		&"decor": WorldMaterials.decor()}, MeshKit.LAYER_SCENERY, false)
+
+
+static func _clutter_recipe(f: MeshForge) -> void:
+	# 躺桶与小酒桶下的垫木、酒桶架;货箱印字;麻袋
+	f.surface(&"wood")
+	f.part_space = true
+	f.paint(Color.WHITE, 0.8)
+	var lying: Vector3 = LYING_BARREL[0]
+	var axis := Basis.from_euler(LYING_BARREL[1] * PI / 180.0) * Vector3.UP
+	for s in [-0.3, 0.3]:
+		var p: Vector3 = lying + axis * s
+		f.seed = 1.0 + s
+		f.prism(Vector3(0.2, 0.1, 0.14), MeshForge.xf(Vector3(p.x, 0.05, p.z), Vector3(0, rad_to_deg(atan2(axis.x, axis.z)) + 90.0, 0)))
+	# 小酒桶架:两根横木 + 四条短腿
+	for z in [-4.12, -3.80]:
+		f.seed = 3.0 + z
+		f.box(Vector3(0.6, 0.05, 0.06), MeshForge.xf(Vector3(-3.92, 0.06, z)))
+	f.part_space = false
+	f.surface(&"decor")
+	RoomKit.decor_paint(f, 0, 0.0, Color(1, 1, 1), 0.9)
+	var labels := ["stencil_xxx", "stencil_dynamite", "stencil_beans"]
+	for i in CRATES.size():
+		var c: Array = CRATES[i]
+		var size: float = c[1]
+		var basis := Basis(Vector3.UP, deg_to_rad(c[2]))
+		# 印字贴在朝屋里(−X 或 −Z)的那一面
+		var face := basis * Basis(Vector3.UP, PI if i != 1 else -PI / 2.0)
+		var center: Vector3 = c[0] + Vector3(0, size * 0.5, 0) + face * Vector3(0, 0, size * 0.5 + 0.004)
+		f.quad(Vector2(size * 0.62, size * 0.31), DecorAtlas.rect(labels[i]), Transform3D(face, center))
+	RoomKit.decor_paint(f, 4, 0.0, BURLAP)
+	for i in SACKS.size():
+		var p: Vector3 = SACKS[i]
+		var k := 0.9 + 0.1 * (i % 3)
+		f.blob(p + Vector3(0, 0.2, 0) * k, [
+			[p + Vector3(0, 0.17, 0) * k, Vector3(0.19, 0.17, 0.16) * k, BURLAP],
+			[p + Vector3(0.0, 0.32, 0.0) * k, Vector3(0.12, 0.08, 0.11) * k, BURLAP],
+			[p + Vector3(0.02, 0.42, 0.0) * k, Vector3(0.04, 0.05, 0.04) * k, BURLAP.darkened(0.15)],
+		], 20, 12, 0.05)
+
+
+# —— 地毯、贴花 ——
+
+static func _rugs_recipe(f: MeshForge) -> void:
+	for i in RoomLayout.RUGS.size():
+		var rug: Array = RoomLayout.RUGS[i]
+		var center: Vector2 = rug[0]
+		var across: float = rug[1]
+		var along: float = rug[2]
+		var fringe := RoomLayout.FRINGE
+		RoomKit.decor_paint(f, 3, float(i))
+		var basis := Basis(Vector3(0, 0, -1), Vector3(-1, 0, 0), Vector3(0, 1, 0)) if rug[3] == "x" \
+			else Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0))
+		f.quad(Vector2(across, along + fringe * 2.0), Rect2(0.0, -fringe, across, along + fringe * 2.0),
+			Transform3D(basis, Vector3(center.x, 0.004 + i * 0.0005, center.y)))
+
+
+static func _decals(tavern: Node3D) -> void:
+	# 接地贴花:径向渐变,只投到布景层(地板、地毯),酒客与腿脚投不上
+	var root := MeshKit.pivot(tavern, Vector3.ZERO, "Decals")
+	var spots := [
+		[Vector3(0, 0, 0), Vector2(1.3, 1.3)],
+		[BARREL_SPOTS[0], Vector2(0.9, 0.9)], [BARREL_SPOTS[1], Vector2(0.9, 0.9)], [BARREL_SPOTS[2], Vector2(0.9, 0.9)],
+		[Vector3(3.6, 0, 3.9), Vector2(1.6, 1.1)],
+		[Vector3(-3.12, 0, -4.1), Vector2(0.8, 0.7)],
+		[Vector3(-2.75, 0, 4.05), Vector2(1.8, 0.9)],
+		[COAT_RACK, Vector2(0.7, 0.7)],
+		[Vector3(-1.5, 0, -3.45), Vector2(1.4, 0.6)],
+		[Vector3(-3.0, 0, -0.6), Vector2(0.4, 3.7)],
+		[Vector3(-2.62, 0, -0.7), Vector2(0.7, 3.2)],
+		[Vector3(-3.92, 0, -0.6), Vector2(0.35, 3.4)],
+	]
+	for s in spots:
+		var decal := Decal.new()
+		decal.size = Vector3(s[1].x, 0.3, s[1].y)
+		decal.position = s[0] + Vector3(0, 0.05, 0)
+		decal.texture_albedo = WorldMaterials.decal_soft()
+		decal.modulate = Color(0, 0, 0, 1)
+		decal.albedo_mix = 1.0
+		decal.normal_fade = 0.5
+		decal.distance_fade_enabled = true
+		decal.distance_fade_begin = 9.0
+		decal.distance_fade_length = 3.0
+		decal.cull_mask = MeshKit.LAYER_SCENERY
+		root.add_child(decal)
+
+
+# —— 壁灯 ——
+
+static func sconce_mesh() -> ArrayMesh:
+	# 黄铜蜡烛壁灯(本地 -Z 指向屋里):带串珠边的圆润底板、弯臂、接蜡杯、奶油色蜡烛;不要玻璃
+	return MeshForge.cached("sconce", func(f: MeshForge):
+		RoomKit.paint(f, RoomKit.BRASS)
+		f.extrude(RoomShell.chamfer_rect(0.10, 0.22, 0.03), 0.014, Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0, 0, -0.007)))
+		for k in 10:
+			var a := TAU * k / 10.0
+			f.sphere(0.006, 6, MeshForge.xf(Vector3(cos(a) * 0.04, sin(a) * 0.095, -0.016)))
+		var arm := PackedVector3Array()
+		for k in 9:
+			var t := k / 8.0
+			arm.append(Vector3(0, -0.06 + sin(t * PI) * 0.035 - t * 0.045, -0.015 - t * 0.135))
+		f.tube(arm, 0.007, 8)
+		f.lathe(PackedVector2Array([Vector2(0.0, -0.012), Vector2(0.012, -0.012), Vector2(0.04, 0.0), Vector2(0.042, 0.006),
+			Vector2(0.016, 0.004), Vector2(0.0, 0.004)]), 14, PackedInt32Array([1, 2, 3]), MeshForge.xf(Vector3(0, -0.10, -0.15)))
+		RoomKit.paint(f, RoomKit.WAX)
+		f.cylinder(0.013, 0.014, 0.085, 12, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(0, -0.0525, -0.15)))
+		f.sphere(0.008, 8, MeshForge.xf(Vector3(0.011, -0.03, -0.15), Vector3.ZERO, Vector3(0.6, 1.5, 0.6))),
+		{&"main": WorldMaterials.prop()})
+
+
+static func _sconces(tavern: Node3D) -> Array:
+	var flickers := []
+	var mesh := sconce_mesh()
+	for i in Tavern.SCONCES.size():
+		var root := MeshKit.pivot(tavern, Tavern.SCONCES[i][0], "Sconce")
+		root.rotation.y = Tavern.SCONCES[i][1]
+		MeshKit.add(root, mesh, null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE, MeshKit.SHADOW_OFF).layers = MeshKit.LAYER_SCENERY
+		var seed := 60.0 + i
+		RoomKit.flame(root, Vector2(0.035, 0.07), Vector3(0, 0.025, -0.15), 3.5, seed)
+		var light := OmniLight3D.new()
+		light.position = Vector3(0, 0.05, -0.2)
+		light.light_color = Color(1.0, 0.74, 0.48)
+		light.light_energy = 1.0
+		light.omni_range = 4.6
+		light.light_volumetric_fog_energy = 0.5
+		root.add_child(light)
+		flickers.append(RoomKit.flicker(light, 4.0, 0.12, seed))
+	return flickers
+
+
+# —— 氛围:暖色 LUT 与分层体积雾 ——
+
+static func atmosphere(tavern: Node3D, environment: Environment) -> void:
+	environment.adjustment_color_correction = WorldMaterials.lut()
+	environment.volumetric_fog_density = 0.03
+	var smoke := FogVolume.new()
+	smoke.name = "SmokeLayer"
+	smoke.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+	smoke.size = Vector3(8.8, 1.6, 8.8)
+	smoke.position = Vector3(0, 3.0, 0)
+	var smoke_mat := FogMaterial.new()
+	smoke_mat.density = 0.05
+	smoke_mat.edge_fade = 0.6
+	smoke.material = smoke_mat
+	tavern.add_child(smoke)
+	var haze := FogVolume.new()
+	haze.name = "HearthHaze"
+	haze.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
+	haze.size = Vector3(1.8, 1.4, 1.2)
+	haze.position = Vector3(-1.5, 1.0, -3.6)
+	var haze_mat := FogMaterial.new()
+	haze_mat.density = 0.04
+	haze_mat.emission = Color(0.08, 0.036, 0.012)
+	haze.material = haze_mat
+	tavern.add_child(haze)
