@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 11:00,第二批进行中;main 已含第一批)
+## 状态(2026-10-08 11:55,已暂停;第二批已合并到 feature/texas-holdem 与 main)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -24,9 +24,9 @@
 | 4 视线抽取 | ✅ th/gaze 完成 | SeatGaze;已合并到 feature/texas-holdem(cc18285),之后又有一个修复提交(探头不往后探)待合并 |
 | 5 说明书 | ✅ th/rulebook 完成、审查通过、修完 | 两本书页签、hands 牌型表、按书记页、README 写明开房后不能改玩法 |
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
-| 6 网络会话 | ⏳ 进行中 | 分支 th/net(从 55b8348 分出);按计划任务 6 做 |
-| 7a HUD 控件 | ⏳ 进行中 | 分支 th/hud(从 55b8348 分出);按计划任务 7 的控件部分做 |
-| 7b 控制器与演出 | ⬜ 等 7a 合并后开始 | 分支 th/screen |
+| 6 网络会话 | ✅ 已写完并合并(c478450),**还没做独立审查** | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;Net 多了 `request_sit_in()`;lan_smoke 通过。接手时先按计划任务 6 的审查要点做一次审查 |
+| 7a HUD 控件 | 🟡 基本写完并合并(c478450),**展台截图未完成、未审查** | 已有:BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护)、PokerHud、CardStrip、PokerNameplate、PokerPrompts(输光/观战/等待/离座的非模态提示)、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测。暂停时的中间状态:`tools/poker_showcase.gd` 与 `tools/shot.gd` 正在接入这些控件(提交 2bacc5b 标 wip),接手时先跑 `tools/shot.gd --poker-showcase` 看能否截图,再按规格 §6.1 的布局预算核对、修正,然后做独立审查 |
+| 7b 控制器与演出 | ⬜ 未开始 | 分支 th/screen(从 feature/texas-holdem 当前提交分出);按计划任务 7 的控制器部分做:poker_screen.gd、poker_director.gd、main.gd 接线(选屏、拆台调用、PokerFaces 清理)、SeatGaze 接法、迟到者第一帧、机位规则、bot 入口;test_poker_screen、test_poker_director_pacing |
 | 8 bot 与冒烟 | ⬜ 未开始 | |
 | 9 联调与截图验收 | ⬜ 未开始 | |
 | 10 审查 | ⬜ 未开始 | |
@@ -47,7 +47,14 @@
    `tools/shot.gd --poker-showcase` 重拍一次看镜头。
 4. 发布时版本 0.7.0(0.6.0 已被上游用掉)。
 
-## 第二批怎么开
+## 接手须知(当前)
+
+1. 先做任务 6 与 7a 的独立审查(对照规格 §4.2–4.6、§6.1–6.5 与计划里的测试清单),修掉问题。
+2. 7a 的展台截图收尾:`$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_overview --poker-showcase`(窗口模式),按规格 §6.1 预算核对。
+3. 开 7b(th/screen),然后任务 8(bot、`tools/poker_smoke.sh`、README)、任务 9 联调截图、任务 10 审查。
+4. 每一步:全量测试 + `tools/lan_smoke.sh` 回归,提交并推送,更新本文。
+
+## 第二批怎么开(原记录)
 
 - 任务 6(网络会话)与任务 7a(HUD 控件)并行,各开一个 worktree(`git worktree add ../th-net -b th/net`、`../th-hud -b th/hud`);
   7a 合并后再开任务 7b(`th/screen`)。每个任务:实现 → 独立审查 → 修复 → 合并。提示词要点都在计划的任务 6 / 任务 7 小节。
