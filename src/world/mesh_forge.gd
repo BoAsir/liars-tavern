@@ -21,6 +21,8 @@ var rough := 0.7
 var metal := 0.0
 var part_space := false
 var seed := 0.0
+var write_custom := false     # true:CUSTOM0 写 custom(酒客网格:材质类, 摆动权重, 种子, 透光)
+var custom := Vector4.ZERO
 
 var _surfaces := {}           # StringName -> _Surface(按首次使用顺序)
 var _order: Array[StringName] = []
@@ -456,6 +458,202 @@ func lathe(profile: PackedVector2Array, segments := 24, creases := PackedInt32Ar
 	return _append(points, normals, indices, t)
 
 
+# —— 有机形体 ——
+
+func blob(center: Vector3, shapes: Array, seg := 40, rings := 24, k := 0.03, t := Transform3D.IDENTITY) -> MeshForge:
+	# 椭球平滑并集(头雕、腮、口鼻、爪掌):从 center 向外星形射线行进。
+	# shapes:[[中心, 半径 Vector3, 颜色 Color, 可选 "mirror"(同时放一份 x 镜像)], ...];center 要在主体里面。
+	# 各椭球远交点的最大值是表面下界 t0(平滑并集只会往外鼓,幅度 ≤ k),在 [t0, t0 + k] 里二分;
+	# 法线取 SDF 的差分,颜色按离表面最近(最靠里)的形体在 k 内平滑混合
+	var list := _expand_shapes(shapes)
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	var eps := 0.0015
+	for j in rings + 1:
+		var theta := PI * j / rings
+		for i in seg + 1:
+			var phi := TAU * i / seg
+			var d := Vector3(sin(phi) * sin(theta), cos(theta), cos(phi) * sin(theta))
+			var lo := 0.0
+			for shape in list:
+				lo = maxf(lo, _ray_ellipsoid_far(center, d, shape[0], shape[1]))
+			var hi := lo + k
+			for _step in 8:
+				var mid := (lo + hi) * 0.5
+				if _blob_sdf(center + d * mid, list, k) < 0.0:
+					lo = mid
+				else:
+					hi = mid
+			var p := center + d * ((lo + hi) * 0.5)
+			var grad := Vector3(
+				_blob_sdf(p + Vector3(eps, 0, 0), list, k) - _blob_sdf(p - Vector3(eps, 0, 0), list, k),
+				_blob_sdf(p + Vector3(0, eps, 0), list, k) - _blob_sdf(p - Vector3(0, eps, 0), list, k),
+				_blob_sdf(p + Vector3(0, 0, eps), list, k) - _blob_sdf(p - Vector3(0, 0, eps), list, k))
+			points.append(p)
+			normals.append(grad.normalized() if grad.length_squared() > 1e-12 else d)
+			colors.append(_blob_color(p, list, k))
+			if i > 0 and j > 0:
+				var prevrow := (j - 1) * (seg + 1)
+				var thisrow := j * (seg + 1)
+				indices.append_array([prevrow + i - 1, prevrow + i, thisrow + i - 1, prevrow + i, thisrow + i, thisrow + i - 1])
+	return _append(points, normals, indices, t, colors)
+
+
+static func _expand_shapes(shapes: Array) -> Array:
+	var out := []
+	for shape in shapes:
+		var c: Color = shape[2] if shape.size() > 2 else Color.WHITE
+		out.append([shape[0], shape[1], c])
+		if shape.size() > 3 and shape[3] == "mirror":
+			out.append([Vector3(-shape[0].x, shape[0].y, shape[0].z), shape[1], c])
+	return out
+
+
+static func _ellipsoid_sdf(p: Vector3, r: Vector3) -> float:
+	# 椭球近似距离(Inigo Quilez):表面上为 0,内部为负
+	var k0 := (p / r).length()
+	var k1 := (p / (r * r)).length()
+	return k0 * (k0 - 1.0) / maxf(k1, 1e-9)
+
+
+static func _blob_sdf(p: Vector3, list: Array, k: float) -> float:
+	var d := INF
+	for shape in list:
+		var e := _ellipsoid_sdf(p - shape[0], shape[1])
+		if d == INF:
+			d = e
+		else:
+			var h := maxf(k - absf(d - e), 0.0) / k
+			d = minf(d, e) - h * h * k * 0.25
+	return d
+
+
+static func _blob_color(p: Vector3, list: Array, k: float) -> Color:
+	var dists := []
+	var best := INF
+	for shape in list:
+		var e := _ellipsoid_sdf(p - shape[0], shape[1])
+		dists.append(e)
+		best = minf(best, e)
+	var total := 0.0
+	var mixed := Color(0, 0, 0, 0)
+	var band := k * 0.6
+	for n in list.size():
+		var w := clampf(1.0 - (dists[n] - best) / band, 0.0, 1.0)
+		w = w * w * (3.0 - 2.0 * w)
+		mixed += list[n][2] * w
+		total += w
+	return mixed / total
+
+
+static func _ray_ellipsoid_far(origin: Vector3, d: Vector3, center: Vector3, r: Vector3) -> float:
+	# 射线 origin + d·t 与椭球的远交点 t;不相交返回 0
+	var o := (origin - center) / r
+	var v := d / r
+	var a := v.dot(v)
+	var b := 2.0 * o.dot(v)
+	var c := o.dot(o) - 1.0
+	var disc := b * b - 4.0 * a * c
+	if disc < 0.0:
+		return 0.0
+	return maxf((-b + sqrt(disc)) / (2.0 * a), 0.0)
+
+
+func loft(path: PackedVector3Array, radii: PackedVector2Array, sides := 16, caps := Vector2i(1, 1),
+		t := Transform3D.IDENTITY, ring_colors := PackedColorArray(), sway := Vector2(-1, -1),
+		up_hint := Vector3.UP) -> MeshForge:
+	# 沿路径放样椭圆截面(躯干、袖子、尾巴、腿):radii[i] = (rx, rz),rx 沿起始「上方」方向,rz 沿侧向;
+	# 截面朝向按平行移动传递,不会扭。ring_colors 逐圈颜色(硬边色带要在边界处重复一圈点);
+	# sway.x ≥ 0 时把沿路径参数在 [sway.x, sway.y] 里平滑升到 1 的摆动权重写进 CUSTOM0.y(尾巴)
+	var n := path.size()
+	if n < 2:
+		return self
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var customs := PackedFloat32Array()
+	var indices := PackedInt32Array()
+	var lengths := PackedFloat32Array([0.0])
+	for i in range(1, n):
+		lengths.append(lengths[i - 1] + path[i].distance_to(path[i - 1]))
+	var total_len := maxf(lengths[n - 1], 1e-6)
+	var tangents: Array[Vector3] = []
+	for i in n:
+		tangents.append((path[mini(i + 1, n - 1)] - path[maxi(i - 1, 0)]).normalized())
+	var normal := up_hint - tangents[0] * up_hint.dot(tangents[0])
+	if normal.length_squared() < 1e-6:
+		normal = Vector3.RIGHT - tangents[0] * Vector3.RIGHT.dot(tangents[0])
+	normal = normal.normalized()
+	var frames: Array[Basis] = []
+	for i in n:
+		if i > 0:
+			normal = (normal - tangents[i] * normal.dot(tangents[i])).normalized()
+		frames.append(Basis(normal, tangents[i].cross(normal), tangents[i]))
+	var use_custom := write_custom or sway.x >= 0.0
+	var stride := sides + 1
+	for i in n:
+		var f := frames[i]
+		var r := radii[i]
+		var span := maxf(lengths[mini(i + 1, n - 1)] - lengths[maxi(i - 1, 0)], 1e-6)
+		var slope := ((radii[mini(i + 1, n - 1)].x + radii[mini(i + 1, n - 1)].y)
+			- (radii[maxi(i - 1, 0)].x + radii[maxi(i - 1, 0)].y)) * 0.5 / span
+		var col: Color = ring_colors[i] if not ring_colors.is_empty() else Color(color.r, color.g, color.b, ao)
+		var w := 0.0
+		if sway.x >= 0.0:
+			w = smoothstep(sway.x, sway.y, lengths[i] / total_len)
+		for jj in stride:
+			var a := TAU * jj / sides
+			var ca := cos(a)
+			var sa := sin(a)
+			points.append(path[i] + f.x * (ca * r.x) + f.y * (sa * r.y))
+			var sec := (f.x * (ca / maxf(r.x, 1e-6)) + f.y * (sa / maxf(r.y, 1e-6))).normalized()
+			normals.append((sec - f.z * slope).normalized())
+			colors.append(col)
+			if use_custom:
+				customs.append_array([custom.x, w if sway.x >= 0.0 else custom.y, custom.z, custom.w])
+			if i > 0 and jj > 0:
+				var a0 := (i - 1) * stride + jj - 1
+				var b0 := i * stride + jj - 1
+				indices.append_array([a0, b0, a0 + 1, a0 + 1, b0, b0 + 1])
+	for end in 2:
+		if (end == 0 and caps.x == 0) or (end == 1 and caps.y == 0):
+			continue
+		var i := 0 if end == 0 else n - 1
+		var f := frames[i]
+		var outward := -f.z if end == 0 else f.z
+		var col: Color = ring_colors[i] if not ring_colors.is_empty() else Color(color.r, color.g, color.b, ao)
+		var center_index := points.size()
+		points.append(path[i])
+		normals.append(outward)
+		colors.append(col)
+		var w := smoothstep(sway.x, sway.y, lengths[i] / total_len) if sway.x >= 0.0 else custom.y
+		if use_custom:
+			customs.append_array([custom.x, w, custom.z, custom.w])
+		for jj in stride:
+			var a := TAU * jj / sides
+			points.append(path[i] + f.x * (cos(a) * radii[i].x) + f.y * (sin(a) * radii[i].y))
+			normals.append(outward)
+			colors.append(col)
+			if use_custom:
+				customs.append_array([custom.x, w, custom.z, custom.w])
+			if jj > 0:
+				if end == 0:
+					indices.append_array([center_index, center_index + jj, center_index + jj + 1])
+				else:
+					indices.append_array([center_index, center_index + jj + 1, center_index + jj])
+	return _append(points, normals, indices, t, colors, customs)
+
+
+func tube(path: PackedVector3Array, radius: float, sides := 6, t := Transform3D.IDENTITY) -> MeshForge:
+	# 细管(胡须、表链、嘴线、颏绳):圆截面放样,两端封口
+	var radii := PackedVector2Array()
+	for i in path.size():
+		radii.append(Vector2(radius, radius))
+	return loft(path, radii, sides, Vector2i(1, 1), t)
+
+
 static func _lathe_normal(a: Vector2, b: Vector2) -> Vector2:
 	# 轮廓从 a 到 b(自下而上)的外法线:切线 (dr, dy) 顺时针转 90°
 	var d := b - a
@@ -466,7 +664,9 @@ static func _lathe_normal(a: Vector2, b: Vector2) -> Vector2:
 
 # —— 写入 ——
 
-func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array, t: Transform3D) -> MeshForge:
+func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array, t: Transform3D,
+		colors := PackedColorArray(), customs := PackedFloat32Array()) -> MeshForge:
+	# colors / customs 可选:逐顶点颜色(sRGB,a = AO)与逐顶点 CUSTOM0(每顶点 4 个数);不给就用当前绘制状态
 	var xform: Transform3D = _stack.back() * t
 	var det := xform.basis.determinant()
 	if absf(det) < 1e-9:
@@ -476,17 +676,22 @@ func _append(points: PackedVector3Array, normals: PackedVector3Array, indices: P
 	var base := s.vertices.size()
 	var c := Color(color.r, color.g, color.b, ao)
 	var pbr := Vector2(rough, metal)
-	if part_space and not s.has_custom:
+	var wants_custom := part_space or write_custom or not customs.is_empty()
+	if wants_custom and not s.has_custom:
 		s.has_custom = true
 		s.custom0.resize(base * 4)   # 之前的部件补 0
 	for k in points.size():
 		s.vertices.append(xform * points[k])
 		s.normals.append((normal_basis * normals[k]).normalized())
-		s.colors.append(c)
+		s.colors.append(colors[k] if not colors.is_empty() else c)
 		s.uv2.append(pbr)
 		if s.has_custom:
-			if part_space:
+			if not customs.is_empty():
+				s.custom0.append_array([customs[k * 4], customs[k * 4 + 1], customs[k * 4 + 2], customs[k * 4 + 3]])
+			elif part_space:
 				s.custom0.append_array([points[k].x, points[k].y, points[k].z, seed])
+			elif write_custom:
+				s.custom0.append_array([custom.x, custom.y, custom.z, custom.w])
 			else:
 				s.custom0.append_array([0.0, 0.0, 0.0, 0.0])
 	if det < 0.0:
@@ -572,7 +777,7 @@ static func prebuild(jobs: Array) -> void:
 		job.key = key
 		job.recipe = spec[1]
 		job.materials = spec[2] if spec.size() > 2 else {}
-		job.task_id = WorkerThreadPool.add_task(func(): job.built = run(job.recipe), false, "MeshForge " + key)
+		job.task_id = WorkerThreadPool.add_task(func(): job.built = run(job.recipe), true, "MeshForge " + key)   # 高优先级:低优先级任务在 8 核上只有 2 个线程,4 核上串行
 		_jobs[key] = job
 
 
