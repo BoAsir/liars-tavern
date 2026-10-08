@@ -2,6 +2,8 @@ class_name RevolverModel
 # 左轮的网格配方(纯数组运算,可在工作线程跑):单动左轮,原点 = 握持点(爪心),枪管沿 −Z,+Y 向上。
 # 机身(钢、黄铜、暗膛 + 胡桃木握把)、转轮(5 个完全一样的弹膛,网格五重对称)、击锤各一份,所有左轮共享。
 # 尺寸见 2026-10-07-visual-overhaul-p3-props.md §2.1;转轮在 DRUM_POS、击锤在 HAMMER_PIVOT 的局部坐标里建。
+# 动森式玩具枪(2026-10-08):枪管加粗、枪口冠大圆角,机匣与击锤倒角加大,护圈与背带加粗,去掉螺丝等碎件;
+# 转轮外轮廓与握把下端不动(REST_* 由测试按这两处的顶点校验,角色举枪依赖 BARREL_Y / MUZZLE_POS / DRUM_POS)。
 
 
 const BARREL_Y := 0.073          # 枪管轴线高度
@@ -63,58 +65,55 @@ static func body(f: MeshForge) -> void:
 	# 机匣后块:防退护板、击锤座、背带顶(10 点侧轮廓)
 	f.extrude(_side([Vector2(-0.017, 0.016), Vector2(-0.017, 0.095), Vector2(0.0, 0.095), Vector2(0.006, 0.091),
 		Vector2(0.015, 0.074), Vector2(0.020, 0.048), Vector2(0.020, 0.022), Vector2(0.016, 0.006),
-		Vector2(-0.003, 0.002), Vector2(-0.012, 0.010)]), 0.030, 0.002, _side_xf())
+		Vector2(-0.003, 0.002), Vector2(-0.012, 0.010)]), 0.031, 0.0045, _side_xf())
 	# 机匣前块(枪管从这里出去)与上下梁:框住转轮
 	f.extrude(_side([Vector2(-0.067, 0.016), Vector2(-0.067, 0.095), Vector2(-0.079, 0.095), Vector2(-0.086, 0.089),
-		Vector2(-0.087, 0.052), Vector2(-0.080, 0.030), Vector2(-0.072, 0.016)]), 0.028, 0.002, _side_xf())
+		Vector2(-0.087, 0.052), Vector2(-0.080, 0.030), Vector2(-0.072, 0.016)]), 0.030, 0.0045, _side_xf())
 	f.extrude(_side([Vector2(-0.069, 0.088), Vector2(-0.015, 0.088), Vector2(-0.015, 0.095), Vector2(-0.069, 0.095)]),
-		0.016, 0.0015, _side_xf())
+		0.018, 0.003, _side_xf())
 	f.extrude(_side([Vector2(-0.069, 0.016), Vector2(-0.015, 0.016), Vector2(-0.015, 0.0235), Vector2(-0.069, 0.0235)]),
-		0.020, 0.0015, _side_xf())
-	# 枪管:根部加粗段 + 主管 + 1.5 mm 圆角的枪口冠,车削 32 段(车削轴 +Y 转到 −Z)
+		0.022, 0.003, _side_xf())
+	# 枪管:根部加粗段 + 主管(玩具式加粗)+ 4 mm 大圆角的枪口冠,车削 32 段(车削轴 +Y 转到 −Z)
 	var barrel_xf := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0, BARREL_Y, BARREL_ROOT_Z))
 	var length := BARREL_ROOT_Z - CROWN_Z
-	f.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.0125, 0.0), Vector2(0.0125, 0.018), Vector2(0.0105, 0.021),
-		Vector2(0.0105, length - 0.0015), Vector2(0.0099, length - 0.0004), Vector2(0.0088, length),
-		Vector2(0.0045, length)]), 32, PackedInt32Array([1, 2, 7]), barrel_xf)
+	var barrel := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.0148, 0.0), Vector2(0.0148, 0.016), Vector2(0.0128, 0.022)])
+	for k in 6:
+		var a := PI / 2.0 * k / 5.0
+		barrel.append(Vector2(0.0128 - 0.004 + cos(a) * 0.004, length - 0.004 + sin(a) * 0.004))
+	barrel.append(Vector2(0.0055, length))
+	f.lathe(barrel, 32, PackedInt32Array([1, 2]), barrel_xf)
 	_p(f, "steel_dark")
-	f.lathe(PackedVector2Array([Vector2(0.0045, length), Vector2(0.0045, length - 0.008), Vector2(0.0, length - 0.008)]),
+	f.lathe(PackedVector2Array([Vector2(0.0055, length), Vector2(0.0055, length - 0.008), Vector2(0.0, length - 0.008)]),
 		16, PackedInt32Array([1]), barrel_xf)
 	_p(f, "steel")
 	# 转轮轴销(从前块伸出一点)
 	f.cylinder(0.0035, 0.0035, 0.008, 10, MeshForge.CAPS_BOTH, xf.call(DRUM_POS + Vector3(0, 0, -0.087 - DRUM_POS.z), Vector3(90, 0, 0)))
 	# 退壳杆护套(右侧,贴着枪管下沿)与杆头
-	var ejector := Vector3(0.0085, 0.0595, 0.0)
-	f.cylinder(0.005, 0.005, 0.116, 16, MeshForge.CAPS_BOTH, xf.call(ejector + Vector3(0, 0, -0.138), Vector3(90, 0, 0)))
-	f.sphere(0.0042, 10, xf.call(ejector + Vector3(0, -0.0015, -0.197), Vector3.ZERO, Vector3(1.1, 1.1, 0.8)))
+	var ejector := Vector3(0.0095, 0.0585, 0.0)
+	f.cylinder(0.0058, 0.0058, 0.116, 16, MeshForge.CAPS_BOTH, xf.call(ejector + Vector3(0, 0, -0.138), Vector3(90, 0, 0)))
+	f.sphere(0.0058, 12, xf.call(ejector + Vector3(0, 0, -0.196)))
 	# 半月形准星刀片
 	var sight := []
 	for k in 9:
 		var a := PI * k / 8.0
-		sight.append(Vector2(-0.242 + cos(a) * 0.0055, BARREL_Y + 0.009 + sin(a) * 0.0105))
-	f.extrude(_side(sight), 0.0035, 0.0006, _side_xf())
-	# 机匣两侧的螺丝
-	_p(f, "steel_dark")
-	for side in [-1.0, 1.0]:
-		for at in [Vector2(-0.006, 0.062), Vector2(0.004, 0.030), Vector2(-0.077, 0.040)]:
-			f.cylinder(0.0016, 0.0016, 0.001, 8, MeshForge.CAPS_BOTH,
-				xf.call(Vector3(side * (0.0145 if at.x > -0.05 else 0.0135), at.y, at.x), Vector3(0, 0, 90)))
+		sight.append(Vector2(-0.242 + cos(a) * 0.0065, BARREL_Y + 0.009 + sin(a) * 0.0105))
+	f.extrude(_side(sight), 0.005, 0.0016, _side_xf())
 	# 扳机:新月形,厚 4 mm
 	_p(f, "steel")
 	f.extrude(_side([Vector2(-0.021, 0.018), Vector2(-0.026, 0.011), Vector2(-0.029, 0.003), Vector2(-0.0285, -0.004),
 		Vector2(-0.0255, -0.0065), Vector2(-0.0235, -0.001), Vector2(-0.021, 0.007), Vector2(-0.0155, 0.018)]),
-		0.004, 0.0008, _side_xf())
+		0.0055, 0.0018, _side_xf())
 	# 黄铜护圈与背带
 	_p(f, "brass")
 	f.tube(PackedVector3Array([Vector3(0, 0.018, -0.050), Vector3(0, 0.008, -0.0505), Vector3(0, -0.003, -0.0475),
 		Vector3(0, -0.011, -0.0395), Vector3(0, -0.0145, -0.0285), Vector3(0, -0.012, -0.0175), Vector3(0, -0.005, -0.0105),
-		Vector3(0, 0.004, -0.0075)]), 0.0035, 8)
+		Vector3(0, 0.004, -0.0075)]), 0.0048, 10)
 	var back := PackedVector3Array()
 	var path: PackedVector3Array = grip[0]
 	var radii: PackedVector2Array = grip[1]
 	for i in range(1, path.size() - 1):
 		back.append(path[i] + Vector3(0, 0, radii[i].y - 0.0012))
-	f.tube(back, 0.003, 8)
+	f.tube(back, 0.0038, 8)
 	# 底帽
 	var bottom: Vector3 = path[path.size() - 1]
 	f.sphere(0.0185, 16, xf.call(bottom + Vector3(0, -0.0005, 0), Vector3(-14, 0, 0), Vector3(0.97, 0.36, 1.08)))
@@ -155,7 +154,7 @@ static func drum(f: MeshForge) -> void:
 	f.surface(&"metal")
 	_p(f, "steel")
 	var outline := drum_outline()
-	var bevel := 0.0018
+	var bevel := 0.0038   # 玩具式大倒角(只缩端面,侧面外轮廓不变)
 	var half := DRUM_LENGTH / 2.0
 	# 侧面、后端倒角与后端面;前端面另外拼(带 5 个弹膛孔)
 	f.extrude(outline, DRUM_LENGTH, bevel, Transform3D.IDENTITY, Vector2i(0, 1))
@@ -210,15 +209,8 @@ static func drum(f: MeshForge) -> void:
 # —— 击锤(HAMMER_PIVOT 局部)——
 
 static func hammer(f: MeshForge) -> void:
-	var xf := MeshForge.xf
 	f.surface(&"metal")
 	_p(f, "steel")
 	f.extrude(_side([Vector2(-0.007, -0.006), Vector2(0.004, -0.009), Vector2(0.010, 0.002), Vector2(0.016, 0.010),
 		Vector2(0.024, 0.0155), Vector2(0.0295, 0.0165), Vector2(0.0285, 0.0215), Vector2(0.020, 0.024),
-		Vector2(0.010, 0.0215), Vector2(0.002, 0.016), Vector2(-0.004, 0.008)]), 0.009, 0.0012, _side_xf())
-	# 扳刺上的防滑槽
-	_p(f, "steel_dark")
-	for k in 4:
-		var z := 0.013 + k * 0.004
-		var y := 0.0195 + k * 0.0012
-		f.box(Vector3(0.0092, 0.0012, 0.0012), xf.call(Vector3(0, y + 0.0028, z), Vector3(-18, 0, 0)))
+		Vector2(0.010, 0.0215), Vector2(0.002, 0.016), Vector2(-0.004, 0.008)]), 0.0105, 0.003, _side_xf())

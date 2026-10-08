@@ -8,7 +8,7 @@ extends Node3D
 const WIDTH := 0.12
 const HEIGHT := 0.1733
 const THICKNESS := 0.0008
-const CORNER := 0.0087          # = 26/360 × WIDTH,与贴图圆角一致(CardFaces.CORNER_RADIUS)
+const CORNER := 0.012667        # = 38/360 × WIDTH,与贴图圆角一致(CardFaces.CORNER_RADIUS)
 const CORNER_STEPS := 6
 const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 

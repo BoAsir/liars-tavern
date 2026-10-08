@@ -84,35 +84,35 @@ func set_table_decor_visible(shown: bool) -> void:
 func _build_environment() -> void:
 	environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.008, 0.006, 0.005)
+	environment.background_color = Color(0.03, 0.035, 0.07)   # 深靛夜色(不是纯黑)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	# 暖色主光 + 冷色环境补光:避免整屏单一橘色
-	environment.ambient_light_color = Color(0.27, 0.26, 0.3)
-	environment.ambient_light_energy = 0.62
-	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	environment.tonemap_exposure = 1.32
+	# 动森式温馨卡通(2026-10-08):环境光提亮、偏奶油淡紫——暗面不黑、不发灰;暖黄主光仍在灯下
+	environment.ambient_light_color = Color(0.42, 0.42, 0.56)
+	environment.ambient_light_energy = 0.55
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.tonemap_exposure = 0.95
 	environment.tonemap_white = 6.0
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.85
-	environment.glow_strength = 1.0
-	environment.glow_bloom = 0.04
+	environment.glow_intensity = 0.55
+	environment.glow_strength = 0.9
+	environment.glow_bloom = 0.02
 	# 阈值高于漫反射能达到的亮度:只有火焰、灯泡等自发光会泛光,平放在灯下的牌不会糊成一团白
-	environment.glow_hdr_threshold = 1.3
+	environment.glow_hdr_threshold = 1.25
 	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	environment.ssao_enabled = true
-	environment.ssao_radius = 0.9
-	environment.ssao_intensity = 1.8
-	environment.ssao_light_affect = 0.35   # 环境光遮蔽也压暗直射光:墙角、椅脚、压在桌上的手臂才有接触暗部
+	environment.ssao_radius = 0.6
+	environment.ssao_intensity = 1.0
+	environment.ssao_light_affect = 0.12   # 接触暗部还在(墙角、椅脚),但又软又浅
 	# 不开 SSIL(屏幕空间间接光):实测内部 1080p 下约 3 毫秒/帧,开关前后画面几乎看不出差别
 	environment.volumetric_fog_enabled = true
 	environment.volumetric_fog_density = 0.05
-	environment.volumetric_fog_albedo = Color(0.85, 0.84, 0.82)
-	environment.volumetric_fog_anisotropy = 0.55
+	environment.volumetric_fog_albedo = Color(0.9, 0.86, 0.82)
+	environment.volumetric_fog_anisotropy = 0.5
 	environment.volumetric_fog_length = 14.0
 	environment.volumetric_fog_ambient_inject = 0.04
 	environment.adjustment_enabled = true
-	environment.adjustment_contrast = 1.07
-	environment.adjustment_saturation = 0.94
+	environment.adjustment_contrast = 0.92    # 低对比:柔和的卡通画面
+	environment.adjustment_saturation = 1.04
 	RoomProps.atmosphere(self, environment)   # 暖色 LUT 与分层体积雾
 	var world_env := WorldEnvironment.new()
 	world_env.environment = environment

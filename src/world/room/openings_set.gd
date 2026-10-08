@@ -6,7 +6,7 @@ class_name OpeningsSet
 
 const WINDOW_PIVOT := RoomLayout.WINDOW_CENTER
 const DOOR_Z := RoomLayout.INNER
-const CURTAIN := Color(0.40, 0.08, 0.08)
+const CURTAIN := Color(0.80, 0.40, 0.36)   # 柔红窗帘(动森式粉彩)
 const GRAIN_ALONG_Y := Basis(Vector3.BACK, PI / 2.0)
 
 
@@ -33,6 +33,8 @@ static func _window(tavern: Node3D) -> void:
 	moon.spot_angle = 24.0
 	moon.shadow_enabled = true
 	moon.shadow_caster_mask = MeshKit.LAYER_MOON
+	moon.shadow_opacity = 0.65
+	moon.shadow_blur = 1.5
 	moon.light_volumetric_fog_energy = 3.2
 	tavern.add_child(moon)
 	moon.look_at_from_position(RoomLayout.MOON_POS, RoomLayout.MOON_TARGET)
@@ -58,15 +60,15 @@ static func _frame_recipe(f: MeshForge) -> void:
 	# 套线(屋里一侧,凸出 2.5 cm)
 	f.seed = 1.0
 	for z in [z0 - c / 2.0, z1 + c / 2.0]:
-		f.extrude_x(RoomShell.chamfer_rect(c, 0.025, 0.006, Vector2(0, 0)), y1 + 0.12 - (y0 - 0.04),
+		RoomKit.extrude_smooth(f, RoomKit.round_rect(c, 0.03, 0.013), y1 + 0.12 - (y0 - 0.04),
 			Transform3D(up, Vector3(inner - 0.0125, (y1 + 0.12 + y0 - 0.04) / 2.0, z)))
 	# 窗头 + 小檐
 	f.seed = 2.0
-	f.box(Vector3(0.03, 0.12, z1 - z0 + c * 2.0 + 0.04), MeshForge.xf(Vector3(inner - 0.015, y1 + 0.06, (z0 + z1) / 2.0)))
-	f.box(Vector3(0.06, 0.04, z1 - z0 + c * 2.0 + 0.1), MeshForge.xf(Vector3(inner - 0.03, y1 + 0.14, (z0 + z1) / 2.0)))
+	RoomKit.rounded_box(f, Vector3(0.03, 0.12, z1 - z0 + c * 2.0 + 0.04), 0.013, MeshForge.xf(Vector3(inner - 0.015, y1 + 0.06, (z0 + z1) / 2.0)))
+	RoomKit.rounded_box(f, Vector3(0.06, 0.045, z1 - z0 + c * 2.0 + 0.1), 0.02, MeshForge.xf(Vector3(inner - 0.03, y1 + 0.14, (z0 + z1) / 2.0)))
 	# 窗台:x 4.30..4.62,y 1.11..1.15,z −1.70..−0.10;下面一条托木
 	f.seed = 3.0
-	f.extrude_x(RoomShell.chamfer_rect(0.32, 0.04, 0.008), 1.6, Transform3D(along_z, Vector3(4.46, 1.13, -0.9)))
+	RoomKit.extrude_smooth(f, RoomKit.round_rect(0.32, 0.045, 0.02), 1.6, Transform3D(along_z, Vector3(4.46, 1.13, -0.9)))
 	f.box(Vector3(0.025, 0.06, 1.4), MeshForge.xf(Vector3(inner - 0.0125, 1.08, -0.9)))
 	# 洞口衬板(墙厚 0.2)
 	f.seed = 4.0
@@ -76,13 +78,14 @@ static func _frame_recipe(f: MeshForge) -> void:
 	# 窗扇外框与窗棂(2 列 × 3 行;竖棂 z −0.9,横棂 y 1.567 / 1.983)
 	f.seed = 5.0
 	var sx := inner + 0.1
-	f.box(Vector3(0.05, 0.05, z1 - z0), MeshForge.xf(Vector3(sx, y0 + 0.045, (z0 + z1) / 2.0)))
-	f.box(Vector3(0.05, 0.05, z1 - z0), MeshForge.xf(Vector3(sx, y1 - 0.045, (z0 + z1) / 2.0)))
+	# 卡通:窗框与窗棂都是圆角方料(小格子窗读起来像玩具屋)
+	RoomKit.rounded_box(f, Vector3(0.06, 0.06, z1 - z0), 0.02, MeshForge.xf(Vector3(sx, y0 + 0.045, (z0 + z1) / 2.0)), 1)
+	RoomKit.rounded_box(f, Vector3(0.06, 0.06, z1 - z0), 0.02, MeshForge.xf(Vector3(sx, y1 - 0.045, (z0 + z1) / 2.0)), 1)
 	for z in [z0 + 0.045, z1 - 0.045]:
-		f.box(Vector3(0.05, y1 - y0, 0.05), MeshForge.xf(Vector3(sx, (y0 + y1) / 2.0, z)))
-	f.box(Vector3(0.04, y1 - y0, 0.035), MeshForge.xf(Vector3(sx, (y0 + y1) / 2.0, Tavern.WINDOW_Z)))
+		RoomKit.rounded_box(f, Vector3(0.06, y1 - y0, 0.06), 0.02, MeshForge.xf(Vector3(sx, (y0 + y1) / 2.0, z)), 1)
+	RoomKit.rounded_box(f, Vector3(0.05, y1 - y0, 0.045), 0.016, MeshForge.xf(Vector3(sx, (y0 + y1) / 2.0, Tavern.WINDOW_Z)), 1)
 	for y in [1.567, 1.983]:
-		f.box(Vector3(0.04, 0.035, z1 - z0), MeshForge.xf(Vector3(sx, y, (z0 + z1) / 2.0)))
+		RoomKit.rounded_box(f, Vector3(0.05, 0.045, z1 - z0), 0.016, MeshForge.xf(Vector3(sx, y, (z0 + z1) / 2.0)), 1)
 	f.part_space = false
 	# 窗台摆件:仙人掌陶盆、未点燃的油灯;黄铜帘杆与托架
 	f.surface(&"prop")
@@ -148,7 +151,7 @@ static func _curtain_recipe(f: MeshForge) -> void:
 	f.grid(curtain_rows(zs[0].x, zs[0].y, x))
 	f.grid(curtain_rows(zs[1].y, zs[1].x, x))
 	# 束带
-	RoomKit.decor_paint(f, 4, 0.0, Color(0.55, 0.42, 0.18))
+	RoomKit.decor_paint(f, 4, 0.0, Color(0.92, 0.78, 0.45))
 	f.box(Vector3(0.07, 0.04, 0.3), MeshForge.xf(Vector3(x - 0.02, 1.55, zs[0].x + 0.12)))
 	f.box(Vector3(0.07, 0.04, 0.3), MeshForge.xf(Vector3(x - 0.02, 1.55, zs[1].y - 0.12)))
 
@@ -184,11 +187,11 @@ static func _door_recipe(f: MeshForge) -> void:
 	# 侧套、脚墩、门头与檐
 	f.seed = 1.0
 	for x in [x0 - c / 2.0, x1 + c / 2.0]:
-		f.extrude_x(RoomShell.chamfer_rect(0.03, c, 0.006), h + 0.16, Transform3D(up, Vector3(x, (h + 0.16) / 2.0, z - 0.015)))
-		f.box(Vector3(c + 0.02, 0.2, 0.045), MeshForge.xf(Vector3(x, 0.1, z - 0.0225)))
+		RoomKit.extrude_smooth(f, RoomKit.round_rect(0.03, c, 0.013), h + 0.16, Transform3D(up, Vector3(x, (h + 0.16) / 2.0, z - 0.015)))
+		RoomKit.rounded_box(f, Vector3(c + 0.02, 0.2, 0.045), 0.015, MeshForge.xf(Vector3(x, 0.1, z - 0.0225)))
 	f.seed = 2.0
-	f.box(Vector3(x1 - x0 + c * 2.0 + 0.04, 0.16, 0.035), MeshForge.xf(Vector3((x0 + x1) / 2.0, h + 0.08, z - 0.0175)))
-	f.extrude_x(RoomShell.chamfer_rect(0.07, 0.04, 0.01), x1 - x0 + c * 2.0 + 0.14,
+	RoomKit.rounded_box(f, Vector3(x1 - x0 + c * 2.0 + 0.04, 0.16, 0.035), 0.015, MeshForge.xf(Vector3((x0 + x1) / 2.0, h + 0.08, z - 0.0175)))
+	RoomKit.extrude_smooth(f, RoomKit.round_rect(0.07, 0.045, 0.02), x1 - x0 + c * 2.0 + 0.14,
 		Transform3D(Basis.IDENTITY, Vector3((x0 + x1) / 2.0, h + 0.18, z - 0.035)))
 	# 洞口衬板与门槛
 	f.seed = 3.0
@@ -223,10 +226,10 @@ static func _leaf(f: MeshForge, hinge: Vector3, dir: float, open_deg: float, see
 	for side in [0.0, 1.0]:
 		var x: float = dir * lerpf(stile / 2.0, width - stile / 2.0, side)
 		var top: float = lerpf(top_hinge, top_mid, side)
-		f.box(Vector3(stile, top - bottom, 0.035), MeshForge.xf(Vector3(x, (top + bottom) / 2.0, 0)))
+		RoomKit.rounded_box(f, Vector3(stile, top - bottom, 0.035), 0.015, MeshForge.xf(Vector3(x, (top + bottom) / 2.0, 0)), 1)
 	f.part_basis = Basis.IDENTITY
 	f.seed = seed + 1.0
-	f.box(Vector3(width, 0.12, 0.035), MeshForge.xf(Vector3(dir * width / 2.0, bottom + 0.06, 0)))
+	RoomKit.rounded_box(f, Vector3(width, 0.12, 0.035), 0.015, MeshForge.xf(Vector3(dir * width / 2.0, bottom + 0.06, 0)), 1)
 	# 弧形上冒头:分 6 段拼出从合页侧 1.75 降到中缝 1.62 的弧
 	var segs := 6
 	for k in segs:
