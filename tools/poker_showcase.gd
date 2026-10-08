@@ -1,9 +1,11 @@
+class_name PokerShowcase
 extends Node
 # 截图与性能用的德州展台(tools/shot.gd --poker-showcase、tools/perf_probe.gd --showcase=poker):
 # 德州桌坐满 8 位酒客,5 张公共牌、2 人亮牌、2 人弃牌、各家筹码与本轮下注、2 个底池、庄家按钮、自己的两张手牌。
 # 用假视图数据走与德州牌桌相同的对账接口(PokerChips.sync / PokerCards.sync),机位取自 TableWorld。
 # worst_case 为真时每摞筹码、每处下注都摆满(40 枚)、底池 7 个:约 900 枚筹码,性能对比用的最坏情况。
-# stage_hud 再用同一份假视图喂 PokerHud / BetControls / 铭牌 / 摊牌条(规格 §8 截图验收),HUD_STATES 列出底部区域的几种状态。
+# stage_hud 再用同一份假视图喂 PokerHud / BetControls / 铭牌 / 摊牌条(规格 §8 截图验收),HUD_STATES 列出底部区域的几种状态,
+# settlement 另在 HUD 上盖散局结算面板(10 行,其中 2 人已离开,列表要滚动)。
 
 
 const ME := 1
@@ -16,7 +18,11 @@ const HAND_NUMBER := 12
 const SETTLE := 3.0   # 秒:登场动画与登场的烟(Fx.smoke_puff 2.8 秒)都散了再拍
 const WORST_AMOUNT := 1000000   # 远超每摞显示上限(40 枚)
 const WORST_POTS := 7           # 8 人全下额度各不相同时最多 7 个底池
-const HUD_STATES := ["bet", "wait", "showdown", "bust", "spectate", "waiting", "away"]
+const BET_STATE := "bet"
+const SPECTATE_STATE := "spectate"
+const SETTLEMENT_STATE := "settlement"
+const HUD_STATES := [BET_STATE, "wait", "showdown", "bust", SPECTATE_STATE, "waiting", "away", SETTLEMENT_STATE]
+const LEFT_ROWS := [["早退的猫", 0, 2, -4000], ["路过的鸭", 3480, 1, 1480]]   # 散局前离开的人:名字、筹码、领取、盈亏
 const NAMES := {1: "我", 2: "阿狸", 3: "酒馆常客", 4: "一个名字非常非常长的客人", 5: "小熊", 6: "狼叔", 7: "猪猪侠", 8: "老狐狸"}
 const TURN_LEFT := 23.0
 const BUST_LEFT := 4.0
@@ -31,6 +37,7 @@ var cards: PokerCards
 var worst_case := false
 var hud: PokerHud = null
 var labels: WorldLabels = null
+var settlement: PokerSettlement = null
 
 
 func build(tavern: Tavern) -> void:
@@ -124,15 +131,19 @@ func stage_hud(ui_root: Control, camera: Camera3D, state: String) -> void:
 	for line in LOG_LINES:
 		hud.log_event(line)
 	_stage_bottom(pub, state)
+	if state == SETTLEMENT_STATE:
+		settlement = PokerSettlement.new(_results(), true)
+		ui_root.add_child(settlement)
 
 
 func clear_hud() -> void:
-	for node in [hud, labels]:
+	for node in [hud, labels, settlement]:
 		if node != null:
 			node.get_parent().remove_child(node)
 			node.free()
 	hud = null
 	labels = null
+	settlement = null
 
 
 func public_view(state: String) -> Dictionary:
@@ -204,6 +215,17 @@ func _stage_bottom(pub: Dictionary, state: String) -> void:
 			hud.set_bottom_mode(PokerHud.BOTTOM_WAITING)
 		"away":
 			hud.set_bottom_mode(PokerHud.BOTTOM_AWAY)
+		SETTLEMENT_STATE:
+			hud.set_bottom_mode(PokerHud.BOTTOM_NONE)
+
+
+func _results() -> Array:
+	# 散局结算行(规格 §4.6 results):8 位在座的 + 2 位已离开的,超过 8 行让列表滚动
+	var rows: Array = _players().map(func(p: Dictionary) -> Dictionary:
+		return {"pid": p["pid"], "name": p["name"], "stack": p["stack"], "buyins": p["buyins"], "net": p["net"], "left": false})
+	for row in LEFT_ROWS:
+		rows.append({"pid": 0, "name": row[0], "stack": row[1], "buyins": row[2], "net": row[3], "left": true})
+	return rows
 
 
 func _showdown_entries() -> Array:

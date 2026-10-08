@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 14:55,进行中:任务 6/7a 审查修复 + 7b 开发,分支 th/net-fix、th/hud-fix、th/screen,均从 ad70b2a 分出)
+## 状态(2026-10-08 11:55,已暂停;第二批已合并到 feature/texas-holdem 与 main)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -25,8 +25,8 @@
 | 5 说明书 | ✅ th/rulebook 完成、审查通过、修完 | 两本书页签、hands 牌型表、按书记页、README 写明开房后不能改玩法 |
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
 | 6 网络会话 | ✅ 已写完并合并(c478450),**还没做独立审查** | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;Net 多了 `request_sit_in()`;lan_smoke 通过。接手时先按计划任务 6 的审查要点做一次审查 |
-| 7a HUD 控件 | 🟡 基本写完并合并(c478450),**展台截图未完成、未审查** | 已有:BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护)、PokerHud、CardStrip、PokerNameplate、PokerPrompts(输光/观战/等待/离座的非模态提示)、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测。暂停时的中间状态:`tools/poker_showcase.gd` 与 `tools/shot.gd` 正在接入这些控件(提交 2bacc5b 标 wip),接手时先跑 `tools/shot.gd --poker-showcase` 看能否截图,再按规格 §6.1 的布局预算核对、修正,然后做独立审查 |
-| 7b 控制器与演出 | ⏳ 进行中 | 分支 th/screen(从 ad70b2a 分出);按计划任务 7 的控制器部分做:poker_screen.gd、poker_director.gd、main.gd 接线(选屏、拆台调用、PokerFaces 清理)、SeatGaze 接法、迟到者第一帧、机位规则、bot 入口;test_poker_screen、test_poker_director_pacing |
+| 7a HUD 控件 | ✅ 已写完、已审查修复(th/hud-fix),展台截图收尾完成 | BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护;新回合按 hand/street/current_pid 或合法动作变化判定,牌桌要对每个公共视图都调 `update`)、PokerHud、CardStrip、PokerNameplate(两行各自按文字宽度给足)、PokerPrompts、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测;主题给 HSlider 铜色轨道。`tools/poker_showcase.gd` + `tools/shot.gd` 已能摆出全部 8 种底部状态(bet/wait/showdown/bust/spectate/waiting/away/settlement)与观战机位,1280×720 与 1280×960 都核对过规格 §6.1 预算、铭牌不相撞 |
+| 7b 控制器与演出 | ⬜ 未开始 | 分支 th/screen(从 feature/texas-holdem 当前提交分出);按计划任务 7 的控制器部分做:poker_screen.gd、poker_director.gd、main.gd 接线(选屏、拆台调用、PokerFaces 清理)、SeatGaze 接法、迟到者第一帧、机位规则、bot 入口;test_poker_screen、test_poker_director_pacing |
 | 8 bot 与冒烟 | ⬜ 未开始 | |
 | 9 联调与截图验收 | ⬜ 未开始 | |
 | 10 审查 | ⬜ 未开始 | |
@@ -47,18 +47,12 @@
    `tools/shot.gd --poker-showcase` 重拍一次看镜头。
 4. 发布时版本 0.7.0(0.6.0 已被上游用掉)。
 
-## 任务 6 审查修复(th/net-fix)
-
-- 中途加入改为会话先于获准收人:名单放行但 `add_player` 返回 `[]`(同一 peer id 本手里刚离开、桌上没座)时撤名单项、`rpc_join_denied`、稍后断开,不再误发 `rpc_game_started`;规格 §4.2 的顺序与拒收路径已同步。
-- `PokerSession._named` 改为生成新字典(不变性);`public_view` 去掉只服务测试的 `_table == null` 分支。
-- 规格 §4.2 伪代码补上 `_schedule_hand_timer` 的「只提前不推迟」夹紧,与正文一致。
-- 新测试(4):会话拒收的迟到者;输光者在选择时间里断线则下一手提前;输光 3 秒后再领(§8);`_named` 不改原事件。全量 822 通过,`tools/lan_smoke.sh` 通过。
-- 未做:`network_manager.gd` 749 行(目标 400、上限 800),任务 8 若再长就把视线转发或德州意图入口抽成 RefCounted。
-
 ## 接手须知(当前)
 
-1. 先做任务 6 与 7a 的独立审查(对照规格 §4.2–4.6、§6.1–6.5 与计划里的测试清单),修掉问题。
-2. 7a 的展台截图收尾:`$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_overview --poker-showcase`(窗口模式),按规格 §6.1 预算核对。
+1. 任务 7a 的独立审查已做完并修复(th/hud-fix);任务 6 的独立审查仍待做(对照规格 §4.2–4.6 与计划里的测试清单)。
+2. 7a 展台截图(窗口模式;不写 `--hud` 时座位机位默认 bet、观战机位默认 spectate):
+   `$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase`;
+   4:3 在 `-s` 前加引擎参数 `--resolution 1280x960`。改 HUD 后重拍并按规格 §6.1 预算核对。
 3. 开 7b(th/screen),然后任务 8(bot、`tools/poker_smoke.sh`、README)、任务 9 联调截图、任务 10 审查。
 4. 每一步:全量测试 + `tools/lan_smoke.sh` 回归,提交并推送,更新本文。
 
