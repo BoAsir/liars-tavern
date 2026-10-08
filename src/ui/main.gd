@@ -15,6 +15,7 @@ var labels: WorldLabels
 var toasts: ToastLayer
 var flags: DebugFlags
 var settings_path := Settings.PATH   # 本机设置文件;测试换成临时文件
+var species := Species.UNASSIGNED    # 本机想要的形象:设置里的(首次启动随机一个并保存),--species 只覆盖本次运行
 
 var _ui: Control
 var _screen: Control = null
@@ -29,6 +30,7 @@ func _ready() -> void:
 	get_window().min_size = Vector2i(1024, 600)
 	RenderBudget.follow(get_window())
 	get_tree().auto_accept_quit = false
+	species = resolve_species(settings_path)
 	# 酒客、椅子、左轮的合批网格先投到工作线程里建(纯数组运算),和下面的场景搭建、牌面生成并行
 	MeshForge.prebuild(PatronParts.forge_jobs() + Revolver3D.forge_jobs())
 	tavern = Tavern.new()
@@ -58,6 +60,8 @@ func _ready() -> void:
 	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED, false, settings_path))
 	Sfx.start_ambience()
 	_show_menu()
+	# 头像图集在菜单出来之后才开始做,不阻塞启动;没做好之前头像显示色圆片加首字
+	SpeciesPortraits.build(self)
 	flags = DebugFlags.new(self)
 	add_child(flags)
 
@@ -92,6 +96,14 @@ func _exit_tree() -> void:
 	MeshForge.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
+	SpeciesPortraits.clear()
+
+
+static func resolve_species(path: String, args: PackedStringArray = OS.get_cmdline_user_args()) -> int:
+	# 首次启动(还没存过形象)随机挑一个并立刻保存;调试开关 --species 只覆盖本次运行,不写设置
+	var saved := Settings.ensure_species(path)
+	var override := DebugFlags.species_override(args)
+	return override if override != Species.UNASSIGNED else saved
 
 
 func toast(text: String, color := UiTheme.PARCHMENT) -> void:
