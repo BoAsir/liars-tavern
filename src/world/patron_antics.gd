@@ -15,8 +15,8 @@ extends Node
 const SWEAT_DROPS := 3
 const SWEAT_CYCLE := 0.85      # 秒:一滴汗从太阳穴滑到脸颊
 const STAR_COUNT := 5
-const STAR_RADIUS := 0.17      # 星星绕头转的半径(米)
-const STAR_LIFT := 0.27        # 星星圈离头心的高度(头已放大,帽子被打飞)
+const STAR_RADIUS := 0.25      # 星星绕头转的半径(米;动森式大头半宽 ≈0.32,星圈套在头顶上方)
+const STAR_LIFT := 0.38        # 星星圈离头心的高度(颅顶 ≈0.29,帽子被打飞)
 const STAR_SPIN := 2.6         # 弧度/秒
 const TREMBLE := 0.004         # 发抖幅度(米,身体左右)
 const EAR_JITTER := 0.16       # 发抖时耳朵左右颤的幅度(弧度)
@@ -25,7 +25,8 @@ const STARTLE_HOP := 0.05      # 被吓一跳蹦起的高度(米)
 const HAT_POP := 0.05          # 帽子弹起的高度(米)
 const FIDGET_EVERY := Vector2(4.0, 9.0)
 const DIZZY_TIME := 1.3        # 中弹后先转蚊香眼的时长,之后定格成 ×
-const TONGUE_COLOR := Color(0.78, 0.3, 0.36)
+const TONGUE_COLOR := Color(0.86, 0.42, 0.48)
+const FX_SCALE := 1.4          # 汗珠、星星、舌头跟着动森式大头放大(Q 版 1.3 倍头时的尺寸 × 这个)
 
 static var _cache := {}        # 共享的汗珠 / 星星网格与材质(main.gd 退出时 clear_cache)
 
@@ -90,8 +91,8 @@ func _tongue_rest(look: Dictionary) -> Transform3D:
 	# 舌头挂在嘴角(没写嘴的鳄鱼挂在上下颌之间的嘴缝),往下、略往外歪
 	var mouth: Dictionary = look["head"].get("mouth", {})
 	var at: Vector3 = mouth.get("pos", Vector3(0, 0.058, -0.2))
-	var width: float = mouth.get("width", 0.11)
-	var p := PatronParts.head_point(look, at + Vector3(width * 0.28, -0.002, -0.004))
+	var width: float = mouth.get("width", 0.11) * PatronHeadBuilder.MOUTH_WIDTH
+	var p := PatronParts.head_point(look, at + Vector3(width * 0.3, -0.002, -0.004))
 	return Transform3D(Basis.from_euler(Vector3(deg_to_rad(-18.0), 0.0, deg_to_rad(14.0))), p)
 
 
@@ -140,7 +141,7 @@ func _tremble() -> void:
 	var mm := _sweat.multimesh
 	for i in SWEAT_DROPS:
 		var k := fposmod(t / SWEAT_CYCLE + float(i) / SWEAT_DROPS, 1.0)
-		var pos := _sweat_from.lerp(_sweat_to, k * k) + Vector3(0, 0, -0.025 * i)
+		var pos := _sweat_from.lerp(_sweat_to, k * k) + Vector3(0, 0, -0.035 * i)
 		var size := sin(k * PI) * (1.0 - 0.18 * i)
 		mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(0.85, 1.0, 0.85) * maxf(size, 0.01)), pos))
 
@@ -396,8 +397,9 @@ static func sweat_mesh() -> Mesh:
 		mat.emission = Color(0.12, 0.2, 0.3)   # 暗处也认得出是一滴汗(很弱,不触发泛光)
 		_cache["sweat"] = MeshForge.cached("antics:sweat", func(f: MeshForge):
 			# 水滴:下半个圆球 + 上面一个尖顶
-			f.sphere(0.016, 10, MeshForge.xf())
-			f.cylinder(0.0, 0.0157, 0.032, 10, MeshForge.CAPS_NONE, MeshForge.xf(Vector3(0, 0.018, 0))), {&"main": mat})
+			f.sphere(0.016 * FX_SCALE, 10, MeshForge.xf())
+			f.cylinder(0.0, 0.0157 * FX_SCALE, 0.032 * FX_SCALE, 10, MeshForge.CAPS_NONE, MeshForge.xf(Vector3(0, 0.018 * FX_SCALE, 0))),
+			{&"main": mat})
 	return _cache["sweat"]
 
 
@@ -409,9 +411,9 @@ static func star_mesh() -> Mesh:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		_cache["star"] = MeshForge.cached("antics:star", func(f: MeshForge):
 			# 五角星:外 5 个尖、内 5 个凹点,前后两面扇形 + 一圈侧壁,薄片立着
-			var outer := 0.04
-			var inner := 0.018
-			var half := 0.006
+			var outer := 0.04 * FX_SCALE
+			var inner := 0.018 * FX_SCALE
+			var half := 0.006 * FX_SCALE
 			var points := PackedVector3Array()
 			var normals := PackedVector3Array()
 			var indices := PackedInt32Array()
@@ -442,8 +444,10 @@ static func tongue_mesh() -> Mesh:
 		var pink := PatronParts.capped(TONGUE_COLOR)
 		f.paint(pink, 0.35)
 		f.custom = Vector4(PatronBuilder.SMOOTH, 0.0, f.custom.z, 0.0)
+		f.push(MeshForge.xf(Vector3.ZERO, Vector3.ZERO, Vector3.ONE * FX_SCALE))
 		f.blob(Vector3(0, -0.02, 0), [[Vector3(0, -0.016, 0), Vector3(0.019, 0.024, 0.007), pink],
-			[Vector3(0, -0.034, 0.001), Vector3(0.016, 0.013, 0.0075), pink]], 14, 8, 0.008), {&"main": WorldMaterials.patron()})
+			[Vector3(0, -0.034, 0.001), Vector3(0.016, 0.013, 0.0075), pink]], 14, 8, 0.008)
+		f.pop(), {&"main": WorldMaterials.patron()})
 
 
 static func clear_cache() -> void:
