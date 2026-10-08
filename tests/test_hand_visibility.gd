@@ -51,6 +51,33 @@ func test_every_species_head_spares_the_hand_on_own_turn():
 		await _assert_hand_visible_for_all_offsets(Species.IDS[species], RISKY_OFFSETS)
 
 
+func test_poker_hand_beside_the_big_head_stays_visible():
+	# 德州:自己的两张底牌由 PokerLayout.fan_transform 摆在大头右前方(动森式大头之后挪过 FAN_OFFSET)。
+	# 每个物种静坐、往前探、往左探时,牌面区域被自己的头挡住的采样点同样 ≤ MAX_BLOCKED。
+	# (德州的牌扇在头的前方,自己按 D 把头往右探就会挡住——那是玩家自己挪的,和 Q 版一样,不在这里测)
+	for species in Species.count():
+		world.queue_free()
+		world = TableWorld.new(null)
+		add_child_autofree(world)
+		world.configure_table(SeatLayout.POKER_TABLE_RADIUS)
+		world.arrange([{"pid": 1, "species": species}, {"pid": 2, "species": (species + 1) % Species.count()}], 1, true, false)
+		me = world.patrons[1]
+		me.fan.transform = PokerLayout.fan_transform(world.seat_transform(world.seat_angles[1]), _eye())
+		await wait_seconds(SETTLE)
+		for offset in [Vector3.ZERO, Vector3(0, 0, -0.4), Vector3(-0.4, 0, 0)]:
+			me.set_neck_target(offset)
+			await wait_seconds(NECK_SETTLE)
+			var total := 0
+			var blocked := 0
+			for i in 9:
+				for j in 5:
+					var local := Vector3((i / 8.0 - 0.5) * (Card3D.WIDTH + 0.07), 0.0, (j / 4.0 - 0.5) * Card3D.HEIGHT * 0.9)
+					total += 1
+					if _blocked(me.fan.global_transform * local):
+						blocked += 1
+			assert_lte(float(blocked) / total, MAX_BLOCKED, "%s 德州底牌,头探到 %s:被挡住 %d/%d" % [Species.IDS[species], offset, blocked, total])
+
+
 func _assert_hand_visible_for_all_offsets(posture: String, offsets: Array = NECK_OFFSETS) -> void:
 	for offset in offsets:
 		me.set_neck_target(offset)

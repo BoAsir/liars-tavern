@@ -32,7 +32,7 @@ const MUCK_SPOT := Vector2(0.15, -0.5)
 const MUCK_SCATTER := 0.06         # 弃牌在弃牌堆里的散开半径
 const MUCK_STEP := 0.0012          # 每张弃牌叠高
 # —— 自己的牌扇(规格 §5.3):座位坐标,相对髋部;落在公共牌与下注控件之间 ——
-const FAN_OFFSET := Vector3(0.30, 0.74, -0.30)
+const FAN_OFFSET := Vector3(0.48, 0.72, -0.36)
 
 
 static func board_slot(index: int) -> Transform3D:
