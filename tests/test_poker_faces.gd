@@ -9,19 +9,24 @@ const SETTLE_FRAMES := 12   # 假渲染器每批等一帧,4 批 + 余量
 
 var host: Node
 var renders: Array = []   # 假渲染器每次收到的那一批牌
+var liars_were_built := false   # 测试开始时骗子酒馆的牌面是否已生成,结束时还原
 
 
 func before_each():
 	PokerFaces.clear()
 	renders = []
+	liars_were_built = CardFaces.is_built()
 	host = add_child_autofree(Node.new())
 
 
 func after_each():
 	PokerFaces.batch_renderer = Callable()
 	PokerFaces.clear()
-	# 有的测试会生成骗子酒馆的牌面:清掉全局缓存,后面的测试文件仍看到未生成的 CardFaces,不受文件顺序影响
-	CardFaces.clear()
+	# 有的测试会清掉或生成骗子酒馆的牌面:把全局缓存还原成测试前的样子,后面的测试不受文件顺序影响
+	if liars_were_built:
+		await CardFaces.build(host)
+	else:
+		CardFaces.clear()
 
 
 func _fake_renderer(image_size := Vector2i(PokerFaces.SIZE)) -> Callable:

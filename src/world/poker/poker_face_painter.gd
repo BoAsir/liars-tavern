@@ -10,7 +10,16 @@ const FRAME_INSET := 5.0           # 金边贴着纸边走,给超大角标让出
 const FRAME_WIDTH := 2
 const FRAME_RADIUS := CORNER_RADIUS - int(FRAME_INSET)   # 与牌的圆角同心
 const SPECKLES := 140              # 纸面杂点(按面积从 CardFaces 的 260 折算)
+const SPECKLE_SEED := 4321         # 杂点随机种子的基数(加牌值;与 CardFaces 的 1234 错开,同一张牌每次生成都一样)
+const SPECKLE_MARGIN := 8.0        # 杂点离牌边至少这么远,不落到纸边与金边上
+const SPECKLE_HALF_MIN := 0.5      # 杂点方块的半边长范围(像素):一两个像素大
+const SPECKLE_HALF_MAX := 1.6
+const SPECKLE_ALPHA_MIN := 0.02    # 杂点墨色的透明度范围:几乎看不见,只让纸面不那么平
+const SPECKLE_ALPHA_MAX := 0.06
 const EDGE_SHADES := 5             # 纸边做旧的层数
+const EDGE_SHADE_STEP := 2.0       # 每层往里缩这么多像素
+const EDGE_SHADE_WIDTH := 2
+const EDGE_SHADE_COLOR := Color(0.55, 0.42, 0.25, 0.05)
 const CROWN_OUTLINE := 2.5
 const CROWN_BAND := 0.22           # 冠饰底部色带占冠高的比例
 
@@ -36,20 +45,22 @@ func _draw() -> void:
 
 
 func _draw_paper() -> void:
-	_rounded(Rect2(Vector2.ZERO, size), CardFaces.PAPER_EDGE, CORNER_RADIUS)
-	_rounded(_inset(PAPER_INSET), CardFaces.PAPER, CORNER_RADIUS - int(PAPER_INSET))
+	CardFaces.draw_rounded(self, Rect2(Vector2.ZERO, size), CardFaces.PAPER_EDGE, CORNER_RADIUS)
+	CardFaces.draw_rounded(self, _inset(PAPER_INSET), CardFaces.PAPER, CORNER_RADIUS - int(PAPER_INSET))
 	# 杂点画成小方块:一两个像素、几乎透明,看不出与圆点的区别;draw_circle 每个都要建一个多边形,
 	# 13 张一批时光杂点就占掉十几毫秒,生成那几帧会卡
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 4321 + card
+	rng.seed = SPECKLE_SEED + card
 	for i in SPECKLES:
-		var p := Vector2(rng.randf_range(8, size.x - 8), rng.randf_range(8, size.y - 8))
-		var half := Vector2.ONE * rng.randf_range(0.5, 1.6)
-		draw_rect(Rect2(p - half, half * 2.0), Color(CardFaces.INK, rng.randf_range(0.02, 0.06)))
+		var p := Vector2(rng.randf_range(SPECKLE_MARGIN, size.x - SPECKLE_MARGIN),
+			rng.randf_range(SPECKLE_MARGIN, size.y - SPECKLE_MARGIN))
+		var half := Vector2.ONE * rng.randf_range(SPECKLE_HALF_MIN, SPECKLE_HALF_MAX)
+		draw_rect(Rect2(p - half, half * 2.0),
+			Color(CardFaces.INK, rng.randf_range(SPECKLE_ALPHA_MIN, SPECKLE_ALPHA_MAX)))
 	for i in EDGE_SHADES:
-		_rounded(_inset(PAPER_INSET + i * 2), Color.TRANSPARENT, CORNER_RADIUS - int(PAPER_INSET), 2,
-			Color(0.55, 0.42, 0.25, 0.05), false)
-	_rounded(_inset(FRAME_INSET), Color.TRANSPARENT, FRAME_RADIUS, FRAME_WIDTH, CardFaces.GOLD, false)
+		CardFaces.draw_rounded(self, _inset(PAPER_INSET + i * EDGE_SHADE_STEP), Color.TRANSPARENT,
+			CORNER_RADIUS - int(PAPER_INSET), EDGE_SHADE_WIDTH, EDGE_SHADE_COLOR, false)
+	CardFaces.draw_rounded(self, _inset(FRAME_INSET), Color.TRANSPARENT, FRAME_RADIUS, FRAME_WIDTH, CardFaces.GOLD, false)
 
 
 func _draw_crown(crown: PackedVector2Array, jewels: PackedVector2Array, ink: Color) -> void:
@@ -66,18 +77,6 @@ func _draw_crown(crown: PackedVector2Array, jewels: PackedVector2Array, ink: Col
 
 func _inset(amount: float) -> Rect2:
 	return Rect2(Vector2(amount, amount), size - Vector2(amount, amount) * 2.0)
-
-
-func _rounded(rect: Rect2, fill: Color, radius: int, border := 0, border_color := Color.TRANSPARENT,
-		draw_fill := true) -> void:
-	var box := StyleBoxFlat.new()
-	box.bg_color = fill
-	box.draw_center = draw_fill
-	box.set_corner_radius_all(radius)
-	box.set_border_width_all(border)
-	box.border_color = border_color
-	box.anti_aliasing = true
-	draw_style_box(box, rect)
 
 
 static func _bounds(poly: PackedVector2Array) -> Rect2:
