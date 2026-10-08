@@ -55,3 +55,13 @@ func test_turn_timer_restarts_full_after_a_turn_batch():
 func test_bystander_batches_keep_the_running_turn_time():
 	var events := [{"type": "rebuy", "pid": 4}]
 	assert_almost_eq(PokerPacing.turn_timer_after(events, 0.6, 12.0), 12.0 + PokerPacing.REBUY, 0.001)
+
+
+func test_bust_decision_gap_is_longer_than_the_plain_hand_gap():
+	# 有人输光的那一手之后,下一手晚一点开,留时间给他选再领/观战(规格 §2.6);选完就恢复普通间隔
+	assert_gt(PokerPacing.BUST_DECISION, PokerPacing.HAND_GAP)
+	assert_almost_eq(PokerPacing.BUST_DECISION, 6.0, 0.001)
+
+
+func test_seat_status_events_take_no_show_time():
+	assert_eq(PokerPacing.estimate([{"type": "away", "pid": 1}, {"type": "sit_in", "pid": 1}, {"type": "spectate", "pid": 2}]), 0.0)
