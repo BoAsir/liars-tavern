@@ -97,30 +97,45 @@ static func mug_mesh() -> ArrayMesh:
 
 
 static func stool_mesh() -> ArrayMesh:
-	# 吧凳(也给钢琴凳用):木座面 + 皮垫、四条外撇的腿、黄铜脚圈
+	# 吧凳(也给钢琴凳用):圆鼓鼓的木座面 + 胖软垫、四条外撇的粗腿、黄铜脚圈(动森式:矮胖圆润)
 	return MeshForge.cached("stool", func(f: MeshForge):
 		f.surface(&"wood")
 		f.part_space = true
 		f.paint(Color.WHITE, 0.7)
 		f.seed = 1.0
-		f.cylinder(0.17, 0.165, 0.04, 20, MeshForge.CAPS_BOTH, MeshForge.xf(Vector3(0, 0.72, 0)))
+		# 座面:圆角车削盘(上下沿各一道 1.5 cm 圆角)
+		var seat := PackedVector2Array([Vector2(0.0, 0.695), Vector2(0.15, 0.695)])
+		for k in range(1, 4):
+			var a := -PI / 2.0 + PI / 2.0 * k / 3.0
+			seat.append(Vector2(0.155, 0.71) + Vector2(cos(a), sin(a)) * 0.015)
+		for k in range(1, 4):
+			var a := PI / 2.0 * k / 3.0
+			seat.append(Vector2(0.155, 0.73) + Vector2(cos(a), sin(a)) * 0.015)
+		seat.append(Vector2(0.0, 0.745))
+		f.lathe(seat, 20)
 		f.part_basis = GRAIN_ALONG_Y
 		for k in 4:
 			var a := PI / 4.0 + k * PI / 2.0
-			var top := Vector3(cos(a), 0, sin(a)) * 0.1 + Vector3(0, 0.70, 0)
-			var foot := Vector3(cos(a), 0, sin(a)) * 0.16
+			var top := Vector3(cos(a), 0, sin(a)) * 0.095 + Vector3(0, 0.70, 0)
+			var foot := Vector3(cos(a), 0, sin(a)) * 0.165
 			var d := top - foot
 			var basis := Basis(Quaternion(Vector3.UP, d.normalized()))
 			f.seed = 2.0 + k
-			f.cylinder(0.016, 0.02, d.length(), 8, MeshForge.CAPS_BOTH, Transform3D(basis, (top + foot) / 2.0))
+			f.cylinder(0.024, 0.03, d.length(), 10, MeshForge.CAPS_BOTH, Transform3D(basis, (top + foot) / 2.0))
+			f.sphere(0.03, 10, MeshForge.xf(foot + Vector3(0, 0.012, 0), Vector3.ZERO, Vector3(1, 0.5, 1)))   # 圆脚
 		f.part_basis = Basis.IDENTITY
 		f.part_space = false
 		f.surface(&"prop")
-		RoomKit.paint(f, [Color(0.36, 0.13, 0.08), 0.62, 0.0])
-		f.lathe(PackedVector2Array([Vector2(0.0, 0.74), Vector2(0.16, 0.74), Vector2(0.165, 0.75), Vector2(0.15, 0.768),
-			Vector2(0.08, 0.776), Vector2(0.0, 0.778)]), 20, PackedInt32Array([1]))
+		# 胖软垫:柔红,顶面鼓起
+		RoomKit.paint(f, RoomKit.RED_PAINT)
+		var cushion := PackedVector2Array([Vector2(0.0, 0.742), Vector2(0.13, 0.742)])
+		for k in range(1, 7):
+			var a := -PI / 2.0 + PI * 0.75 * k / 6.0
+			cushion.append(Vector2(0.13, 0.765) + Vector2(cos(a), sin(a)) * Vector2(0.025, 0.023))
+		cushion.append_array([Vector2(0.08, 0.792), Vector2(0.0, 0.796)])
+		f.lathe(cushion, 20)
 		RoomKit.paint(f, RoomKit.BRASS)
-		f.torus(0.128, 0.142, 24, MeshForge.xf(Vector3(0, 0.28, 0))),
+		f.torus(0.124, 0.146, 24, MeshForge.xf(Vector3(0, 0.28, 0), Vector3.ZERO, Vector3(1, 1.3, 1))),
 		{&"wood": WorldMaterials.wood("dark", true), &"prop": WorldMaterials.prop()})
 
 
@@ -143,7 +158,8 @@ static func _body_recipe(f: MeshForge) -> void:
 	f.part_basis = Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(stretch, 0, 0))
 	f.part_origin = Vector3(stretch * length / 2.0, (top + kick) / 2.0, 0.0)
 	f.seed = 5.0
-	f.box(Vector3(x1 - x0, top - kick, length), MeshForge.xf(Vector3((x0 + x1) / 2.0, (top + kick) / 2.0, (z0 + z1) / 2.0)))
+	RoomKit.rounded_box(f, Vector3(x1 - x0, top - kick, length), 0.04,
+		MeshForge.xf(Vector3((x0 + x1) / 2.0, (top + kick) / 2.0, (z0 + z1) / 2.0)))
 	# 两端:u 沿 x
 	var depth := x1 - x0
 	var stretch_end := 0.62 / RoomLayout.panel_fit(depth, 0.62)
@@ -160,7 +176,7 @@ static func _body_recipe(f: MeshForge) -> void:
 	f.part_basis = Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(bstretch, 0, 0))
 	f.part_origin = Vector3(bstretch * blen / 2.0, 0.46 + 0.1, 0.0)
 	f.seed = 7.0
-	f.box(Vector3(RoomLayout.INNER + RoomLayout.BACKBAR_FRONT, 0.82, blen),
+	RoomKit.rounded_box(f, Vector3(RoomLayout.INNER + RoomLayout.BACKBAR_FRONT, 0.82, blen), 0.035,
 		MeshForge.xf(Vector3((-RoomLayout.INNER + RoomLayout.BACKBAR_FRONT) / 2.0, 0.51, (bz0 + bz1) / 2.0)))
 	f.part_basis = Basis.IDENTITY
 	f.part_origin = Vector3.ZERO
@@ -175,9 +191,9 @@ static func _body_recipe(f: MeshForge) -> void:
 	nose.append(Vector2(0.03, top))
 	var along_z := Basis(Vector3(0, 0, 1), Vector3.UP, Vector3(-1, 0, 0))
 	f.part_basis = Basis.IDENTITY
-	f.extrude_x(nose, 3.52, Transform3D(along_z, Vector3(-2.96, 0.0, (-2.36 + 1.16) / 2.0)))
+	RoomKit.extrude_smooth(f, nose, 3.52, Transform3D(along_z, Vector3(-2.96, 0.0, (-2.36 + 1.16) / 2.0)))
 	f.seed = 9.0
-	f.extrude_x(RoomShell.chamfer_rect(0.47, 0.03, 0.006), blen + 0.02,
+	RoomKit.extrude_smooth(f, RoomKit.round_rect(0.47, 0.03, 0.014), blen + 0.02,
 		Transform3D(along_z, Vector3((-RoomLayout.INNER + RoomLayout.BACKBAR_FRONT + 0.02) / 2.0, 0.935, (bz0 + bz1) / 2.0)))
 	# 踢脚板(退进 4 cm)与下柜踢脚
 	f.surface(&"dark")
@@ -196,25 +212,37 @@ static func _frame_recipe(f: MeshForge) -> void:
 	var up := Basis(Vector3(0, 1, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1))
 	for z in [-2.20, 1.00]:
 		f.seed = 20.0 + z
-		f.extrude_x(RoomShell.chamfer_rect(0.12, 0.1, 0.01), 2.62 - 0.95, Transform3D(up, Vector3(-RoomLayout.INNER + 0.05, (0.95 + 2.62) / 2.0, z)))
+		RoomKit.extrude_smooth(f, RoomKit.round_rect(0.12, 0.1, 0.035), 2.62 - 0.95,
+			Transform3D(up, Vector3(-RoomLayout.INNER + 0.05, (0.95 + 2.62) / 2.0, z)))
 	for shelf in 3:
 		var y := 1.55 + shelf * 0.45
 		f.seed = 30.0 + shelf
-		f.box(Vector3(0.3, 0.04, 3.0), MeshForge.xf(Vector3(-4.18, y, -0.6)))
+		RoomKit.rounded_box(f, Vector3(0.3, 0.04, 3.0), 0.016, MeshForge.xf(Vector3(-4.18, y, -0.6)))
 		f.box(Vector3(0.012, 0.02, 3.0), MeshForge.xf(Vector3(-4.035, y + 0.03, -0.6)))
 		# 托架
 		for z in [-1.8, -0.6, 0.6]:
 			f.extrude_x(PackedVector2Array([Vector2(0.0, y - 0.02), Vector2(0.24, y - 0.02), Vector2(0.22, y - 0.05), Vector2(0.0, y - 0.16)]),
 				0.03, RoomShell.wall_frame("left", z))
 	# 檐口(冠顶)
-	var cornice := PackedVector2Array([Vector2(0.0, 2.62), Vector2(0.43, 2.62), Vector2(0.45, 2.64), Vector2(0.45, 2.72),
-		Vector2(0.50, 2.76), Vector2(0.50, 2.84), Vector2(0.0, 2.84)])
+	var cornice := PackedVector2Array([Vector2(0.0, 2.62), Vector2(0.43, 2.62)])
+	for k in range(1, 5):   # 下沿四分之一圆(卡通的圆润檐口)
+		var a := -PI / 2.0 + PI / 2.0 * k / 4.0
+		cornice.append(Vector2(0.43, 2.64) + Vector2(cos(a), sin(a)) * 0.02)
+	cornice.append(Vector2(0.45, 2.72))
+	for k in range(0, 5):
+		var a := -PI / 2.0 + PI / 2.0 * k / 4.0
+		cornice.append(Vector2(0.475, 2.765) + Vector2(cos(a), sin(a)) * 0.025)
+	cornice.append_array([Vector2(0.50, 2.815)])
+	for k in range(1, 5):
+		var a := PI / 2.0 * k / 4.0
+		cornice.append(Vector2(0.475, 2.815) + Vector2(cos(a), sin(a)) * 0.025)
+	cornice.append(Vector2(0.0, 2.84))
 	f.seed = 40.0
-	f.extrude_x(cornice, RoomLayout.BACKBAR_Z.y - RoomLayout.BACKBAR_Z.x + 0.08,
+	RoomKit.extrude_smooth(f, cornice, RoomLayout.BACKBAR_Z.y - RoomLayout.BACKBAR_Z.x + 0.08,
 		RoomShell.wall_frame("left", (RoomLayout.BACKBAR_Z.x + RoomLayout.BACKBAR_Z.y) / 2.0))
 	# 招牌底板
 	f.seed = 41.0
-	f.box(Vector3(0.025, 0.29, 2.48), MeshForge.xf(Vector3(SIGN_X, 2.785, -0.6)))
+	RoomKit.rounded_box(f, Vector3(0.025, 0.29, 2.48), 0.012, MeshForge.xf(Vector3(SIGN_X, 2.785, -0.6)))
 	f.part_space = false
 
 

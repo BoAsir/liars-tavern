@@ -38,8 +38,11 @@ static func _world(f: MeshForge) -> void:
 	f.push(Transform3D(Basis.IDENTITY, -PIVOT))
 
 
-static func _aabb_box(f: MeshForge, lo: Vector3, hi: Vector3) -> void:
-	f.box(hi - lo, MeshForge.xf((lo + hi) / 2.0))
+static func _aabb_box(f: MeshForge, lo: Vector3, hi: Vector3, radius := 0.0) -> void:
+	if radius > 0.0:
+		RoomKit.rounded_box(f, hi - lo, radius, MeshForge.xf((lo + hi) / 2.0))
+	else:
+		f.box(hi - lo, MeshForge.xf((lo + hi) / 2.0))
 
 
 static func _stone_recipe(f: MeshForge) -> void:
@@ -47,7 +50,7 @@ static func _stone_recipe(f: MeshForge) -> void:
 	f.paint(Color.WHITE, 0.9)
 	for id in ["pier_l", "pier_r", "lintel", "breast"]:
 		var box: Array = RoomLayout.FIRE_BOXES[id]
-		_aabb_box(f, box[0], box[1])
+		_aabb_box(f, box[0], box[1], 0.035)   # 卡通:石体棱角圆润
 	# 炉膛:后壁、壁柱内侧与过梁底面熏黑(顶点色 0.3,sRGB)
 	var soot := Color(0.3, 0.29, 0.28)
 	f.paint(soot, 0.95)
@@ -60,7 +63,7 @@ static func _stone_recipe(f: MeshForge) -> void:
 	_aabb_box(f, Vector3(x0, 0.998, RoomLayout.FIRE_BACK_Z), Vector3(x1, 1.0, -3.925))
 	# 炉床石板(高度不在 0.2 网格上:整块落在一层砖内)
 	f.paint(Color(0.82, 0.8, 0.78), 0.9)
-	_aabb_box(f, RoomLayout.HEARTH[0], RoomLayout.HEARTH[1])
+	_aabb_box(f, RoomLayout.HEARTH[0], RoomLayout.HEARTH[1], 0.028)
 
 
 static func _mantel_recipe(f: MeshForge) -> void:
@@ -71,7 +74,7 @@ static func _mantel_recipe(f: MeshForge) -> void:
 	var lo: Vector3 = RoomLayout.MANTEL[0]
 	var hi: Vector3 = RoomLayout.MANTEL[1]
 	var size := hi - lo
-	f.extrude_x(RoomShell.chamfer_rect(size.z, size.y, 0.018), size.x, MeshForge.xf((lo + hi) / 2.0))
+	RoomKit.extrude_smooth(f, RoomKit.round_rect(size.z, size.y, 0.055), size.x, MeshForge.xf((lo + hi) / 2.0))
 	# 台梁下的两只托木
 	for x in [-2.5, -0.5]:
 		f.seed = 4.0 + x
@@ -82,7 +85,7 @@ static func _mantel_recipe(f: MeshForge) -> void:
 
 static func _log(f: MeshForge, pos: Vector3, rot_deg: Vector3, radius: float, length: float, seed: float) -> void:
 	f.seed = seed
-	f.cylinder(radius, radius * 1.06, length, 10, MeshForge.CAPS_BOTH, MeshForge.xf(pos, rot_deg))
+	f.cylinder(radius, radius * 1.06, length, 12, MeshForge.CAPS_BOTH, MeshForge.xf(pos, rot_deg))
 
 
 static func _logs_recipe(f: MeshForge) -> void:
@@ -111,11 +114,11 @@ static func _props_recipe(f: MeshForge) -> void:
 	# 柴架 2 只:前立柱 + 顶上黄铜球 + 向后的横杆 + 脚
 	for x in [-1.85, -1.15]:
 		RoomKit.paint(f, RoomKit.IRON)
-		f.box(Vector3(0.028, 0.32, 0.028), MeshForge.xf(Vector3(x, 0.22, -3.98)))
-		f.box(Vector3(0.024, 0.024, 0.26), MeshForge.xf(Vector3(x, 0.09, -4.10)))
-		f.box(Vector3(0.12, 0.018, 0.03), MeshForge.xf(Vector3(x, 0.07, -3.98)))
+		RoomKit.rounded_box(f, Vector3(0.04, 0.32, 0.04), 0.016, MeshForge.xf(Vector3(x, 0.22, -3.98)))
+		RoomKit.rounded_box(f, Vector3(0.032, 0.032, 0.26), 0.012, MeshForge.xf(Vector3(x, 0.09, -4.10)))
+		RoomKit.rounded_box(f, Vector3(0.14, 0.026, 0.04), 0.011, MeshForge.xf(Vector3(x, 0.07, -3.98)))
 		RoomKit.paint(f, RoomKit.BRASS)
-		f.sphere(0.028, 12, MeshForge.xf(Vector3(x, 0.40, -3.98)))
+		f.sphere(0.036, 14, MeshForge.xf(Vector3(x, 0.41, -3.98)))
 	# 火具架:底座、立杆、挂着的拨火棍与铲子
 	var tx := -0.12
 	var tz := -4.2
