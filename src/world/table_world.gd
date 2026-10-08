@@ -368,10 +368,10 @@ func revolver_rest(pid: int) -> Transform3D:
 	# 平放在座位右前方桌面上,枪管斜指桌心
 	var angle: float = seat_angles.get(pid, 0.0)
 	var dir := SeatLayout.direction(angle)
-	# 侧放在毡面上(转轮所在处已在毡面范围内,按毡面顶而不是桌面算高度)
-	var pos := dir * REVOLVER_RADIUS + seat_right(pid) * REVOLVER_SIDE + Vector3(0, SeatLayout.FELT_TOP + Revolver3D.REST_HALF_WIDTH, 0)
+	# 侧放:转轮压在毡面上、握把底帽落在毡面外的木桌面上(低 4 mm),所以用桌上那组侧倾与抬高
+	var pos := dir * REVOLVER_RADIUS + seat_right(pid) * REVOLVER_SIDE + Vector3(0, SeatLayout.FELT_TOP + Revolver3D.TABLE_REST_LIFT, 0)
 	var aim := (-dir + seat_right(pid) * -0.35).normalized()
-	var basis := Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.BACK, PI / 2.0)
+	var basis := Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.BACK, PI / 2.0 + Revolver3D.TABLE_REST_ROLL)
 	return Transform3D(basis, pos)
 
 

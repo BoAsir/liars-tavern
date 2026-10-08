@@ -34,6 +34,25 @@ static func place(rig: CameraRig, view: String) -> bool:
 			rig.snap(Vector3(0.0, 1.05, 0.55), Vector3(0, top, -0.2))
 		"opponent":
 			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
+		# 开发机位(道具特写,不进 NAMES,探针不跑)
+		"gunrest":
+			rig.snap(Vector3(0.62, 1.0, 1.02), Vector3(0.3, top, 0.74))
+		"fan":
+			rig.snap(Vector3(0.66, 1.56, 2.08), Vector3(0.45, 1.33, 1.5))
+		"candles":
+			rig.snap(Vector3(-0.16, 1.06, -0.08), Vector3(-0.48, top + 0.06, -0.51))
+		"stand":
+			rig.snap(Vector3(0.05, 0.98, 0.36), Vector3(0, top + 0.1, 0))
+		"lamp":
+			rig.snap(Vector3(0.9, 1.55, 1.25), Vector3(0, 1.95, 0))
+		"reveal":
+			rig.snap(Vector3(0, 1.42, 1.05), Vector3(0, 0.86, 0.0))
+		"table":
+			rig.snap(Vector3(1.9, 1.15, 1.9), Vector3(0, 0.55, 0))
+		"gunclose":
+			rig.snap(Vector3(0.78, 1.42, -0.62), Vector3(1.22, 1.33, -0.3))
+		"flash":
+			rig.snap(Vector3(0.1, 1.42, 0.3), Vector3(1.25, 1.25, 0.0))
 		# --lineup:8 个物种一字排开在 x ∈ [-2.73, 2.73]、z = 1.5,面朝 +Z
 		"lineup_front":
 			rig.snap(Vector3(0, 1.35, 6.1), Vector3(0, 0.85, 1.5))

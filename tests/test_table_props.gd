@@ -49,11 +49,41 @@ func _world(count: int) -> TableWorld:
 	return world
 
 
-func test_resting_revolvers_lie_on_the_felt_not_in_it():
+func _part_points(gun: Revolver3D, part: String) -> PackedVector3Array:
+	# 静置枪的转轮顶点 / 握把底帽顶点(全局坐标)
+	var out := PackedVector3Array()
+	var inst: MeshInstance3D = gun.get_node("Body/Drum/DrumMesh" if part == "drum" else "Body/BodyMesh")
+	for s in inst.mesh.get_surface_count():
+		for v: Vector3 in inst.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+			if part == "drum" or v.y < -0.066:
+				out.append(inst.global_transform * v)
+	return out
+
+
+func test_resting_guns_lie_on_felt_and_table():
+	# 转轮压在毡面上、底帽落在毡面外的木桌面上:不悬空也不陷桌(按网格顶点精确算)
 	for count in [2, 3, 4]:
 		var world := _world(count)
 		for pid in world.revolvers:
-			assert_gte(_lowest_point(world.revolvers[pid]), SeatLayout.FELT_TOP - 0.0005, "%d 人局 %d 号座" % [count, pid])
+			var label := "%d 人局 %d 号座" % [count, pid]
+			var drum := _part_points(world.revolvers[pid], "drum")
+			var cap := _part_points(world.revolvers[pid], "cap")
+			var drum_low := INF
+			var drum_far := 0.0
+			for v in drum:
+				if v.y < drum_low:
+					drum_low = v.y
+					drum_far = Vector2(v.x, v.z).length()
+			var cap_low := INF
+			var cap_near := INF
+			for v in cap:
+				cap_low = minf(cap_low, v.y)
+				cap_near = minf(cap_near, Vector2(v.x, v.z).length())
+			assert_almost_eq(drum_low, SeatLayout.FELT_TOP, 0.001, label + " 转轮最低点在毡面上")
+			assert_lt(drum_far, SeatLayout.FELT_RADIUS, label + " 转轮着地处在毡面范围内")
+			assert_almost_eq(cap_low, SeatLayout.TABLE_TOP, 0.001, label + " 底帽落在木桌面上")
+			assert_gt(cap_near, SeatLayout.FELT_RADIUS, label + " 底帽在毡面外")
+			assert_gte(_lowest_point(world.revolvers[pid]), SeatLayout.TABLE_TOP - 0.0005, label + " 不陷桌")
 
 
 func test_dropped_gun_lands_on_the_table():
