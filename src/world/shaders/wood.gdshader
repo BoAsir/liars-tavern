@@ -16,11 +16,16 @@ uniform float plank_length = 1.6;
 uniform float roughness_base = 0.62;
 uniform float varnish = 0.0;
 uniform float wear = 0.0;
+// 合并网格(MeshForge)里木纹按部件自己的局部坐标算:CUSTOM0.xyz = 部件原始顶点,w = 部件种子;
+// 不合并的网格不开,和原来完全一样
+uniform bool use_part_space = false;
 
 varying vec3 obj_pos;
+varying float part_seed;
 
 void vertex() {
-	obj_pos = VERTEX * scale;
+	obj_pos = (use_part_space ? CUSTOM0.xyz : VERTEX) * scale;
+	part_seed = use_part_space ? CUSTOM0.w : 0.0;
 }
 
 float axis_component(vec3 v, int axis) {
@@ -43,7 +48,7 @@ void fragment() {
 		float edge = min(min(fa, 1.0 - fa) * plank_width, min(fl, 1.0 - fl) * plank_length);
 		seam = 1.0 - smoothstep(0.0, 0.005, edge);
 	}
-	float rnd = hash12(vec2(plank_id, 1.3));
+	float rnd = hash12(vec2(plank_id, 1.3) + part_seed * 31.7);
 	float warp = fbm(vec2(along * 0.45, across * 1.6) + rnd * 10.0);
 	vec2 ring_p = vec2(across + rnd * 13.0, depth * 0.6 + rnd * 7.0);
 	float rings = fract(length(ring_p) * ring_frequency + warp * 1.1);

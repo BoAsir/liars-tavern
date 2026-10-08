@@ -8,6 +8,8 @@ const STONE_SHADER := preload("res://src/world/shaders/stone.gdshader")
 const FLAME_SHADER := preload("res://src/world/shaders/flame.gdshader")
 const PARTICLE_SHADER := preload("res://src/world/shaders/soft_particle.gdshader")
 const PARTICLE_ADD_SHADER := preload("res://src/world/shaders/soft_particle_add.gdshader")
+const PATRON_SHADER := preload("res://src/world/shaders/patron.gdshader")
+const PROP_SHADER := preload("res://src/world/shaders/prop.gdshader")
 
 # 木材预设:颜色 + 纹理参数
 const WOOD_PRESETS := {
@@ -61,13 +63,32 @@ const WOOD_PRESETS := {
 static var _cache := {}
 
 
-static func wood(preset: String) -> ShaderMaterial:
-	return _cached("wood:" + preset, func():
+static func wood(preset: String, part_space := false) -> ShaderMaterial:
+	# part_space:给 MeshForge 合并网格用,木纹按部件自己的局部坐标算。变体一律新建,不 duplicate()
+	# (实测 duplicate 出来的材质木纹会走样)
+	return _cached("wood:%s:%s" % [preset, part_space], func():
 		var mat := ShaderMaterial.new()
 		mat.shader = WOOD_SHADER
 		for key in WOOD_PRESETS[preset]:
 			var value = WOOD_PRESETS[preset][key]
 			mat.set_shader_parameter(key, Vector3(value.r, value.g, value.b) if value is Color else value)
+		mat.set_shader_parameter("use_part_space", part_space)
+		return mat)
+
+
+static func patron() -> ShaderMaterial:
+	# 所有酒客共用的顶点 PBR 材质(出局褪色走实例参数 fade)
+	return _cached("patron", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = PATRON_SHADER
+		return mat)
+
+
+static func prop() -> ShaderMaterial:
+	# 道具共用的顶点 PBR 材质
+	return _cached("prop", func():
+		var mat := ShaderMaterial.new()
+		mat.shader = PROP_SHADER
 		return mat)
 
 
