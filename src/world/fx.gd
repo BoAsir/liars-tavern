@@ -1,5 +1,5 @@
 class_name Fx
-# 粒子与瞬时特效:壁炉火星、光束浮尘、枪口焰、硝烟、火花、出局烟尘。
+# 粒子与瞬时特效:壁炉火星、光束浮尘、枪口焰、硝烟、火花、出局烟尘、番茄汁。
 
 
 # 枪口焰:枪口抵在太阳穴外 8–14 mm,往前喷的东西几乎全在头里,所以可见的火焰与火花都往侧面、往后喷;
@@ -11,6 +11,8 @@ const CROWN_FRONT := 0.008        # 朝头最多伸出(= Patron.GUN_CLEARANCE)
 const CROWN_RADIAL := 0.07
 const SPARK_DIRECTION := Vector3(0, 0, 1)   # 发射器局部:沿枪身往后,远离头
 const SMOKE_FADE := 0.08          # 硝烟与头、桌面相交处的软过渡距离
+const JUICE_MAX := 24             # 番茄汁一次最多这么多粒(规格 §5)
+const JUICE_COLOR := Color(0.86, 0.16, 0.1)
 
 static var _soft_dot_texture: GradientTexture2D = null
 static var _smoke_texture: ImageTexture = null
@@ -194,6 +196,34 @@ static func _smoke() -> ImageTexture:
 		image.generate_mipmaps()
 		_smoke_texture = ImageTexture.create_from_image(image)
 	return _smoke_texture
+
+
+static func juice_splash(parent: Node3D, pos: Vector3, normal: Vector3, amount := 18) -> GPUParticles3D:
+	# 番茄砸中:红色汁水沿命中面法线溅开再往下掉;普通透明混合(不发光),复用柔和粒子材质,结束后自行释放
+	var particles := _particles(Vector3.ZERO, clampi(amount, 1, JUICE_MAX), 0.55, true)
+	particles.explosiveness = 1.0
+	var pm := _process_material(Vector3.ONE * 0.01, normal if normal.length_squared() > 0.0 else Vector3.UP, 70.0,
+		Vector2(0.6, 1.6))
+	pm.gravity = Vector3(0, -6.0, 0)
+	pm.scale_min = 0.6
+	pm.scale_max = 1.4
+	pm.color_ramp = _ramp([JUICE_COLOR, Color(JUICE_COLOR.darkened(0.25), 0.85), Color(JUICE_COLOR.darkened(0.4), 0.0)])
+	particles.process_material = pm
+	particles.draw_pass_1 = _juice_quad()
+	particles.visibility_aabb = AABB(Vector3(-0.6, -1.2, -0.6), Vector3(1.2, 1.6, 1.2))
+	parent.add_child(particles)
+	particles.global_position = pos
+	_emit_once(particles)
+	return particles
+
+
+static func _juice_quad() -> QuadMesh:
+	if not _quads.has("juice"):
+		var mesh := QuadMesh.new()
+		mesh.size = Vector2(0.045, 0.045)
+		mesh.material = WorldMaterials.particle(false, 1.0, 0.8)
+		_quads["juice"] = mesh
+	return _quads["juice"]
 
 
 static func _burst(pos: Vector3, direction: Vector3, amount: int, lifetime: float, color: Color,

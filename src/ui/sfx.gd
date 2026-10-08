@@ -14,6 +14,7 @@ const VOLUMES := {
 	"ui_click": -14.0, "ui_hover": -22.0, "whoosh": -12.0, "sting_lie": -6.0, "sting_truth": -8.0,
 	"win": -6.0, "join": -10.0, "thud": -4.0,
 	"chips": -9.0, "chips_push": -7.0, "fold": -14.0,   # 德州:筹码碰撞 / 全下推筹码 / 轻推牌(规格 §6.7)
+	"tomato_throw": -12.0, "tomato_splat": -4.0,        # 丢番茄:出手的短 whoosh / 湿的「啪叽」
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -160,6 +161,10 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_mix([_noise_burst(0.45, 0.1, 0.08), _offset(_chip_clatter(CHIP_PUSH_COUNT, 0.5), 0.05)]))
 		"fold":
 			return _wav(_noise_burst(0.11, 0.2, 0.02))
+		"tomato_throw":
+			return _wav(_whoosh_up(0.24))
+		"tomato_splat":
+			return _wav(_splat())
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -316,6 +321,50 @@ func _whoosh(duration: float) -> PackedFloat32Array:
 		var cutoff := 0.03 + 0.12 * sin(t * PI)
 		y += cutoff * (_rng.randf_range(-1.0, 1.0) - y)
 		out[i] = y * sin(t * PI) * 1.5
+	return out
+
+
+func _whoosh_up(duration: float) -> PackedFloat32Array:
+	# 番茄出手:短促、越来越亮的风声
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / n
+		y += (0.04 + 0.22 * t) * (_rng.randf_range(-1.0, 1.0) - y)
+		out[i] = y * sin(t * PI) * pow(1.0 - t, 0.5) * 2.2
+	return out
+
+
+func _splat() -> PackedFloat32Array:
+	# 番茄砸中:低频的「啪」+ 湿漉漉的滤波噪声尾巴(截止频率往下掉,像汁水摊开)+ 两三滴往下滑音的小水滴
+	var n := int(0.42 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var cutoff := 0.05 + 0.4 * exp(-t * 22.0)
+		y += cutoff * (_rng.randf_range(-1.0, 1.0) - y)
+		var gurgle := 0.75 + 0.25 * sin(TAU * 31.0 * t)
+		out[i] = y * gurgle * exp(-t * 9.0) * minf(t / 0.0015, 1.0) * 1.2
+	var layers := [out, _thump(95.0, 0.12, 0.7)]
+	for k in 3:
+		layers.append(_offset(_drip(_rng.randf_range(700.0, 1100.0), 0.05, 0.18), 0.07 + k * _rng.randf_range(0.05, 0.08)))
+	return _mix(layers)
+
+
+func _drip(freq: float, duration: float, gain: float) -> PackedFloat32Array:
+	# 一滴水:很短的正弦,音高往下滑
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / n
+		phase += TAU * freq * (1.0 - 0.45 * t) / RATE
+		out[i] = sin(phase) * sin(t * PI) * gain
 	return out
 
 

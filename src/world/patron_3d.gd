@@ -69,6 +69,13 @@ const DIE_HEAD_ROT := Vector3(0.3, 0.3, -0.4)
 # 出局时牌扇扣在大腿上(座位坐标):身子往后仰,挂在胸前的牌会跟着翻上来戳进大头的脸
 const DIE_FAN_POS := Vector3(0, 0.6, -0.1)
 const DIE_FAN_TIME := 0.4
+# 丢番茄(规格 2026-10-08):抛的人右手往后上方蓄力再甩向目标;被砸的人左爪抹一下脸(身体局部坐标,相对头的位置)
+const HAND_WINDUP := Vector3(0.34, 0.92, 0.14)
+const THROW_WINDUP := 0.16      # 蓄力时长(秒):番茄在这之后出手
+const THROW_FLING := 0.1
+const THROW_RECOVER := 0.32     # 甩完之后停多久再把手搭回桌上
+const WIPE_FACE := Vector3(-0.06, -0.04, -0.36)
+const SPEECH_ABOVE_HEAD := 0.34 # 快捷语气泡挂在头心之上这么高(没有铭牌时)
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
@@ -112,6 +119,7 @@ var _neck: Node3D
 var _neck_target := Vector3.ZERO     # 座位坐标的头部偏移目标
 var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
 var _neck_velocity := Vector3.ZERO
+var _wipe_tween: Tween = null      # 被番茄砸中后抹脸的补间(出局、复位时中止)
 var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
 
 
@@ -253,7 +261,7 @@ func _animate_idle(delta: float) -> void:
 	# 枪抵着太阳穴时屏住不动(头一晃,只隔 8 mm 的枪口就戳进头里);搞笑表演的头部偏移同样屏住
 	var wobble := 0.0 if _steady else 1.0
 	yaw += (_noise.get_noise_1d(_time * 0.4) * 0.08 + _antics.head_add.y) * wobble
-	pitch += (_noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x) * wobble
+	pitch += (_noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x + _antics.nod) * wobble
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
 	head.rotation.z = lerpf(head.rotation.z, (_noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 + _antics.head_add.z) * wobble,
@@ -369,6 +377,11 @@ func head_position() -> Vector3:
 
 func nameplate_anchor() -> Vector3:
 	return global_transform * Vector3(0, NAMEPLATE_HEIGHT, 0.1)
+
+
+func speech_anchor() -> Vector3:
+	# 没有铭牌的人(越肩机位下的自己)快捷语气泡挂在头顶上方:跟着头晃、探头
+	return head_position() + Vector3.UP * SPEECH_ABOVE_HEAD
 
 
 func set_active(active: bool) -> void:
@@ -588,6 +601,7 @@ func relief() -> void:
 func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	alive = false
 	_arms_locked = true
+	_stop_wipe()
 	_eye.set_instance_shader_parameter("dead", 1.0)
 	_set_fist(false)
 	if gun != null and table_parent != null:
@@ -666,6 +680,7 @@ func reset_pose() -> void:
 		if tween.is_valid():
 			tween.kill()
 	_cheer_tweens = []
+	_stop_wipe()
 	_arms_locked = false
 	_sitting_up = false
 	_neck_target = Vector3.ZERO
@@ -684,6 +699,81 @@ func reset_pose() -> void:
 func startle() -> void:
 	# 被吓一跳(有人喊「骗子!」拍桌、旁边有人中枪):原地一蹦、眼睛瞪圆、帽子弹起、耳朵炸开
 	_antics.startle()
+
+
+# —— 丢番茄与说话(规格 2026-10-08 丢番茄与快捷语 §5)——
+
+func can_throw() -> bool:
+	# 活着、手没被别的动作占着(举枪、拍桌、庆祝、抹脸)才做抛的动作;否则番茄直接从手里飞出去
+	return alive and not _arms_locked
+
+
+func throw_at(target: Vector3) -> void:
+	# 右手往后上方蓄力 THROW_WINDUP 秒,再甩向目标(番茄在蓄力结束时出手,由 BanterFx 按同一时长放开)
+	if not can_throw():
+		return
+	_arms_locked = true
+	var windup := pose_right(HAND_WINDUP, THROW_WINDUP, Tween.TRANS_SINE)
+	var serial := _arm_serial
+	await windup.finished
+	if not alive or serial != _arm_serial:
+		return   # 期间出局或有别的手臂动作接管(举枪、复位……):交给它们收尾
+	pose_right(body.to_local(target), THROW_FLING, Tween.TRANS_EXPO)
+	serial = _arm_serial
+	await get_tree().create_timer(THROW_FLING + THROW_RECOVER).timeout
+	if alive and serial == _arm_serial:
+		_arms_locked = false
+		rest_arms()
+
+
+func hit_by_tomato(_local_point: Vector3) -> void:
+	# 被番茄砸中:吓一跳、眯眼嫌弃、摇头吐舌,手空着就用左爪抹一下脸;出局的不反应(番茄泥照样贴上)
+	if not alive:
+		return
+	_antics.startle()
+	if _sitting_up:
+		return   # 举着枪、正在庆祝:只吓一跳,不打断动作
+	_antics.disgust()
+	if not _arms_locked:
+		_wipe_face()
+
+
+func _wipe_face() -> void:
+	_arms_locked = true
+	_stop_wipe()
+	var face := head.position + WIPE_FACE
+	var tween := create_tween()
+	_wipe_tween = tween
+	tween.tween_interval(0.12)   # 先愣一下
+	_tween_arm(tween, _arm_l, face, 0.16)
+	for side in [1.0, -1.0, 1.0]:
+		_tween_arm(tween, _arm_l, face + Vector3(0.07 * side, 0.025, 0.0), 0.09, Tween.TRANS_SINE)
+	var serial := _arm_serial
+	await tween.finished
+	if _wipe_tween != tween:
+		return
+	_wipe_tween = null
+	if alive and serial == _arm_serial:   # 期间没有别的手臂动作(举枪、拍桌)接管
+		_arms_locked = false
+		rest_arms()
+
+
+func _stop_wipe() -> void:
+	if _wipe_tween != null and _wipe_tween.is_valid():
+		_wipe_tween.kill()
+	_wipe_tween = null
+
+
+func talk(syllable_times: PackedFloat32Array) -> void:
+	# 说话:头随每个音节轻点一下(出局的人照样能说,只是不点头)
+	if alive:
+		_antics.talk(syllable_times)
+
+
+func skull_ellipsoid() -> Array:
+	# 头部主颅骨的椭球 [中心, 半轴](Head 局部坐标,已含 Q 版放大):番茄落点、番茄泥贴在它表面上
+	var skull: Array = _look_data["head"]["skull"][0]
+	return [PatronParts.head_point(_look_data, skull[0]), skull[1] * PatronParts.head_scale(_look_data)]
 
 
 func appear() -> void:
