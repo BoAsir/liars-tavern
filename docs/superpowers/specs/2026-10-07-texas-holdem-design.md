@@ -197,13 +197,20 @@ func _after_action(events: Array, turn_action := false) -> void:
 		_turn_timer.stop()
 	else:
 		_turn_timer.start(_session.turn_timer_after(events, _anim_left, _turn_time_left()))
-	if not _session.is_over() and _session.next_hand_ready():
-		_hand_timer.start(_anim_left + _session.hand_gap())
-	else:
-		_hand_timer.stop()
+	_schedule_hand_timer()
 	game_events.emit(events)
 	_send_to_members("rpc_game_events", [events])
 	_sync_all()
+
+func _schedule_hand_timer() -> void:
+	# 已排期时只会提前(输光者选完了间隔变短),不会推迟到比原计划更晚
+	if _session.is_over() or not _session.next_hand_ready():
+		_hand_timer.stop()
+		return
+	var delay := _anim_left + _session.hand_gap()
+	if not _hand_timer.is_stopped():
+		delay = minf(delay, _hand_timer.time_left)
+	_hand_timer.start(delay)
 
 func _on_hand_timer() -> void:
 	if in_game and _session != null and _session.next_hand_ready():
@@ -213,7 +220,8 @@ func _on_hand_timer() -> void:
   开局时先置 `_anim_left = Pacing.INTRO` 再 `_after_action(start 的事件)`。输光者做了选择(再领/观战/离开)后 `hand_gap()` 变短,`_after_action` 会按新的间隔重排 `_hand_timer`(只会提前,不会推迟到比原计划更晚)。`_turn_time_left()` 与 `_on_turn_timeout()` 都以 `_session != null and _session.has_turn()` 为前提;超时代打按 `turn_action = true` 处理。
   `leave()` 与 `request_rematch_lobby()` 都停 `_hand_timer` 并把会话置空;`leave()` 另把 `game_mode` 复位为 `GameMode.DEFAULT`。
 - **可离线测试的结构**:`rpc_join_request` 只取发送者再调用 `_handle_join_request(id, pname, version)`;`rpc_poker_intent` 只取发送者再调用 `_handle_poker_rpc(pid, action, amount)`;所有直接的 `rpc_id` 改走 `_send_to(id, method, args)`,内部先判断 `_is_connected(id)`(离线测试里对未知 peer 调 rpc_id 会触发引擎错误,GUT 会判失败)。
-- **中途加入的房主处理顺序**:`_lobby.add_member` → `_send_to(id, "rpc_join_accepted", [{"in_game": true}])` → 只对他发 `rpc_game_started(当前座位, {"mode", "late": true})` → `_session.add_player(id, 名字)` → `_after_action(事件)` → `_broadcast_lobby()`。
+- **中途加入的房主处理顺序**:`_lobby.add_member` → `_session.add_player(id, 名字)` → `_send_to(id, "rpc_join_accepted", [{"in_game": true}])` → 只对他发 `rpc_game_started(当前座位, {"mode", "late": true})` → `_after_action(事件)` → `_broadcast_lobby()`。
+  会话先于获准收人:名单放行但 `add_player` 返回 `[]`(同一 peer id 本手里刚离开、引擎要等这一手结束才移出他;或桌上没座)时撤掉名单项、发 `rpc_join_denied("牌桌暂时坐不下,请稍后再来")` 并稍后断开,不发获准与牌局信息——否则他会被告知开局却不在会话里。入座后再发的座位表仍不含他(`seats_with_patrons()` 取本手的座位表)。
 - **视线**:对局中「本场成员」= 已完成握手的等待厅成员 `_lobby`。`rpc_look` 校验 `in_game and _lobby.has(sender)`;`_relay_gaze` 遍历 `_lobby.seat_order()`(跳过房主、发送者与未连接的人)。客户端只对当前桌上有酒客的 pid 应用视线。
 - `Net.seats` 在德州里只由 NetworkManager 写(开局与中途加入的引导);`PokerScreen` 自己保存座位表(演到 `hand_started` 时取它的 seats),对账时 `last_public.seats` 不同就重排。
 
@@ -452,7 +460,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
   - 随机模拟:固定 8 个种子 × 150 手,2–8 人,长短牌各半;每一步随机合法动作,穿插随机再领、加入、离开。每一步断言筹码守恒、金额非负且是 10 的倍数、BETTING 时一定有行动者、每手有限步内结束。失败信息带种子、手号与最近若干步动作。总耗时 < 10 秒;更长的浸泡测试只在命令行开关下跑。
   - `PokerViews`:**按字段路径**检查不泄露(牌值 8–59 会和筹码数、手数撞值,不能按数值搜):board 只含公共牌;没亮过的人 `shown` 为空;视图里带牌的键只有白名单(board、players[].shown);事件里手牌只能出现在 `reveal.hands` 与已亮过的人的 `pot_won.best`。没摊牌就赢的那手(公共牌 ≥ 3)任何事件与视图都不含赢家的手牌与牌型名。
   - `PokerPacing` 与导演节奏;`GameMode` / `RoomList`(含 v3 校验规则能接受新版德州报文、新版读到 cap/seated)/ `LobbyModel` / `Protocol` / RPC 编号冻结。
-  - 离线 NetworkManager(经 `_handle_join_request`、`_handle_poker_rpc`、`_handle_intent` 等内部函数):德州开局计时;一手间隔排期;回合中旁人再领只补 REBUY 预算、一手间隔中再领不缩短 `_hand_timer`;间隔里散局、断线到 1 人、`leave()` 后 `_hand_timer` 都已停;中途加入的完整顺序且下一手发牌,之后视线转发对象里有他;断线弃牌后行动继续;散局与回等待厅。
+  - 离线 NetworkManager(经 `_handle_join_request`、`_handle_poker_rpc`、`_handle_intent` 等内部函数):德州开局计时;一手间隔排期;回合中旁人再领只补 REBUY 预算、一手间隔中再领不缩短 `_hand_timer`;间隔里散局、断线到 1 人、`leave()` 后 `_hand_timer` 都已停;中途加入的完整顺序且下一手发牌,之后视线转发对象里有他;名单放行但会话拒收的迟到者只收到拒绝、不留在名单里;输光者在选择时间里断线则下一手提前到演完后 HAND_GAP;断线弃牌后行动继续;散局与回等待厅。
   - 输光选择时间:三人局一人输光后 3 秒再领 → 他在下一手的 dealt 里;都不选 → 下一手在演出后约 6 秒开始,不卡住;最后一个没选的人选了观战 → 间隔恢复 HAND_GAP。
   - 挂机离座:连续 2 次超时 → 下一手 `away`、不发牌、按钮与盲注跳过;sit_in 后下一手发牌;中间自己行动一次 → 清零。
   - 拆台:打完一手回等待厅 → `TableWorld` 下没有德州节点、酒客 Fan 下没有德州 Card3D;德州房间 → 离开 → 开骗子酒馆房间 → 桌子 0.95、立牌与烛台可见、有左轮、没有德州节点。
