@@ -4,6 +4,8 @@ extends SceneTree
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
 # --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
+# --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
+# 文件名带状态,同一机位可以拍几种底部区域。
 
 
 const WARMUP_FRAMES := 45
@@ -12,6 +14,8 @@ const POKER_ME := 1
 
 var opts := {}
 var _poker_world: TableWorld = null
+var _poker: Node = null
+var _ui: Control = null
 
 
 func _initialize() -> void:
@@ -45,17 +49,22 @@ func _run() -> void:
 		root.add_child(poker)
 		await poker.build(tavern)
 		_poker_world = poker.world
+		_poker = poker
 	var views: PackedStringArray = opts.get("views", "seat").split(",")
-	for view in views:
+	var hud_states: PackedStringArray = opts.get("hud", "").split(",")
+	for index in views.size():
+		var view: String = views[index]
+		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
 		if view.begins_with("poker_"):
 			_place_poker_camera(tavern, view)
+			_stage_hud(tavern, view, hud_state)
 		else:
 			_place_camera(tavern.camera_rig, view)
 		for i in WARMUP_FRAMES:
 			await process_frame
 		for i in SETTLE_DRAWS:
 			RenderingServer.force_draw(false)
-		var path := "%s/%s.png" % [out_dir, view]
+		var path := "%s/%s.png" % [out_dir, view if hud_state == "" else view + "_" + hud_state]
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)
 	quit()
@@ -124,3 +133,18 @@ func _poker_table(tavern: Tavern) -> TableWorld:
 		tavern.set_table_decor_visible(false)
 		_poker_world.cards.set_stand_visible(false)
 	return _poker_world
+
+
+func _stage_hud(tavern: Tavern, view: String, state: String) -> void:
+	# 德州 HUD 叠在展台上(等待厅机位没有 HUD);同 main._ui_layer:CanvasLayer + 全屏根控件 + 主题
+	if _poker == null or state == "" or view == "poker_lobby":
+		return
+	if _ui == null:
+		var layer := CanvasLayer.new()
+		root.add_child(layer)
+		_ui = Control.new()
+		_ui.theme = UiTheme.theme()
+		_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_ui)
+	_poker.stage_hud(_ui, tavern.camera_rig.camera, state)
