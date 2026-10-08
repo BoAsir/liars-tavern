@@ -50,14 +50,15 @@ const LOOK := {
 
 # 虎斑纹:头上的贴花条(方位角°, 高度),半宽°
 const HEAD_STRIPES := [
-	[[Vector2(0, 0.192), Vector2(0, 0.252)], 3.2],                                     # 额头 M 纹中线
-	[[Vector2(8, 0.2), Vector2(12, 0.25)], 2.6, "mirror"],                             # M 纹内侧两笔
-	[[Vector2(47, 0.152), Vector2(65, 0.142), Vector2(84, 0.126)], 4.2, "mirror"],     # 颊纹(眼角往后)
-	[[Vector2(52, 0.108), Vector2(70, 0.098), Vector2(88, 0.086)], 3.6, "mirror"],
-	[[Vector2(96, 0.205), Vector2(130, 0.21), Vector2(166, 0.204)], 4.6, "mirror"],    # 后脑三道横纹
-	[[Vector2(100, 0.152), Vector2(134, 0.152), Vector2(168, 0.146)], 4.6, "mirror"],
-	[[Vector2(106, 0.098), Vector2(140, 0.092), Vector2(170, 0.086)], 4.2, "mirror"],
-	[[Vector2(180, 0.215), Vector2(180, 0.06)], 3.6],                                  # 后颈中线
+	[[Vector2(0, 0.19), Vector2(0, 0.255)], 4.0],                                      # 额头 M 纹中线
+	[[Vector2(9, 0.198), Vector2(13, 0.255)], 3.4, "mirror"],                          # M 纹内侧两笔
+	[[Vector2(25, 0.208), Vector2(32, 0.25)], 3.0, "mirror"],                          # M 纹外侧两笔(眉梢上方)
+	[[Vector2(42, 0.156), Vector2(62, 0.146), Vector2(84, 0.128)], 5.4, "mirror"],     # 颊纹(眼角往后)
+	[[Vector2(48, 0.108), Vector2(68, 0.098), Vector2(88, 0.084)], 4.6, "mirror"],
+	[[Vector2(96, 0.205), Vector2(130, 0.21), Vector2(166, 0.204)], 5.4, "mirror"],    # 后脑三道横纹
+	[[Vector2(100, 0.152), Vector2(134, 0.152), Vector2(168, 0.146)], 5.4, "mirror"],
+	[[Vector2(106, 0.098), Vector2(140, 0.092), Vector2(170, 0.086)], 5.0, "mirror"],
+	[[Vector2(180, 0.215), Vector2(180, 0.06)], 4.4],                                  # 后颈中线
 ]
 
 
@@ -107,8 +108,8 @@ static func _ear_rings(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 			var h := 0.09
 			while h > -0.02 and not _in_cowboy_hat(to_hat * _ear_point(t, h, 0.0)):
 				h -= 0.004
-			ring.append(to_hat * _ear_point(t, h + 0.004, 0.006))
-		f.loft(ring, PackedVector2Array(Array(range(17)).map(func(_i: int) -> Vector2: return Vector2(0.0055, 0.0065))),
+			ring.append(to_hat * _ear_point(t, h + 0.009, 0.01))
+		f.loft(ring, PackedVector2Array(Array(range(17)).map(func(_i: int) -> Vector2: return Vector2(0.0095, 0.0095))),
 			6, Vector2i(0, 0))
 
 

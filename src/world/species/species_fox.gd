@@ -173,14 +173,19 @@ static func surface_point(origin: Vector3, shapes: Array, k: float, dir: Vector3
 
 
 static func panel(f: MeshForge, origin: Vector3, shapes: Array, k: float, dir: Callable, nu: int, nv: int, off := 0.006,
-		colors := Callable(), rim := true, wrap := false) -> Array:
+		colors := Callable(), rim := true, wrap := false, rows_v := PackedFloat32Array()) -> Array:
 	# 贴身衣片:dir(u, v) 给 (u, v) ∈ [0,1]² 的射线方向;colors(u, v) 可选逐顶点颜色;
-	# rim 为 false 时不做侧壁(贴花);wrap 时 u 首尾相接(绕一圈的腰带、裤腰)。返回 [外表面点行, 法线行]
+	# rim 为 false 时不做侧壁(贴花);wrap 时 u 首尾相接(绕一圈的腰带、裤腰);
+	# rows_v 可选:每行的 v 值(不均匀分行;两行 v 只差一点点就是一条硬边色带)。返回 [外表面点行, 法线行]
+	if rows_v.is_empty():
+		for j in nv + 1:
+			rows_v.append(float(j) / nv)
+	nv = rows_v.size() - 1
 	var surf := []
 	for j in nv + 1:
 		var row := PackedVector3Array()
 		for i in nu + 1:
-			row.append(MeshForge.blob_surface(origin, dir.call(float(i) / nu, float(j) / nv), shapes, k))
+			row.append(MeshForge.blob_surface(origin, dir.call(float(i) / nu, rows_v[j]), shapes, k))
 		surf.append(row)
 	var normals := _grid_normals(surf, origin, wrap)
 	var outer := []
@@ -191,7 +196,7 @@ static func panel(f: MeshForge, origin: Vector3, shapes: Array, k: float, dir: C
 		for i in nu + 1:
 			row.append(surf[j][i] + normals[j][i] * off)
 			if colors.is_valid():
-				var col: Color = colors.call(float(i) / nu, float(j) / nv)
+				var col: Color = colors.call(float(i) / nu, rows_v[j])
 				crow.append(Color(col.r, col.g, col.b, 1.0))
 		outer.append(row)
 		cols.append(crow)
@@ -304,7 +309,7 @@ static func _rim(f: MeshForge, surf: Array, normals: Array, off: float, wrap: bo
 
 
 static func band(f: MeshForge, origin: Vector3, shapes: Array, k: float, dirs: Array, half_width_deg: float, nv: int,
-		off := 0.006, colors := Callable(), rim := true, taper := 0.0) -> Array:
+		off := 0.006, colors := Callable(), rim := true, taper := 0.0, rows_v := PackedFloat32Array()) -> Array:
 	# 背带、毛巾、斑纹这类贴身长条:沿一串控制方向(折线插值)走,左右各 half_width_deg 宽;
 	# taper > 0 时两头收尖(虎斑纹),rim 为 false 时是不带侧壁的贴花
 	var count := dirs.size()
@@ -315,4 +320,4 @@ static func band(f: MeshForge, origin: Vector3, shapes: Array, k: float, dirs: A
 		var tangent: Vector3 = (dirs[i + 1] as Vector3).normalized() - (dirs[i] as Vector3).normalized()
 		var side := d.cross(tangent).normalized()
 		var w := deg_to_rad(half_width_deg) * lerpf(1.0, maxf(sin(v * PI), 0.12), taper)
-		return d + side * w * (u * 2.0 - 1.0), 2, nv, off, colors, rim)
+		return d + side * w * (u * 2.0 - 1.0), 2, nv, off, colors, rim, false, rows_v)

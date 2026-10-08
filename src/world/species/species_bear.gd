@@ -72,40 +72,40 @@ static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	for side: float in [-1.0, 1.0]:
 		PatronBuilder.paint(f, pal, "vest", 0.7, PatronBuilder.CLOTH)
 		Kit.panel(f, c, shapes, k, func(u: float, v: float) -> Vector3:
-			var y := lerpf(0.5, lerpf(-0.01, 0.06, u), v)
+			var y := lerpf(0.5, lerpf(0.03, 0.085, u), v)
 			var a_in := lerpf(15.0, -2.0, clampf((0.5 - y) / 0.22, 0.0, 1.0))
 			var a_out := lerpf(52.0, 100.0, smoothstep(0.44, 0.33, y))
-			return Kit.aim(c, lerpf(a_in, a_out, u) * side, y), 6, 10, 0.007 if side > 0.0 else 0.006)
+			return Kit.aim(c, lerpf(a_in, a_out, u) * side, y), 7, 12, 0.0085 if side > 0.0 else 0.0075)
 	PatronBuilder.paint(f, pal, "vest_back", 0.45, PatronBuilder.CLOTH)
 	Kit.panel(f, c, shapes, k, func(u: float, v: float) -> Vector3:
 		var a := lerpf(100.0, 260.0, u)
 		var top := lerpf(0.53, 0.33, smoothstep(45.0, 78.0, absf(a - 180.0)))
-		return Kit.aim(c, a, lerpf(top, 0.06, v)), 8, 7, 0.0055)
+		return Kit.aim(c, a, lerpf(top, 0.08, v)), 8, 7, 0.0065)
 	# 背心滚边:前襟一条深酒红细边
 	PatronBuilder.paint(f, pal, "piping", 0.6, PatronBuilder.CLOTH)
 	for side: float in [-1.0, 1.0]:
 		var edge := PackedVector3Array()
 		for i in 9:
-			var y := lerpf(0.5, -0.0, i / 8.0)
+			var y := lerpf(0.5, 0.035, i / 8.0)
 			var a_in := lerpf(15.0, -2.0, clampf((0.5 - y) / 0.22, 0.0, 1.0))
-			edge.append(Kit.surface_point(c, shapes, k, Kit.aim(c, (a_in + 0.6) * side, y), 0.0095 if side > 0.0 else 0.0085))
+			edge.append(Kit.surface_point(c, shapes, k, Kit.aim(c, (a_in + 0.6) * side, y), 0.011 if side > 0.0 else 0.01))
 		f.tube(edge, 0.0035, 5)
 	# 四颗铜扣
 	PatronBuilder.paint(f, pal, "brass", 0.3, PatronBuilder.METAL, 1.0)
 	for i in 4:
-		var p := Kit.surface_point(c, shapes, k, Kit.aim(c, 2.5, 0.29 - i * 0.075), 0.012)
+		var p := Kit.surface_point(c, shapes, k, Kit.aim(c, 2.5, 0.3 - i * 0.07), 0.0135)
 		f.sphere(0.011, 10, PatronBuilder.xf(p, Vector3.ZERO, Vector3(1.0, 1.0, 0.7)))
 	# 怀表链:第二颗扣子垂到左侧口袋
 	var chain := PackedVector3Array()
 	for i in 9:
 		var t := i / 8.0
-		chain.append(Kit.surface_point(c, shapes, k, Kit.aim(c, lerpf(-3.0, -34.0, t), lerpf(0.215, 0.17, t) - sin(t * PI) * 0.05), 0.01))
+		chain.append(Kit.surface_point(c, shapes, k, Kit.aim(c, lerpf(-3.0, -34.0, t), lerpf(0.23, 0.18, t) - sin(t * PI) * 0.05), 0.0115))
 	f.tube(chain, 0.003, 5)
 	# 背心口袋:两道深色口袋盖
 	PatronBuilder.paint(f, pal, "piping", 0.6, PatronBuilder.CLOTH)
 	for side: float in [-1.0, 1.0]:
 		Kit.panel(f, c, shapes, k, func(u: float, v: float) -> Vector3:
-			return Kit.aim(c, lerpf(22.0, 42.0, u) * side, lerpf(0.185, 0.165, v) - u * 0.012), 3, 1, 0.0095)
+			return Kit.aim(c, lerpf(22.0, 42.0, u) * side, lerpf(0.195, 0.175, v) - u * 0.012), 3, 1, 0.011)
 	# 蝴蝶结:领口正中,两片鼓起的翼加中间的结
 	var bow := Vector3(0, 0.548, -0.128)
 	var brown := PatronBuilder.color(pal, "accent")
@@ -120,8 +120,17 @@ static func _body(f: MeshForge, look: Dictionary, pal: Dictionary) -> void:
 	var towel := PatronBuilder.color(pal, "towel")
 	var stripe := PatronBuilder.color(pal, "stripe")
 	PatronBuilder.paint(f, pal, "towel", 0.95, PatronBuilder.KNIT)
+	var rows := PackedFloat32Array()
+	var edges := [0.04, 0.085, 0.12, 0.16]
+	for j in 25:
+		rows.append(j / 24.0)
+	for e: float in edges:
+		for v: float in [e, 1.0 - e]:
+			rows.append(v - 0.0004)
+			rows.append(v + 0.0004)
+	rows.sort()
 	Kit.band(f, Vector3(-0.12, 0.35, -0.01), towel_shapes, k, [Vector3(-0.02, -0.1, 0.2), Vector3(-0.01, 0.08, 0.2),
-		Vector3(-0.02, 0.2, 0.08), Vector3(-0.025, 0.2, -0.06), Vector3(-0.01, 0.06, -0.2), Vector3(0.0, -0.08, -0.2), Vector3(0.0, -0.2, -0.2)], 15.0, 30, 0.014,
-		func(_u: float, v: float) -> Color:
+		Vector3(-0.02, 0.2, 0.08), Vector3(-0.025, 0.2, -0.06), Vector3(-0.01, 0.06, -0.2), Vector3(0.0, -0.08, -0.2), Vector3(0.0, -0.2, -0.2)],
+		15.0, 0, 0.014, func(_u: float, v: float) -> Color:
 			var e := minf(v, 1.0 - v)
-			return stripe if (e > 0.04 and e < 0.09) or (e > 0.12 and e < 0.16) else towel)
+			return stripe if (e > edges[0] and e < edges[1]) or (e > edges[2] and e < edges[3]) else towel, true, 0.0, rows)
