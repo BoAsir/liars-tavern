@@ -1,11 +1,12 @@
 extends RefCounted
-# 主菜单「开一桌」标题行上的玩法三段切换:互斥的小号切换按钮,按 GameMode.ALL 的顺序排、预选传入的玩法。
+# 主菜单「开一桌」标题行上的玩法切换:互斥的小号切换按钮,按 GameMode.menu_modes() 的顺序排、预选传入的玩法。
 # 挤在标题行里不另占一行(1280×720 下面板不用滚动),所以每种状态的样式都换成小内边距:
 # 按钮的最小尺寸取各状态样式里最大的那个。切到别的玩法回调 on_select(mode),被挤掉的按钮不回调。
 
 
 const FONT_SIZE := 15
-const PADDING := Vector2(10, 4)   # 左右, 上下
+const PADDING := Vector2(9, 4)    # 左右, 上下
+const SEPARATION := 6             # 四个按钮(加了炸弹猫)挤在标题行里,按钮间距收窄才不撑宽 480 宽的面板
 const BORDER_WIDTH := 1
 const RADIUS := 6
 const FOCUS_RING_WIDTH := 2
@@ -23,9 +24,9 @@ const DISABLED_BORDER_ALPHA := 0.3
 
 static func build(selected: String, on_select: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", SEPARATION)
 	var group := ButtonGroup.new()
-	for mode in GameMode.ALL:
+	for mode in GameMode.menu_modes():
 		row.add_child(_button(mode, group, mode == selected, on_select))
 	return row
 
