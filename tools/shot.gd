@@ -7,6 +7,7 @@ extends SceneTree
 
 
 const WARMUP_FRAMES := 45
+const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
 const POKER_ME := 1
 
 var opts := {}
@@ -18,6 +19,14 @@ func _initialize() -> void:
 		var kv := arg.trim_prefix("--").split("=", true, 1)
 		opts[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	process_frame.connect(_run, CONNECT_ONE_SHOT)
+	process_frame.connect(_draw_when_covered)
+
+
+func _draw_when_covered() -> void:
+	# 窗口被别的窗口挡住时 macOS 不再调度正常绘制:牌面生成与截图里等 frame_post_draw 会永远卡住。
+	# 每帧强制绘制一次(不交换缓冲),frame_post_draw 照常发出,不依赖窗口可见
+	if not DisplayServer.window_can_draw():
+		RenderingServer.force_draw(false)
 
 
 func _run() -> void:
@@ -44,7 +53,8 @@ func _run() -> void:
 			_place_camera(tavern.camera_rig, view)
 		for i in WARMUP_FRAMES:
 			await process_frame
-		await RenderingServer.frame_post_draw
+		for i in SETTLE_DRAWS:
+			RenderingServer.force_draw(false)
 		var path := "%s/%s.png" % [out_dir, view]
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)

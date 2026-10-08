@@ -66,7 +66,7 @@ static func situation(pub: Dictionary, my_pid: int) -> Dictionary:
 			continue
 		if p.get("bet") is int:
 			pot += maxi(p["bet"], 0)
-		if p.get("pid") != my_pid and p.get("status") == PokerRules.STATUS_ACTIVE and p.get("left", false) != true:
+		if p.get("pid") != my_pid and p.get("status") == PokerRules.STATUS_ACTIVE and not PokerNameplate.has_left(p):
 			live += 1
 	var current_bet: int = pub["current_bet"] if pub.get("current_bet") is int else 0
 	return {"legal": legal, "current_bet": current_bet, "pot": pot, "opponents_live": live}
