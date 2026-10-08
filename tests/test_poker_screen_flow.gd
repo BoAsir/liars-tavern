@@ -56,6 +56,9 @@ var names := {1: "我", 2: "乙", 3: "丙", 9: "迟到"}
 
 func before_each():
 	saved = {"seats": Net.seats, "pub": Net.last_public, "priv": Net.last_private, "mode": Net.game_mode, "scale": Engine.time_scale}
+	# 前面的联机测试 leave() 后会把整棵树共用的 multiplayer_peer 置空,本屏幕 _ready 里要读 Net.my_pid()
+	if multiplayer.multiplayer_peer == null:
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	Engine.time_scale = SPEED
 	PokerFaces.clear()
 	app = StubApp.new()
