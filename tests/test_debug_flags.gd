@@ -36,3 +36,15 @@ func test_species_line_lists_ids_in_seat_order():
 	var entries := [{"pid": 1, "species": 7}, {"pid": 2034, "species": 0}, {"pid": 99, "species": -1},
 		{"pid": 5, "species": "x"}]
 	assert_eq(DebugFlags.species_line(entries), "[debug] species {1: crocodile, 2034: fox, 99: -, 5: -}")
+
+
+# —— --mode=<玩法>:房主开房的玩法(冒烟测试用它开一桌炸弹猫)——
+
+func test_host_mode_reads_a_known_mode():
+	assert_eq(DebugFlags.host_mode({"mode": "bomb_cat"}), GameMode.BOMB_CAT)
+	assert_eq(DebugFlags.host_mode({"mode": "short_deck"}), GameMode.SHORT_DECK)
+	assert_eq(DebugFlags.host_mode({}), GameMode.DEFAULT, "没给用默认玩法")
+
+
+func test_unknown_host_mode_falls_back_to_the_default():
+	assert_eq(DebugFlags.host_mode({"mode": "chess"}), GameMode.DEFAULT)

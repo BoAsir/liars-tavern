@@ -374,3 +374,87 @@
    不行! 按钮亮起条件 = `step == "window"`、自己活着且手里有 `nope`;塞回滑块范围 = 私有视图 `reinsert.deck_count`;给牌提示看私有视图 `give`。
 4. 说明书「炸弹猫」一本(牌名与一行说明取 `BombCatCard.display_name` / `description`,数量取 `BombCatDeck.action_counts`)。
 5. 机器人(`debug_flags.gd`)与 `tools/lan_smoke.sh` 的炸弹猫一局;`tools/shot.gd` 展台。可以直接复用 `tests/test_bomb_cat_fuzz.gd` 里挑合法意图的写法。
+
+## 8. 实施记录(阶段二:牌桌、HUD、导演、3D、牌面、音效、说明书、机器人、冒烟与展台,2026-10-09)
+
+阶段一的事件 / 视图 / 意图字段一个没改,阶段二全部搭在 §7 的接口上;规则引擎没有改动(没发现引擎的 bug)。
+
+### 8.1 文件
+
+- 牌桌(`src/ui/bomb_cat/`):
+  - `bomb_cat_screen.gd`(不声明 class_name,同德州牌桌,由 main 预载):接 `game_events` / 视图 / `intent_rejected`(toast `BombCatState.ERROR_MESSAGES`);
+    进牌桌先 `apply_table_mode` 再按 `SeatLayout.table_radius_for(mode, 人数)` 摆桌(5–6 人大桌);事件排队交给导演,演完用视图对账。
+    出手入口(按钮、快捷键、机器人共用):`toggle_card` / `submit_play` / `choose_target` / `choose_named` / `submit_draw` / `submit_nope` /
+    `submit_reinsert` / `submit_give`;`intent_sink` 是测试钩子(不走 Net,直接交给本地会话)。
+  - `bomb_cat_screen_state.gd`(`BombCatScreenState`):视图 + 按事件推进的影子行(张数、存活、牌堆、炸弹、当前玩家与回合数、步骤、窗口、最近的弃牌),
+    屏幕上的自己的手牌 `shown_hand`(出牌按提交的下标拿走、摸到 / 拿到的牌等私有视图到了再追加,演完以私有视图为准),出手规则与结算名次。
+  - `bomb_cat_hud.gd`(`BombCatHud`)、`bomb_cat_hand_strip.gd`(`BombCatHandStrip`,2D 手牌条)、`bomb_cat_nameplate.gd`、
+    `bomb_cat_settlement.gd`(版式照搬骗子酒馆的 `Settlement`,但只发 `lobby_pressed` / `leave_pressed` 信号、不直接调 Net,截图展台也能用)、
+    `bomb_cat_director.gd`(`BombCatDirector`)、`bomb_cat_bot.gd`(`BombCatBot`)。
+- 3D 与牌面(`src/world/bomb_cat/`):`bomb_cat_faces.gd`(`BombCatFaces`:14 层数组纹理 + 烫金遮罩 + 一份共享 `ShaderMaterial` + 牌堆侧面材质)、
+  `bomb_cat_face_painter.gd`、`bomb_card_3d.gd`(`BombCard3D extends Card3D`)、`bomb_cat_layout.gd`(纯函数)、`bomb_cat_cards.gd`(`BombCatCards`,挂在 `TableWorld.poker_root` 下)。
+- 共用件的增补(骗子酒馆 / 德州行为不变):`Fx.fuse_sparks / explosion / head_smoke`;`patron.gdshader` 新实例参数 `soot`(默认 0);
+  `Patron.cover_mouth / snip_wires / set_soot`;`PatronAntics.sweat / giggle`;`Sfx` 的 `fuse` `boom` `snip` `nope_slap` `riffle`;
+  说明书 `RulebookBombCat` 与块类型 `bomb_cards`;`main` 的 `_exit_tree` 加 `BombCatFaces.clear()`;等待厅选了炸弹猫就后台生成牌面。
+- 工具:`tools/bomb_cat_showcase.gd`、`tools/shot.gd --bomb-cat-showcase`、`tools/perf_probe.gd --showcase=bomb_cat`、`tools/perf_budget.gd` 的 bomb_* 机位、
+  `tools/bomb_cat_faces_sheet.gd`(牌面验收图)、`tools/lan_smoke.sh` 的炸弹猫一局、`DebugFlags --mode=`。
+
+### 8.2 表现上定下的细节
+
+- 牌桌布局(本机座位在 +Z):牌堆在桌心左、弃牌堆在右,桌上的牌放大 1.8 倍。牌堆 = 一块按张数缩放的纸边盒子(`BoxMesh`,三平面贴纸页线)+ 顶上一张牌背;
+  弃牌堆 = 纸边盒子 + 顶上最多 5 张正面朝上、按全局序号确定性稍乱的牌(各端一致,后压上的牌不挪动前面的)。出局者的手牌飞进弃牌堆底(看不到是哪张)。
+- 卡面 320×462(与 Card3D 同比例),层序 `[牌背, BombCatCard.ALL…]`;card.gdshader v2 照用,所有炸弹猫的牌共用 `BombCatFaces.material()` 一份(实例参数 `face`)。
+  每张牌:主色横幅 + 首字小圆章(牌扇里只露左边也认得出)+ 金边圆盘里的大图标 + 底部一行 `BombCatCard.description`。牌背:深红斜格 + 金色圆章里的「炸弹猫」剪影与火花。
+- 牌扇:≤ 10 张每张间隔 4.5 cm;超过 10 张保持 10 张的总宽、挤得更近(每张仍是一张牌,不加网格);整扇最多转 36°。
+  自己的牌扇:小桌按骗子酒馆的举牌位置、大桌按德州的位置,都再抬高 10–13 cm、缩小到 0.82(底部 HUD 比骗子酒馆高);第一人称拿在镜头右下方。
+- 摸到炸弹:炸弹牌从牌堆顶翻起来,立在摸牌人面前偏右、牌面朝桌心,导火索冒火花(世界坐标粒子);镜头推近到 `BombCatLayout.bomb_view`(从桌心斜上方看他的脸)。
+  拆弹:双手在胸前来回比划 + 冒冷汗,拆弹牌飞进弃牌堆,「咔嚓」后松一口气;塞回:炸弹翻成背面插进牌堆中间(不暴露位置)。
+  爆炸:闪光 + 火核 + 四散火花 + 深浅两团烟、震屏、灯晃,`die()`(蚊香眼 → ×、星星、帽子飞走)+ `set_soot(1.0)` 黑灰脸 + 两缕头顶黑烟;自己被炸就转观战俯视。
+- 偷看:自己打的偷看,三张牌浮在镜头前(挂在相机下,只在本机),同时画面上方一块小的 2D 浮层(从上到下第 1–3 张,炸弹标红)。点「知道了」、点牌、Esc,
+  或牌堆一变(私有视图的 peek 清空)就收起。别人只看到他捂嘴偷乐。
+- 转手(讨要 / 两张零食 / 三张零食):一张牌从一人牌扇飞到另一人牌扇;只有当事人(私有视图的 `transfer`)看到正面,其余人看到牌背。
+- HUD 底部:「出牌」· 2D 手牌条 ·「摸牌」并排一行(不叠高),其上依次是回合横幅 + 环形倒计时、选目标 / 点名 / 塞回 / 给牌的临时面板、反应窗口条。
+  反应窗口条:「谁打出了什么 → 谁 · 被不行几次(作废 / 又生效)」+ 倒计时条(房主剩余 / 3 秒)+ 大「不行!」按钮(活着才显示,手里有才按得动)。
+  环形倒计时的满格按步骤取:回合 30 秒、窗口 3 秒、塞回 15 秒、给牌 15 秒。左上:牌堆张数、剩余炸弹(小炸弹图标)、轮到谁(被甩时写还要走几回合)、自己的手牌 / 拆弹 / 不行! 数。
+- 选牌:单张功能牌只能单选;零食可以选两三张一样的;点别的牌就换成选那张。选目标:3D 里点酒客(头的屏幕投影 ≤ 140 像素)或点弹出的名单,Esc 取消;三张零食接着点名(除炸弹外 12 种)。
+- 快捷键:1–9 选牌(被讨要时就是给牌)、Enter 出牌(塞回时是确认)、空格摸牌、N 不行!、←→ 微调塞回位置。**D 不用来摸牌**(它是探头键,按住会伸脖子)。
+  快捷语面板开着时数字键一律归面板:BanterView 先拦 1–8,牌桌对 9 也不响应。
+- 回执:任何一批事件到达都算房主处理过了,解除「等回执」;「不行!」单独记着,等自己的 `noped` 或被拒。
+- 机位:常驻两种(座位越肩 / 第一人称,共用 `SeatCamera`;出局后观战俯视),特写一种(摸到炸弹),胜利环绕胜者。
+
+### 8.3 演出预算
+
+导演每段演出都在 `BombCatPacing` 的预算之内(`test_bomb_cat_director` 按最坏情况加上每个 await 一帧余量核对),阶段一的预算没有收紧
+(收紧会让窗口 / 塞回的计时更紧,先保持;实测余量:出牌约 0.2 秒、爆炸约 0.6 秒、发牌 6 人约 0.25 秒)。
+
+| 事件 | 实际(秒) | 预算 |
+|---|---|---|
+| 发牌(6 人 48 张) | 0.4 等私有手牌 + 2.25 | 3.0 |
+| 出牌(三张零食) | 0.63 | 0.8 |
+| 不行! | 0.44 | 0.7 |
+| 偷看 | 0.95 | 1.2 |
+| 洗牌 | 0.85 | 1.0 |
+| 转手 | 0.65 | 0.9 |
+| 摸牌 | 0.45 | 0.6 |
+| 摸到炸弹 | 1.75 | 2.0 |
+| 拆弹 | 1.3 | 1.6 |
+| 塞回 | 0.55 | 0.8 |
+| 爆炸 | 2.8 | 3.5 |
+| 结算谢幕 | 2.2 | 3.0 |
+
+### 8.4 验证
+
+- 测试(全部无头):`test_bomb_cat_screen_state`(与真实会话逐批核对影子行)、`test_bomb_cat_screen`(快捷键、出手路径、回执、塞回范围、给牌)、
+  `test_bomb_cat_hud`、`test_bomb_cat_world`(数组纹理层数、共享材质、牌扇压缩、对账、偷看浮牌、拆台)、`test_bomb_cat_director`、`test_rulebook_bomb_cat`、
+  `test_bomb_cat_screen_flow`(真的牌桌 + 导演 + 会话,3 人与 6 人各打完一整局到结算;真的 BanterView 压在牌桌上拦数字键),以及 perf_budget / debug_flags 的新条目。
+- `tools/lan_smoke.sh`:骗子酒馆那局照旧,之后炸弹猫一局(房主 + 发现 + 直连,机器人走牌桌真实入口),三端都打到 MATCH_OVER、胜者一致、无脚本错误。
+- 性能(M3,`perf_probe --showcase=bomb_cat --cases=budget`):6 人桌 bomb_seat 379 draw call(可见 147 + 阴影 232)、bomb_fp 360、bomb_overview 392,
+  都在 700 / 900 之内。帧时间在这台机器上当时约 30 ms,同一时刻骗子酒馆 4 人 seat 也是 30 ms、德州 8 人 31 ms(机器整体变慢,不是炸弹猫的开销;
+  炸弹猫约为骗子酒馆的 1.1 倍)。
+
+### 8.5 已知问题与后续
+
+- 摸到炸弹的特写机位是固定公式(从桌心斜上方看摸牌人),小桌上烛台偶尔挡住一角。
+- 观战俯视时自己的(倒下的)酒客仍在画面下方;骗子酒馆也是这样,没有藏。
+- 2D 手牌条超过 9 张时第 10 张起没有数字键(只能点)。
+- 帧时间预算(10 ms)在当前机器状态下所有玩法都超,需要在机器空闲时复测。

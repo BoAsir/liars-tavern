@@ -243,6 +243,8 @@ func _apply_table_mode() -> void:
 	app.apply_table_mode(_table_mode)
 	if GameMode.is_poker(_table_mode) and is_inside_tree():
 		PokerFaces.build(self)
+	if GameMode.is_bomb_cat(_table_mode) and is_inside_tree():
+		BombCatFaces.build(self)   # 炸弹猫牌面同理(一批画完,约两帧)
 	app.tavern.camera_rig.move_to(app.world.lobby_view(), CAMERA_MOVE_TIME)
 
 

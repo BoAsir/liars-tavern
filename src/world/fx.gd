@@ -94,6 +94,55 @@ static func muzzle_flash(parent: Node3D, xform: Transform3D) -> void:
 	tween.chain().tween_callback(root.queue_free)
 
 
+static func fuse_sparks(parent: Node3D, local_pos: Vector3) -> GPUParticles3D:
+	# 炸弹猫:导火索嘶嘶冒火花(持续发射,挂在炸弹牌上跟着走);停下时把 emitting 置假,发完最后一批自行释放
+	var particles := _particles(local_pos, 70, 0.5, false)
+	var pm := _process_material(Vector3.ONE * 0.003, Vector3.UP, 70.0, Vector2(0.15, 0.55))
+	pm.gravity = Vector3(0, -1.2, 0)
+	pm.scale_min = 0.5
+	pm.scale_max = 1.5
+	pm.color_ramp = _ramp([Color(1.0, 0.75, 0.3), Color(1.0, 0.45, 0.08), Color(0.8, 0.15, 0.0, 0.0)])
+	particles.process_material = pm
+	particles.draw_pass_1 = _additive_quad(0.016, 4.0)
+	particles.local_coords = false
+	particles.visibility_aabb = AABB(Vector3(-0.6, -0.6, -0.6), Vector3(1.2, 1.2, 1.2))
+	parent.add_child(particles)
+	particles.finished.connect(particles.queue_free)
+	return particles
+
+
+static func explosion(parent: Node3D, pos: Vector3) -> void:
+	# 炸弹猫爆炸:比枪口焰大得多的闪光与火核、四面八方的火花、两团(深灰 + 浅灰)翻滚的烟。复用枪口焰的火核网格与硝烟
+	var root := Node3D.new()
+	parent.add_child(root)
+	root.global_position = pos
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.66, 0.32)
+	light.light_energy = 14.0
+	light.omni_range = 6.0
+	root.add_child(light)
+	var core := MeshInstance3D.new()
+	core.mesh = core_mesh()
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	core.scale = Vector3.ONE * 0.6
+	core.set_instance_shader_parameter("spin", randf() * TAU)
+	root.add_child(core)
+	root.add_child(_burst(Vector3.ZERO, Vector3.UP, 48, 0.6, Color(1.0, 0.7, 0.25), 180.0))
+	var tween := root.create_tween().set_parallel()
+	tween.tween_property(light, "light_energy", 0.0, 0.5).set_ease(Tween.EASE_OUT)
+	tween.tween_property(core, "scale", Vector3.ONE * 3.2, 0.1)
+	tween.tween_property(core, "scale", Vector3.ONE * 0.01, 0.22).set_delay(0.1)
+	tween.chain().tween_interval(1.5)
+	tween.chain().tween_callback(root.queue_free)
+	smoke_puff(parent, pos, 34, Color(0.28, 0.26, 0.25))
+	smoke_puff(parent, pos + Vector3(0, 0.08, 0), 20, Color(0.62, 0.6, 0.58))
+
+
+static func head_smoke(parent: Node3D, pos: Vector3) -> void:
+	# 被炸黑的头顶冒一小缕黑烟
+	smoke_puff(parent, pos, 8, Color(0.22, 0.2, 0.2))
+
+
 static func core_mesh() -> ArrayMesh:
 	if not _meshes.has("core"):
 		_meshes["core"] = _fire_quads(func(f: MeshForge):

@@ -33,3 +33,12 @@ func test_missing_stats_are_not_violations():
 
 func test_unknown_view_reports_nothing():
 	assert_eq(PerfBudget.violations("nowhere", {"draw_calls": 99999}).size(), 0)
+
+
+func test_bomb_cat_views_have_budgets():
+	# 炸弹猫 6 人桌:座位与第一人称 ≤ 700 draw call(同越肩),俯视与特写同其余机位
+	assert_eq(PerfBudget.LIMITS["bomb_seat"]["draw_calls"], 700)
+	assert_eq(PerfBudget.LIMITS["bomb_fp"]["draw_calls"], 700)
+	assert_eq(PerfBudget.LIMITS["bomb_overview"]["draw_calls"], 900)
+	assert_eq(PerfBudget.LIMITS["bomb_close"]["draw_calls"], 900)
+	assert_eq(PerfBudget.violations("bomb_seat", {"draw_calls": 701}).size(), 1)

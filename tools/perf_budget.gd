@@ -19,6 +19,11 @@ const LIMITS := {
 	"fireplace": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"overhead": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 	"selfshot": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	# 炸弹猫 6 人大桌展台(perf_probe --showcase=bomb_cat):座位与第一人称同骗子酒馆的越肩预算,俯视与特写按其余机位
+	"bomb_seat": {"draw_calls": 700, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"bomb_fp": {"draw_calls": 700, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"bomb_overview": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
+	"bomb_close": {"draw_calls": OTHER_VIEW_DRAW_CALLS, "frame_ms": FRAME_MS, "cpu_ms": CPU_MS, "lights": MAX_LIGHTS},
 }
 
 
