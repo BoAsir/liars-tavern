@@ -84,6 +84,7 @@ func _exit_tree() -> void:
 	Card3D.clear_materials()
 	CardFaces.clear()
 	WorldMaterials.clear_cache()
+	MeshKit.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 

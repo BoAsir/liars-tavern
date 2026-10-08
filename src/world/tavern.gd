@@ -180,8 +180,7 @@ func _build_lamp() -> void:
 	MeshKit.add(_lamp_pivot, MeshKit.cylinder(0.006, 0.006, LAMP_DROP, 6), WorldMaterials.iron(),
 		Vector3(0, -LAMP_DROP / 2.0, 0))
 	var shade_y := -LAMP_DROP - 0.1
-	var shade_mesh := MeshKit.cylinder(0.07, 0.36, 0.2, 48)
-	shade_mesh.cap_bottom = false
+	var shade_mesh := MeshKit.cylinder(0.07, 0.36, 0.2, 48, MeshKit.CAPS_TOP)
 	var shade_mat := StandardMaterial3D.new()
 	shade_mat.albedo_color = Color(0.12, 0.2, 0.14)
 	shade_mat.metallic = 0.6
