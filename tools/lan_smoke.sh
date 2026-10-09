@@ -5,7 +5,8 @@
 # 三人都要鳄鱼(--species=crocodile):三个日志最后一条 [debug] species 完全一致,房主是 crocodile,
 # 另外两人各不相同且不是 crocodile(先到先得,被占时房主给空着的)。
 # 接着再跑一局炸弹猫(--mode=bomb_cat,同样 1 房主 + 发现 + 直连,机器人走牌桌的真实入口出牌、不行!、摸牌、塞回、给牌):
-# 三个进程都以 0 退出、都打到 MATCH_OVER、三端的胜者一致、日志里没有脚本错误。SKIP_BOMB_CAT=1 时只跑骗子酒馆。
+# 三个进程都以 0 退出、都打到 MATCH_OVER、三端的胜者一致、都收到另外两人的九宫格快捷对话(QUIPS heard=2)、日志里没有脚本错误。
+# SKIP_BOMB_CAT=1 时只跑骗子酒馆。
 set -u
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -97,12 +98,12 @@ if [ "${SKIP_BOMB_CAT:-0}" != "1" ]; then
 		errors=$(grep -c "SCRIPT ERROR" "$log" || true)
 		winner=$(grep -m1 -o "MATCH_OVER winner=[0-9]*" "$log" || true)
 		winners+=("$winner")
-		if [ "$code" -ne 0 ] || [ -z "$winner" ] || [ "$errors" -ne 0 ]; then
+		if [ "$code" -ne 0 ] || [ -z "$winner" ] || [ "$errors" -ne 0 ] || ! grep -q "QUIPS heard=2" "$log"; then
 			echo "FAIL $name (exit=$code, script_errors=$errors) — 日志:$log"
 			grep -A3 "SCRIPT ERROR\|FAIL" "$log" | head -20
 			status=1
 		else
-			echo "ok   $name — 炸弹猫 $winner"
+			echo "ok   $name — 炸弹猫 $winner · $(grep -m1 -o "QUIPS heard=[0-9]*" "$log")"
 		fi
 	done
 	if [ -z "${winners[0]}" ] || [ "${winners[0]}" != "${winners[1]}" ] || [ "${winners[0]}" != "${winners[2]}" ]; then
