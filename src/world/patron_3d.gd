@@ -36,6 +36,15 @@ const HAND_RAISED := Vector3(0.24, 0.82, -0.32)
 const HAND_GUN_HEAD := Vector3(0.33, 0.85, -0.05)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
+# 举枪:枪口抵在太阳穴(头部右侧略靠前的球面方向)外一点,枪身从太阳穴斜向外上方伸出——
+# 手按枪长放到头侧,枪管水平地指向太阳穴,不会从帽檐上方斜插下来穿过帽子
+const TEMPLE_YAW := 1.25
+const TEMPLE_PITCH := 0.05
+const GUN_MUZZLE_GAP := 0.03
+# 太阳穴 → 手的方向:从水平朝右逐步抬高(最多 GUN_MAX_RISE 弧度),取第一个让一臂之长的手刚好离太阳穴一枪之长的仰角
+const GUN_MAX_RISE := 0.9
+const GUN_RISE_STEPS := 10
+const GUN_BACK := 0.1        # 方向略往后(+Z),枪身不横在脸前
 # 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线。
 # FAN_POS 为座位坐标(相对髋部):前倾坐着时牌扇停在这里,轮到他再前倾时下沉也碰不到桌面
 const FAN_TILT_DEG := -18.0
@@ -65,6 +74,7 @@ var _arm_r: Node3D
 var _face: PatronFaceRig
 var _hat: Node3D
 var _tail: Node3D
+var _temple := Vector3.ZERO   # 太阳穴(头部坐标)
 var _material: ShaderMaterial
 var _look_target := Vector3.ZERO
 var _has_look := false
@@ -118,6 +128,7 @@ func _build() -> void:
 	_part(head, meshes["skull"], "Skull")
 	_part(head, meshes["head_detail"], "HeadDetail", false)
 	_face = PatronFaceRig.new(self, head, spec, meshes, _material)
+	_temple = PatronHead.point(PatronHead.sculpt(spec), TEMPLE_YAW, TEMPLE_PITCH)
 	_hat = _part(head, meshes["hat"], "Hat")
 	_hat.position = spec["hat"]["pos"]
 	_hat.rotation_degrees = spec["hat"]["rot"]
@@ -342,14 +353,44 @@ func pick_up(gun: Node3D, duration: float) -> void:
 
 func raise_gun_to_head(gun: Node3D, duration: float) -> void:
 	_sitting_up = true
-	var tween := pose_right(HAND_GUN_HEAD, duration, Tween.TRANS_BACK)
+	var tween := pose_right(_gun_hand_target(gun), duration, Tween.TRANS_BACK)
 	await tween.finished
-	# 枪口对准太阳穴
-	var aim := Transform3D(Basis.looking_at(head_position() - gun.global_position, Vector3.UP), gun.global_position)
+	# 枪口对准太阳穴:枪管在握把上方,瞄准点相应下移,枪管轴线(而不是握把)正对太阳穴
+	var temple := head.global_transform * _temple
+	var muzzle := gun.get("muzzle") as Node3D
+	var lift := muzzle.position.y if muzzle != null else 0.0
+	var basis := Basis.looking_at(temple - gun.global_position, Vector3.UP)
+	var aim := Transform3D(Basis.looking_at(temple - basis.y * lift - gun.global_position, Vector3.UP), gun.global_position)
 	var settle := create_tween()
 	settle.tween_property(gun, "global_transform", aim, 0.18).set_trans(Tween.TRANS_SINE)
 	set_expression("worried")
 	await settle.finished
+
+
+func _gun_hand_target(gun: Node3D) -> Vector3:
+	# 举枪时手的目标(身体局部):太阳穴往外上方一枪之长;不知道枪多长(没有枪口标记)时用固定的举枪点
+	var muzzle := gun.get("muzzle") as Node3D
+	if muzzle == null:
+		return HAND_GUN_HEAD
+	var temple := head.transform * _temple
+	var want := muzzle.position.length() + GUN_MUZZLE_GAP
+	var target := temple
+	for k in GUN_RISE_STEPS:
+		var rise := GUN_MAX_RISE * k / (GUN_RISE_STEPS - 1.0)
+		var dir := Vector3(cos(rise), sin(rise), GUN_BACK).normalized()
+		var reach := _arm_reach(temple, dir)
+		target = temple + dir * reach
+		if reach <= want:
+			break
+	return target
+
+
+func _arm_reach(from: Vector3, dir: Vector3) -> float:
+	# 沿 dir 离 from 多远的点正好在右手一臂之长上(手臂不弯,手只能落在以肩为心的球面上)
+	var rel := from - _arm_r.position
+	var b := dir.dot(rel)
+	var c := rel.length_squared() - ARM_LENGTH * ARM_LENGTH
+	return -b + sqrt(maxf(b * b - c, 0.0))
 
 
 func lower_gun(gun: Node3D, rest: Transform3D, table_parent: Node3D, duration: float) -> void:
