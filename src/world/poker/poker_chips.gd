@@ -9,9 +9,9 @@ extends Node3D
 
 signal sfx(name: String)
 
-const BET_SLIDE := 0.4        # 下注:新放进去的筹码从筹码堆滑到下注位(盲注预算 0.5、行动 0.7)
+const BET_SLIDE := 0.36       # 下注:新放进去的筹码从筹码堆滑到下注位(盲注预算 0.5、行动 0.7)
 const REFUND_SLIDE := 0.2     # 一轮结束:未跟注部分先退回筹码堆
-const COLLECT_SLIDE := 0.4    # 再把各家下注收进底池(两段合计在 BETS_COLLECTED 0.7 之内)
+const COLLECT_SLIDE := 0.36   # 再把各家下注收进底池(两段合计在 BETS_COLLECTED 0.7 之内)
 const AWARD_SLIDE := 0.8      # 底池滑向赢家(POT_WON 2.0 之内,留时间给宣告与庆祝)
 const REBUY_DROP := 0.45      # 再领:一摞新筹码从上方落到座位前(REBUY 0.6 之内)
 const BUTTON_MOVE := 0.9      # 庄家按钮绕桌心滑到新按钮座位前(HAND_STARTED 1.4 之内)

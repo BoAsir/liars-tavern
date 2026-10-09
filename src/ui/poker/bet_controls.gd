@@ -291,6 +291,11 @@ func _shrink_padding(button: Button, padding: Vector2) -> void:
 
 func update(pub: Dictionary, my_pid: int) -> void:
 	var fresh := situation(pub, my_pid)
+	if fresh["legal"].is_empty():
+		# 收起控件(演出中 / 别人的回合),但记住上一个回合:同一回合恢复时保留已调好的金额
+		_presets = []
+		_apply_turn(false)
+		return
 	var new_turn: bool = fresh["turn"] != _situation["turn"] or fresh["legal"] != _situation["legal"]
 	_situation = fresh
 	_presets = preset_amounts(fresh)

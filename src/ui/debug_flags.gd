@@ -163,7 +163,10 @@ func _process(delta: float) -> void:
 
 
 func _poker_tick(screen: Node, delta: float) -> void:
-	# 轮到自己就下注;输光再领(截图模式第一次先观战);挂机离座就回座。都走 PokerScreen 给按钮用的入口
+	# 轮到自己就下注;输光再领(截图模式第一次先观战);挂机离座就回座。都走 PokerScreen 给按钮用的入口。
+	# 散局后什么都不做(结算事件到了、面板还没弹出时去领筹码只会被房主拒绝)
+	if _match_finished:
+		return
 	var status: String = screen.my_status()
 	var seat_choice := status in [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY]
 	if not screen.is_my_turn() and not seat_choice:

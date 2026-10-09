@@ -1,16 +1,18 @@
 extends GutTest
 # 德州导演的实际时长不超过 PokerPacing 的预算(规格 §4.7):把导演与资产类(PokerChips / PokerCards / TableWorld)
-# 的节奏常量按每种事件的最坏情况加起来,每个 await 再算一帧余量(同 test_pacing),仍要 ≤ 预算。
+# 的节奏常量按每种事件的最坏情况加起来,再加余量(每个 await 一帧,至少 4 帧,计划任务 7),仍要 ≤ 预算。
 # 导演或资产改了节奏,这里会跟着变。另测导演的几个纯函数(日志文案、高亮的牌、分池宣告)。
 
 
 const FRAME := 1.0 / 30.0   # 每个 await 可能晚一帧(按 30 fps 估)
+const MIN_SLACK_FRAMES := 4
 const MAX_PLAYERS := GameMode.POKER_MAX_PLAYERS
 const H := preload("res://tests/poker_helpers.gd")
 
 
 func _budget_ok(actual: float, awaits: int, budget: float, what: String) -> void:
-	assert_lte(actual + FRAME * awaits, budget, "%s:实际 %.2f + %d 帧余量 > 预算 %.2f" % [what, actual, awaits, budget])
+	var frames := maxi(awaits, MIN_SLACK_FRAMES)
+	assert_lte(actual + FRAME * frames, budget, "%s:实际 %.2f + %d 帧余量 > 预算 %.2f" % [what, actual, frames, budget])
 
 
 func test_hand_started_waits_for_sweep_button_seat_move_and_camera_in_parallel():

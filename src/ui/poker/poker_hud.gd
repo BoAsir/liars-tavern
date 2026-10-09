@@ -100,13 +100,16 @@ static func my_status_text(player: Dictionary) -> String:
 
 
 static func bottom_mode_for(player: Dictionary, in_showdown: bool) -> String:
-	# 座位状态优先(输光 / 观战 / 离座 / 等待下一手只看 status),其次摊牌条,否则下注控件(含旁人回合的横幅)
+	# 输光提示最优先(要做选择);其次摊牌条(公共信息人人都要看到,观战 / 离座 / 等待下一手的人也一样,规格 §5.3);
+	# 再其次按 status 的座位提示(等待下一手只看 status);否则下注控件(含旁人回合的横幅)
 	if player.is_empty():
-		return BOTTOM_NONE
+		return BOTTOM_SHOWDOWN if in_showdown else BOTTOM_NONE
 	var status: Variant = player.get("status")
-	if STATUS_MODES.has(status):
-		return STATUS_MODES[status]
-	return BOTTOM_SHOWDOWN if in_showdown else BOTTOM_BET
+	if status == PokerRules.STATUS_BUSTED:
+		return BOTTOM_BUST
+	if in_showdown:
+		return BOTTOM_SHOWDOWN
+	return STATUS_MODES.get(status, BOTTOM_BET)
 
 
 static func _int(player: Dictionary, key: String) -> int:

@@ -21,6 +21,7 @@ const END_CONFIRM := "散局:打完当前这一手后结算,全员回到等待�
 const LEAVE_CONFIRM := "离开牌桌后这一手按弃牌处理,确定吗?"
 const HOST_LEAVE_CONFIRM := "你是房主,离开会解散整桌,确定吗?"
 const FOLD_CONFIRM := "现在可以免费过牌,确定要弃牌吗?"
+const SEAT_EVENTS := ["rebuy", "spectate", "sit_in"]   # 再领 / 观战 / 回座请求的回执(事件里是自己的 pid)
 
 var app: Node
 var my_pid := 0
@@ -41,6 +42,8 @@ var _awaiting_intent := false        # 已提交下注动作,等房主回执
 var _seat_request_pending := false   # 已提交再领 / 观战 / 回座,等房主回执
 var _bust_left := -1.0               # 输光后到下一手开始的本地倒计时(规格 §2.6);< 0 表示没在数
 var _settlement: PokerSettlement = null
+var _end_requested := false             # 房主已确认散局:按钮立刻变灰,不等 ending 事件演到
+var _fold_confirm: ConfirmOverlay = null   # 「可以免费过牌,确定弃牌吗」:换了行动者就作废
 
 
 func _init(p_app: Node) -> void:
@@ -109,9 +112,9 @@ func _process(delta: float) -> void:
 	_clock.tick(delta)
 	var show_ring: bool = state.current_pid != null and not animating and not state.pub.is_empty()
 	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
-	if _bust_left >= 0.0 and my_status() == PokerRules.STATUS_BUSTED:
+	if _bust_left >= 0.0 and my_status() == PokerRules.STATUS_BUSTED and _settlement == null:
 		_bust_left = maxf(_bust_left - delta, 0.0)
-		hud.set_bust_countdown(_bust_left, PokerPacing.BUST_DECISION)
+		hud.set_bust_countdown(minf(_bust_left, PokerPacing.BUST_DECISION), PokerPacing.BUST_DECISION)
 
 
 func _connect_hud() -> void:
@@ -153,7 +156,10 @@ func _on_private(view: Dictionary) -> void:
 
 
 func _on_events(events: Array) -> void:
-	_seat_request_pending = false
+	# 再领 / 观战 / 回座只等自己的回执:别人的事件先到时仍不能重复发(房主会拒,界面弹多余的错误)
+	for ev in events:
+		if ev is Dictionary and ev.get("pid") == my_pid and SEAT_EVENTS.has(ev.get("type")):
+			_seat_request_pending = false
 	_queue.append_array(events)
 	if _intro_done and not animating:
 		_drain()
@@ -181,8 +187,11 @@ func _first_frame() -> void:
 	while state.pub.is_empty() and is_inside_tree():
 		await get_tree().process_frame
 	_queue.clear()
-	state.sync_from_view()
+	# 开场运镜期间可能已开了新的一手(他被排进座位)或有人离开:座位表变了就按视图重排
+	if state.sync_from_view():
+		_arrange()
 	_sync_table()
+	set_current(state.current_pid)
 
 
 func _reconcile() -> void:
@@ -206,8 +215,8 @@ func _sync_table() -> void:
 	_update_visibility()
 	_sync_nameplates()
 	refresh_hud()
-	if director != null:
-		director.settle_camera()
+	if director != null and _settlement == null:
+		director.settle_camera()   # 结算时留在散局环绕镜头
 
 
 # —— 3D ——
@@ -254,7 +263,7 @@ func refresh_hud() -> void:
 	hud.set_header(state.mode, state.pub.get("blinds", []), state.hand)
 	hud.set_pots(state.pots)
 	hud.set_board(state.board)
-	hud.set_ending(state.ending)
+	hud.set_ending(state.ending or _end_requested)
 	hud.set_my_status(name_of(my_pid), state.row(my_pid))
 	hud.set_my_hole(state.hole())
 	hud.set_my_best(state.best_detail())
@@ -267,6 +276,9 @@ func refresh_hud() -> void:
 func refresh_actions() -> void:
 	# 底部中间放什么(规格 §6.1);下注控件只在演到自己回合、视图也说轮到自己时才展开
 	if hud == null:
+		return
+	if _settlement != null:
+		hud.set_bottom_mode(PokerHud.BOTTOM_NONE)   # 结算面板下面不再露出输光 / 观战提示
 		return
 	var mode := state.bottom_mode(my_pid)
 	hud.set_bottom_mode(mode)
@@ -284,6 +296,9 @@ func set_current(pid: Variant) -> void:
 	state.current_pid = pid if pid is int else null
 	_clock.restart_turn()
 	_awaiting_intent = false
+	if is_instance_valid(_fold_confirm):
+		_fold_confirm.dismiss()   # 换了行动者(超时代打、下一手):旧的弃牌确认已没有意义
+	_fold_confirm = null
 	if hud == null:
 		return   # 不入树的测试:没有 HUD 与酒客,只改状态
 	# 所有人盯着当前行动者,行动者自己看桌心(规格 §5.6)
@@ -343,7 +358,8 @@ func hole_for_hand(number: int) -> Array:
 func end_hand(_ev: Dictionary) -> void:
 	set_current(null)
 	if my_status() == PokerRules.STATUS_BUSTED:
-		_bust_left = PokerPacing.BUST_DECISION
+		# 房主的选择时间从这一手演完(含 hand_over 本身)才开始算
+		_bust_left = PokerPacing.BUST_DECISION + PokerPacing.HAND_OVER
 
 
 func drop_player(pid: Variant) -> void:
@@ -357,6 +373,7 @@ func drop_player(pid: Variant) -> void:
 
 func show_settlement(results: Array) -> void:
 	hud.set_bottom_mode(PokerHud.BOTTOM_NONE)
+	_bust_left = -1.0
 	_settlement = PokerSettlement.new(results, Net.is_host)
 	_settlement.lobby_pressed.connect(func(): Net.request_rematch_lobby())
 	_settlement.leave_pressed.connect(func(): Net.end_session())
@@ -404,7 +421,7 @@ func choose_sit_in() -> bool:
 
 func _request_seat(statuses: Array, request: Callable) -> bool:
 	# 再领 / 观战 / 回座:等房主回执(下一批事件或拒绝)期间不重复发
-	if _seat_request_pending or _settlement != null or not statuses.has(my_status()):
+	if _seat_request_pending or _settlement != null or state.pub.get("phase") == "over" or not statuses.has(my_status()):
 		return false
 	_seat_request_pending = true
 	Sfx.play("ui_click")
@@ -429,15 +446,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _confirm_fold() -> void:
-	var overlay: ConfirmOverlay = app.confirm(FOLD_CONFIRM, "弃牌")
-	overlay.confirmed.connect(func(): submit(PokerRules.FOLD))
+	_fold_confirm = app.confirm(FOLD_CONFIRM, "弃牌")
+	_fold_confirm.confirmed.connect(func(): submit(PokerRules.FOLD))
 
 
 func _confirm_end() -> void:
-	if not Net.is_host or state.ending:
+	if not Net.is_host or state.ending or _end_requested:
 		return
 	var overlay: ConfirmOverlay = app.confirm(END_CONFIRM, "散局")
-	overlay.confirmed.connect(func(): Net.end_poker_session())
+	overlay.confirmed.connect(func():
+		_end_requested = true
+		hud.set_ending(true)
+		Net.end_poker_session())
 
 
 func _confirm_leave() -> void:
