@@ -33,16 +33,16 @@ func _init() -> void:
 	MeshKit.add(body, MeshKit.torus(0.016, 0.02, 24), steel, Vector3(0, 0.0, -0.022), Vector3(0, 0, 90),
 		Vector3(1, 1.0, 1.25))
 	MeshKit.add(body, MeshKit.box(Vector3(0.004, 0.022, 0.006)), brass, Vector3(0, 0.005, -0.02), Vector3(-12, 0, 0))
-	# 转轮:六个弹膛孔 + 槽线,绕枪管轴旋转
+	# 转轮:弹膛孔(与规则的膛数一致)+ 槽线,绕枪管轴旋转
 	drum = MeshKit.pivot(body, DRUM_POS, "Drum")
 	MeshKit.add(drum, MeshKit.cylinder(0.025, 0.025, 0.046, 24), steel, Vector3.ZERO, Vector3(90, 0, 0))
-	for i in 6:
-		var a := TAU * i / 6.0
+	for i in Revolver.CHAMBERS:
+		var a := TAU * i / Revolver.CHAMBERS
 		var off := Vector3(cos(a), sin(a), 0) * 0.0145
 		MeshKit.add(drum, MeshKit.cylinder(0.0055, 0.0055, 0.004, 10), WorldMaterials.iron(),
-			off + Vector3(0, 0, -0.022), Vector3(90, 0, 0))
+			off + Vector3(0, 0, -0.022), Vector3(90, 0, 0)).name = "Chamber%d" % (i + 1)
 		MeshKit.add(drum, MeshKit.cylinder(0.003, 0.003, 0.004, 8), brass, off + Vector3(0, 0, 0.022), Vector3(90, 0, 0))
-		var flute := Vector3(cos(a + PI / 6.0), sin(a + PI / 6.0), 0) * 0.024
+		var flute := Vector3(cos(a + PI / Revolver.CHAMBERS), sin(a + PI / Revolver.CHAMBERS), 0) * 0.024
 		MeshKit.add(drum, MeshKit.box(Vector3(0.004, 0.004, 0.032)), WorldMaterials.iron(), flute)
 	# 击锤:绕后端铰点扳动
 	hammer = MeshKit.pivot(body, Vector3(0, 0.06, 0.022), "Hammer")
@@ -63,7 +63,7 @@ func spin_drum(duration: float, turns := 2.5) -> Tween:
 func cock_hammer(duration := 0.18) -> Tween:
 	var tween := create_tween()
 	tween.tween_property(hammer, "rotation:x", deg_to_rad(38.0), duration).set_trans(Tween.TRANS_BACK)
-	tween.parallel().tween_property(drum, "rotation:z", drum.rotation.z + TAU / 6.0, duration)
+	tween.parallel().tween_property(drum, "rotation:z", drum.rotation.z + TAU / Revolver.CHAMBERS, duration)
 	return tween
 
 

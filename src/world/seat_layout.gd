@@ -8,6 +8,17 @@ const TABLE_TOP := 0.78
 const SEAT_RADIUS := 1.25
 const PILE_INNER := 0.13
 const PILE_OUTER := 0.31
+# 德州最多 8 人,桌子放大;座位到桌沿的距离不变,酒客按座位局部坐标摆的爪子与伸手位置照常可用
+const POKER_TABLE_RADIUS := 1.45
+const SEAT_GAP := SEAT_RADIUS - TABLE_RADIUS
+
+
+static func table_radius_for(mode: String) -> float:
+	return POKER_TABLE_RADIUS if GameMode.is_poker(mode) else TABLE_RADIUS
+
+
+static func seat_radius_for(table_radius: float) -> float:
+	return table_radius + SEAT_GAP
 
 
 static func seat_angle(seat_index: int, my_index: int, count: int) -> float:

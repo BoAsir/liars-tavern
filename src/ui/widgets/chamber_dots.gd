@@ -1,6 +1,6 @@
 class_name ChamberDots
 extends Control
-# 六膛弹巢指示:已扣过扳机的膛位画成空心暗格,其余为黄铜实心;出局后整体变红叉。
+# 弹巢指示(格数 = Revolver.CHAMBERS):已扣过扳机的膛位画成空心暗格,其余为黄铜实心;出局后整体变红叉。
 
 
 var fired := 0:

@@ -19,6 +19,7 @@ const BOT_THINK := Vector2(0.6, 1.6)
 const CHALLENGE_CHANCE := 0.35
 const BOT_FIDGET := 1.5    # bot 按住 W 探头、松开、按住 S 收回、松开,每步这么久(秒);冒烟测试据此确认脖子偏移走通了网络
 const BOT_FIDGET_KEYS := [KEY_W, KEY_S]
+const SHOT_SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛)
 
 var app: Node
 var opts := {}
@@ -242,7 +243,10 @@ func _capture_later(tag: String, delay: float) -> void:
 	if not opts.has("shots"):
 		return
 	await get_tree().create_timer(delay).timeout
-	await RenderingServer.frame_post_draw
+	# 窗口被别的窗口挡住时 macOS 不再调度正常绘制,等 frame_post_draw 会永远卡住;
+	# 强制绘制几帧再读图,不依赖窗口可见(同 tools/shot.gd)
+	for i in SHOT_SETTLE_DRAWS:
+		RenderingServer.force_draw(false)
 	var image := get_viewport().get_texture().get_image()
 	if image == null or image.is_empty():
 		return

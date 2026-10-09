@@ -59,3 +59,16 @@ func test_unreadable_file_is_replaced_on_next_save():
 	assert_eq(Settings.get_string(Settings.KEY_NAME, "", PATH), "阿花")
 	# ConfigFile 自己会打印解析错误:读取一次、保存前回读一次;覆盖后再读就正常了
 	assert_engine_error_count(2, "坏文件只在被替换前解析失败两次")
+
+
+func test_last_mode_defaults_until_a_room_is_opened_and_then_round_trips():
+	assert_eq(Settings.last_mode(PATH), GameMode.DEFAULT)
+	assert_eq(Settings.set_value(Settings.KEY_LAST_MODE, GameMode.SHORT_DECK, PATH), OK)
+	assert_eq(Settings.last_mode(PATH), GameMode.SHORT_DECK)
+
+
+func test_unknown_or_mistyped_last_mode_falls_back_to_the_default():
+	# 手改的设置文件、更新版本留下的新玩法:主菜单照常打开,用默认玩法
+	for junk in ["mahjong", "", 7, true]:
+		Settings.set_value(Settings.KEY_LAST_MODE, junk, PATH)
+		assert_eq(Settings.last_mode(PATH), GameMode.DEFAULT, str(junk))

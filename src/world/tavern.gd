@@ -66,11 +66,35 @@ func add_flicker(light: Light3D, speed: float, depth: float, seed: float) -> voi
 func set_table_radius(radius: float) -> void:
 	# 换桌面大小(德州扑克用大桌):桌面、包边、黄铜圈、桌布随半径变化,桌面高度与桌腿不变
 	table.set_radius(radius)
+	# 德州灯光(规格 §9):吊灯聚光在桌面高度只照到半径约 1.5 米,放大的桌沿在半影外。
+	# 按桌面半径放宽到照到桌沿外 EDGE_REACH,再加一点半影;骗子酒馆桌保持原来的角度
+	const LIARS_SPOT_ANGLE := 52.0
+	const EDGE_REACH := 0.15
+	const SOFT_EDGE_DEG := 2.5
+	for spot in table.lamp_pivot.get_children().filter(func(n: Node) -> bool: return n is SpotLight3D):
+		var drop: float = (table.lamp_pivot.transform * spot.transform).origin.y - SeatLayout.TABLE_TOP
+		var needed := rad_to_deg(atan((radius + EDGE_REACH) / drop)) + SOFT_EDGE_DEG
+		spot.spot_angle = maxf(LIARS_SPOT_ANGLE, needed)
 
 
-func set_table_decor_visible(visible: bool) -> void:
+func set_table_decor_visible(shown: bool) -> void:
 	# 桌面摆设(烛台连同烛光):德州扑克收起来给筹码和公共牌腾地方
-	table.set_decor_visible(visible)
+	table.set_decor_visible(shown)
+	# 德州灯光(规格 §9):烛台一藏,桌沿与酒客的脸少了暖色补光,
+	# 换一盏桌心上方、不投影、像烛光一样微微起伏的暖光
+	var rim := get_node_or_null("TableRimLight") as OmniLight3D
+	if rim == null and not shown:
+		rim = OmniLight3D.new()
+		rim.name = "TableRimLight"
+		rim.position = Vector3(0, SeatLayout.TABLE_TOP + 0.35, 0)
+		rim.light_color = Color(1.0, 0.74, 0.48)
+		rim.light_energy = 0.9
+		rim.omni_range = 2.8
+		rim.light_volumetric_fog_energy = 0.0
+		add_child(rim)
+		add_flicker(rim, 3.0, 0.08, 91.0)
+	if rim != null:
+		rim.visible = not shown
 
 
 # —— 环境 ——

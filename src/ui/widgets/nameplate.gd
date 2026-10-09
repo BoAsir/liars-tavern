@@ -1,6 +1,6 @@
 class_name Nameplate
 extends PanelContainer
-# 对手头顶铭牌:名字、手牌数、六膛弹巢;轮到其行动时黄铜高亮,出局后变灰。
+# 对手头顶铭牌:名字、手牌数、弹巢;轮到其行动时黄铜高亮,出局后变灰。
 
 
 var _name: Label

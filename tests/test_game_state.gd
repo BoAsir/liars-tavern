@@ -99,7 +99,7 @@ func test_challenge_honest_play_shoots_challenger_and_restarts_round():
 	gs.hands[pid] = [Card.QUEEN, Card.JOKER, Card.KING, Card.KING, Card.ACE]
 	gs.play_cards(pid, [0, 1])
 	var challenger = gs.current_pid
-	gs.revolvers[challenger].bullet_chamber = 6
+	gs.revolvers[challenger].bullet_chamber = Revolver.CHAMBERS
 	gs.revolvers[challenger].next_chamber = 1
 	var result := gs.challenge(challenger)
 	assert_true(result["ok"])
@@ -124,7 +124,7 @@ func test_challenge_lie_shoots_liar():
 	gs.hands[pid] = [Card.KING, Card.QUEEN, Card.QUEEN, Card.ACE, Card.ACE]
 	gs.play_cards(pid, [0])
 	var challenger = gs.current_pid
-	gs.revolvers[pid].bullet_chamber = 6
+	gs.revolvers[pid].bullet_chamber = Revolver.CHAMBERS
 	gs.revolvers[pid].next_chamber = 1
 	var result := gs.challenge(challenger)
 	var gunshot := _find(result["events"], "gunshot")
@@ -179,7 +179,7 @@ func test_last_player_with_cards_lie_gets_shot():
 		if other != pid:
 			gs.hands[other] = []
 	gs.hands[pid] = [Card.KING]
-	gs.revolvers[pid].bullet_chamber = 6
+	gs.revolvers[pid].bullet_chamber = Revolver.CHAMBERS
 	gs.revolvers[pid].next_chamber = 1
 	var result := gs.play_cards(pid, [0])
 	var gunshot := _find(result["events"], "gunshot")
