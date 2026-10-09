@@ -1,5 +1,5 @@
 class_name Settings
-# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音。
+# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音、上次开房选的玩法。
 # 启动流程与主菜单共用这组键。设置文件是外部数据:读不出或类型不对时回退默认值并告警。
 
 
@@ -8,6 +8,7 @@ const SECTION := "player"
 const KEY_NAME := "name"
 const KEY_LAST_IP := "last_ip"
 const KEY_MUTED := "muted"
+const KEY_LAST_MODE := "last_mode"
 
 
 static func get_string(key: String, fallback := "", path := PATH) -> String:
@@ -24,6 +25,16 @@ static func get_bool(key: String, fallback := false, path := PATH) -> bool:
 		return value
 	_warn_type(key, value, path)
 	return fallback
+
+
+static func last_mode(path := PATH) -> String:
+	# 上次开房选的玩法(主菜单的玩法切换据此预选)。不认识的值(手改的文件、更新版本留下的新玩法)
+	# 回退默认玩法:类型不对已由 get_string 告警,这里只补「是字符串但不是已知玩法」的告警
+	var mode := get_string(KEY_LAST_MODE, GameMode.DEFAULT, path)
+	if GameMode.is_valid(mode):
+		return mode
+	push_warning("设置 %s 的值「%s」不是已知玩法(来自 %s),改用默认玩法" % [KEY_LAST_MODE, mode, path])
+	return GameMode.DEFAULT
 
 
 static func set_value(key: String, value: Variant, path := PATH) -> Error:

@@ -4,6 +4,8 @@ class_name LobbyModel
 
 const HOST_ID := 1
 const DEFAULT_NAME := "酒客"
+const IN_GAME_REASON := "游戏已开始,请等这一局结束"
+const WINDING_DOWN_REASON := "牌局正在散局,请稍后再来"
 
 var _order: Array = []
 var _members := {}  # peer_id -> {"name": String, "ready": bool}
@@ -15,14 +17,18 @@ func add_host(host_name: String) -> void:
 	_insert(HOST_ID, host_name, true)
 
 
-func check_join(version: int, in_game: bool) -> String:
-	# 返回空串表示允许加入,否则为拒绝原因
+func check_join(version: int, in_game: bool, mode: String, accepting_late: bool) -> String:
+	# 返回空串表示允许加入,否则为拒绝原因。判定顺序固定:
+	# ① 版本必须最先判断:主菜单靠「版本」字样去问房主要更新,对局中、满员的房间也得先报这个;
+	# ② 已开局时只有正在接受中途入座的德州牌局能进(散局中或已结算的德州另有文案);
+	# ③ 人数按玩法上限,只数已完成握手、仍连着的等待厅成员
 	if version != Protocol.VERSION:
 		return "版本不匹配(房主 v%d / 你 v%d),请更新游戏" % [Protocol.VERSION, version]
-	if in_game:
-		return "游戏已开始,请等这一局结束"
-	if _members.size() >= Protocol.MAX_PLAYERS:
-		return "房间已满(%d/%d)" % [_members.size(), Protocol.MAX_PLAYERS]
+	if in_game and not accepting_late:
+		return WINDING_DOWN_REASON if GameMode.allows_late_join(mode) else IN_GAME_REASON
+	var cap := GameMode.max_players(mode)
+	if _members.size() >= cap:
+		return "房间已满(%d/%d)" % [_members.size(), cap]
 	return ""
 
 

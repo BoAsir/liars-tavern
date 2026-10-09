@@ -14,8 +14,9 @@ const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.65, -0.02)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
 const NECK_BASE := Vector3(0, 0.55, -0.02)
-const NECK_REACH := 0.85      # 头最远水平伸出(米):4 人同时探向桌心头不相撞,头顶仍低于吊灯
-const NECK_RISE := 0.25       # 每伸出 1 米头抬高这么多:像潜望镜一样往上探,不会贴着桌面
+const NECK_REACH := 0.85      # 头最远水平伸出(米):4 人同时探向桌心头不相撞;头平着伸出去,高度不变
+# 头只能往前、往两侧探,不往后(+Z,朝越肩镜头):往后会挡在镜头和自己的手牌之间
+const NECK_MAX_BACK := 0.0
 const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:临界阻尼(2√刚度),头跟手又停得稳,不过冲不回晃
 const NECK_DAMPING := 15.5
 const NECK_MIN_THICKNESS := 0.55   # 拉长时脖子变细,最细到原粗细的这个比例
@@ -39,9 +40,10 @@ const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
 # FAN_POS 为座位坐标(相对髋部):前倾坐着时牌扇停在这里,轮到他再前倾时下沉也碰不到桌面
 const FAN_TILT_DEG := -18.0
 const FAN_POS := Vector3(0, 0.46, -0.37)
-# 第三人称下自己的牌扇:举到右胸前、略放大,牌面朝向越肩镜头(座位坐标,相对髋部;越肩机位按它取景)
-const SELF_FAN_POS := Vector3(0.36, 0.62, -0.3)
-const SELF_FAN_SCALE := 1.4
+# 第三人称下自己的牌扇:举在右肩外侧、比头更靠近越肩镜头,头怎么探都只会在牌后面;牌面朝向镜头,
+# 高度让牌扇停在回合横幅之上(座位坐标,相对髋部;越肩机位按它取景)
+const SELF_FAN_POS := Vector3(0.48, 0.88, 0.16)
+const SELF_FAN_SCALE := 1.25
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
 const CHEER_BOUNCES := 3
 const CHEER_BOUNCE_TIME := 0.22
@@ -177,9 +179,12 @@ func _animate_idle(delta: float) -> void:
 # —— 弹簧脖子 ——
 
 func set_neck_target(seat_offset: Vector3) -> void:
-	# 座位坐标的水平偏移(-Z 朝桌心);超出 NECK_REACH 截断,伸得越远头抬得越高
-	var flat := Vector3(seat_offset.x, 0.0, seat_offset.z).limit_length(NECK_REACH)
-	_neck_target = flat + Vector3.UP * flat.length() * NECK_RISE
+	_neck_target = clamp_neck(seat_offset)
+
+
+static func clamp_neck(seat_offset: Vector3) -> Vector3:
+	# 座位坐标的水平偏移(-Z 朝桌心):只取水平分量(头平着伸出去,高度不变),不往后,最远 NECK_REACH
+	return Vector3(seat_offset.x, 0.0, minf(seat_offset.z, NECK_MAX_BACK)).limit_length(NECK_REACH)
 
 
 func neck_offset() -> Vector3:

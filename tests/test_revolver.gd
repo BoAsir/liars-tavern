@@ -1,13 +1,15 @@
 extends GutTest
 
 
-func test_exactly_one_hit_in_six_pulls():
+func test_five_chambers_fifth_pull_is_certain():
+	# 五膛左轮装一发:不管子弹在哪一膛,扣满 5 次正好中 1 次
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	for i in 20:
+	for i in 50:
 		var revolver := Revolver.new(rng)
+		assert_between(revolver.bullet_chamber, 1, 5)
 		var hits := 0
-		for pull in 6:
+		for pull in 5:
 			if revolver.pull_trigger():
 				hits += 1
 		assert_eq(hits, 1)

@@ -53,9 +53,39 @@ func test_text_follows_rule_constants():
 	var text := ""
 	for section in RulebookContent.sections():
 		text += _text_of(section)
-	assert_string_contains(text, "%d–%d 人" % [Protocol.MIN_PLAYERS, Protocol.MAX_PLAYERS])
+	# 人数取骗子酒馆自己的上限:Protocol.MAX_PLAYERS 是所有玩法的绝对上限(德州 8 人),不再指骗子酒馆
+	var liars := GameMode.LIARS
+	assert_string_contains(text, "%d–%d 人" % [GameMode.min_players(liars), GameMode.max_players(liars)])
+	assert_false(text.contains("%d–%d 人" % [GameMode.min_players(liars), GameMode.max_players(GameMode.HOLDEM)]),
+		"骗子酒馆那本不能写成德州的人数")
 	assert_string_contains(text, "%d–%d 张" % [Rules.MIN_PLAY, Rules.MAX_PLAY])
 	assert_string_contains(text, "%d 秒" % int(Protocol.TURN_TIMEOUT))
+
+
+func test_liars_book_is_the_default_and_keeps_its_chapters():
+	# 骗子酒馆那本内容不变:章节与顺序照旧;不指定书时就是这本
+	var ids := RulebookContent.sections().map(func(section): return section["id"])
+	assert_eq(ids, ["goal", "deck", "turn", "reveal", "revolver", "rounds", "controls"])
+	assert_eq(RulebookContent.sections(RulebookContent.BOOK_LIARS), RulebookContent.sections())
+
+
+func test_each_book_has_a_tab_title():
+	assert_eq(RulebookContent.BOOKS, [RulebookContent.BOOK_LIARS, RulebookContent.BOOK_POKER])
+	assert_eq(RulebookContent.book_title(RulebookContent.BOOK_LIARS), "骗子酒馆")
+	assert_eq(RulebookContent.book_title(RulebookContent.BOOK_POKER), "德州扑克")
+
+
+func test_both_poker_modes_share_the_poker_book():
+	assert_eq(RulebookContent.book_for_mode(GameMode.LIARS), RulebookContent.BOOK_LIARS)
+	assert_eq(RulebookContent.book_for_mode(GameMode.HOLDEM), RulebookContent.BOOK_POKER)
+	assert_eq(RulebookContent.book_for_mode(GameMode.SHORT_DECK), RulebookContent.BOOK_POKER)
+	assert_eq(RulebookContent.book_for_mode("chess"), RulebookContent.BOOK_LIARS, "未知玩法回退到骗子酒馆那本")
+
+
+func test_find_looks_only_in_the_given_book():
+	assert_eq(RulebookContent.find("hands", RulebookContent.BOOK_POKER)["id"], "hands")
+	assert_eq(RulebookContent.find("hands"), {})
+	assert_eq(RulebookContent.find("deck", RulebookContent.BOOK_POKER), {})
 
 
 func test_controls_list_the_rulebook_hotkey():

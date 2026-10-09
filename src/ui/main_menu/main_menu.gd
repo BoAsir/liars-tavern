@@ -1,9 +1,11 @@
 extends Control
-# 主菜单:昵称 / 开设房间 / 局域网房间列表(自动发现)/ IP 直连。
+# 主菜单:昵称 / 开设房间(选玩法)/ 局域网房间列表(自动发现)/ IP 直连。
 # 左侧木牌面板,右侧是环绕镜头下的酒馆。面板在可滚动的侧栏里:1280x720 逻辑分辨率下整块放得下,
 # 窗口再矮也只是滚动,底部的 IP 直连、状态行与页脚不会被裁掉。
 
 
+const RoomRow := preload("res://src/ui/main_menu/room_row.gd")
+const ModePicker := preload("res://src/ui/main_menu/mode_picker.gd")
 const PANEL_WIDTH := 480.0
 const SIDE_MARGIN := 48
 const EDGE_MARGIN := 24
@@ -23,6 +25,7 @@ var _mute_button: Button
 var _scroll: ScrollContainer
 var _panel: PanelContainer
 var _busy := false
+var _mode := GameMode.DEFAULT   # 开房用的玩法:预选上次的选择
 var _last_join := ""    # 最近一次尝试加入的地址:被拒"版本不匹配"时据此去问房主要更新
 var _scan_dots := 0.0
 
@@ -119,7 +122,7 @@ func _build_identity(box: VBoxContainer) -> void:
 	_name_edit.max_length = Protocol.MAX_NAME_LENGTH
 	_name_edit.text = Settings.get_string(Settings.KEY_NAME)
 	box.add_child(_name_edit)
-	box.add_child(_section("开一桌"))
+	box.add_child(_mode_section())
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
@@ -132,6 +135,22 @@ func _build_identity(box: VBoxContainer) -> void:
 	_host_button = UiTheme.button("开设房间", true)
 	_host_button.pressed.connect(_on_host_pressed)
 	row.add_child(_host_button)
+
+
+func _mode_section() -> Control:
+	# 「开一桌」小节标题那一行放玩法三段切换:不另占一行,1280×720 下面板不用滚动
+	_mode = Settings.last_mode()
+	var row := _section("开一桌")
+	row.add_child(ModePicker.build(_mode, _select_mode))
+	return row
+
+
+func _select_mode(mode: String) -> void:
+	if mode == _mode:
+		return
+	_mode = mode
+	Sfx.play("ui_click")
+	Settings.set_value(Settings.KEY_LAST_MODE, mode)
 
 
 func _build_rooms(box: VBoxContainer) -> void:
@@ -209,16 +228,6 @@ func _divider() -> ColorRect:
 
 # —— 房间列表 ——
 
-static func clamp_seats(players: int, capacity: int) -> Vector2i:
-	# 人数与上限来自局域网报文,不可信:夹到 0..MAX_PLAYERS 且上限不小于人数,超大数字撑不爆界面
-	var taken := clampi(players, 0, Protocol.MAX_PLAYERS)
-	return Vector2i(taken, clampi(capacity, taken, Protocol.MAX_PLAYERS))
-
-
-static func seat_dots(seats: Vector2i) -> String:
-	return "●".repeat(seats.x) + "○".repeat(seats.y - seats.x)
-
-
 func _refresh_rooms(rooms: Array) -> void:
 	for child in _room_box.get_children():
 		child.queue_free()
@@ -229,43 +238,9 @@ func _refresh_rooms(rooms: Array) -> void:
 		return
 	_scan_label.text = "发现 %d 个房间" % rooms.size()
 	for room in rooms:
-		_room_box.add_child(_room_row(room))
-
-
-func _room_row(room: Dictionary) -> Control:
-	var panel := PanelContainer.new()
-	var style := UiTheme.panel_box(Color(0.13, 0.09, 0.06, 0.9), Color(UiTheme.BRASS, 0.35), 1, 8)
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	style.content_margin_left = 14
-	style.content_margin_right = 10
-	panel.add_theme_stylebox_override("panel", style)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	panel.add_child(row)
-	row.add_child(_room_info(room))
-	var seats := clamp_seats(room["players"], room["max"])
-	row.add_child(UiTheme.label(seat_dots(seats), 18, UiTheme.BRASS))
-	var newer := offers_update(room, BuildInfo.build())
-	if newer:
-		var update := UiTheme.button("更新" if room["compatible"] else "更新后加入", not room["compatible"])
-		update.add_theme_font_size_override("font_size", 15 if room["compatible"] else 18)
-		update.tooltip_text = "房主是新版本 v%s,可以直接从房主这里更新" % room["ver"]
-		update.pressed.connect(_update_from.bind(room["ip"], room["port"], room["host"]))
-		row.add_child(update)
-	if room["compatible"] or not newer:
-		var join := UiTheme.button("加入")
-		join.add_theme_font_size_override("font_size", 18)
-		if not room["compatible"]:
-			join.disabled = true
-			join.text = "版本不同"
-			join.tooltip_text = "房主的游戏版本和你的不一样,请让版本旧的一方更新"
-		elif not room["open"]:
-			join.disabled = true
-			join.text = "对局中" if seats.x < seats.y else "已满"
-		join.pressed.connect(_join.bind(Protocol.format_address(room["ip"], room["port"])))
-		row.add_child(join)
-	return panel
+		var on_join := _join.bind(Protocol.format_address(room["ip"], room["port"]))
+		var on_update := _update_from.bind(room["ip"], room["port"], room["host"])
+		_room_box.add_child(RoomRow.build(room, offers_update(room, BuildInfo.build()), on_join, on_update))
 
 
 static func offers_update(room: Dictionary, my_build: int, my_platform := BuildInfo.platform()) -> bool:
@@ -278,20 +253,6 @@ func _update_from(ip: String, port: int, host_name: String) -> void:
 	Updater.check(Updater.lan_source(ip, port), "房主 %s" % host_name)
 
 
-func _room_info(room: Dictionary) -> Control:
-	# 房名与房主名来自局域网报文:过长时省略号截断,不撑宽面板
-	var info := VBoxContainer.new()
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_theme_constant_override("separation", 0)
-	var title := UiTheme.label(room["room"], 20, UiTheme.PARCHMENT, UiTheme.display_font())
-	var host := UiTheme.label("房主 %s · %s" % [room["host"], Protocol.format_address(room["ip"], room["port"])],
-		15, UiTheme.MUTED)
-	for label: Label in [title, host]:
-		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		info.add_child(label)
-	return info
-
-
 # —— 操作 ——
 
 func _on_host_pressed() -> void:
@@ -301,13 +262,18 @@ func _on_host_pressed() -> void:
 	Sfx.play("ui_click")
 	var room_name := _room_edit.text.strip_edges()
 	if room_name == "":
-		room_name = "%s 的酒馆" % pname
+		room_name = default_room_name(pname, _mode)
 	Discovery.stop_listening(self)
-	var err := Net.host_game(pname, room_name)
+	var err := Net.host_game(pname, room_name, 0, _mode)
 	if err != OK:
 		_show_status("开设房间失败:端口 %d-%d 都被占用(%s)" % [
 			Protocol.GAME_PORT, Protocol.GAME_PORT + Protocol.GAME_PORT_ATTEMPTS - 1, error_string(err)], UiTheme.LIE)
 		Discovery.start_listening(self)
+
+
+static func default_room_name(pname: String, mode: String) -> String:
+	# 没填房名时:骗子酒馆「X 的酒馆」,德州「X 的牌局」
+	return ("%s 的牌局" if GameMode.is_poker(mode) else "%s 的酒馆") % pname
 
 
 func _on_direct_pressed() -> void:
@@ -365,9 +331,11 @@ func _set_busy(busy: bool) -> void:
 
 
 func _validated_name() -> String:
-	var pname := Protocol.sanitize_name(_name_edit.text)
-	if pname == "":
-		_show_status("先给自己起个名号吧", UiTheme.LIE)
+	var raw_text := _name_edit.text
+	var pname := Protocol.sanitize_name(raw_text)
+	var validation := Protocol.validate_name(pname)
+	if not validation["ok"]:
+		_show_status(validation["error"], UiTheme.LIE)
 		_name_edit.grab_focus()
 		return ""
 	Settings.set_value(Settings.KEY_NAME, pname)

@@ -1,15 +1,22 @@
 extends SceneTree
 # 视觉检查:搭建酒馆并按指定机位截图(需要窗口渲染,不能 --headless)。
-# 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase] [--size=1600x900] [--fov=40]
+# 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase | --poker-showcase] [--size=1600x900] [--fov=40]
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
+# --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
+# 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
 # 机位可以是下面的预设名,也可以是自由机位 "px,py,pz:tx,ty,tz"(相机位置:看向的点),
 # 含自由机位时各机位改用分号分隔,如 --views="seat;0,1.4,0.5:0,1.1,-1.25"。
 # 自由机位的文件名为 cam1.png、cam2.png……(按出现顺序);--fov 只作用于自由机位。
 
 
 const WARMUP_FRAMES := 45
+# 截图前连续强制绘制几帧再读图:窗口被其他窗口挡住时 macOS 不再调度正常绘制(等 frame_post_draw 会永远卡住),
+# 强制绘制不依赖窗口可见;体积雾的时域累积也要几帧才收敛
+const SETTLE_DRAWS := 8
+const POKER_ME := 1
 
 var opts := {}
+var _poker_world: TableWorld = null
 
 
 func _initialize() -> void:
@@ -26,6 +33,7 @@ func _run() -> void:
 		var dims: PackedStringArray = opts["size"].split("x")
 		root.size = Vector2i(int(dims[0]), int(dims[1]))
 	RenderBudget.apply(root)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
 	if opts.has("showcase"):
@@ -33,6 +41,11 @@ func _run() -> void:
 		var showcase: Node = script.new()
 		root.add_child(showcase)
 		await showcase.build(tavern)
+	if opts.has("poker-showcase"):
+		var poker: Node = load("res://tools/poker_showcase.gd").new()
+		root.add_child(poker)
+		await poker.build(tavern)
+		_poker_world = poker.world
 	var views: PackedStringArray = opts.get("views", "seat").split(";" if opts.get("views", "").contains(":") else ",")
 	var custom := 0
 	var default_fov := tavern.camera_rig.camera.fov
@@ -46,11 +59,14 @@ func _run() -> void:
 			tavern.camera_rig.snap(_vec(ends[0]), _vec(ends[1]))
 			tavern.camera_rig.fill_light.light_energy = 0.0
 			tavern.camera_rig.camera.fov = float(opts.get("fov", str(default_fov)))
+		elif view.begins_with("poker_"):
+			_place_poker_camera(tavern, view)
 		else:
 			_place_camera(tavern.camera_rig, view)
 		for i in WARMUP_FRAMES:
 			await process_frame
-		await RenderingServer.frame_post_draw
+		for i in SETTLE_DRAWS:
+			RenderingServer.force_draw(false)
 		var path := "%s/%s.png" % [out_dir, label]
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)
@@ -67,7 +83,8 @@ func _place_camera(rig: CameraRig, view: String) -> void:
 	match view:
 		"seat":
 			# 与 TableWorld.third_person_view(本机座位)一致的越肩机位
-			rig.snap(Vector3(0.55, 1.92, 2.1), Vector3(0, top, -0.12))
+			rig.snap(Vector3(TableWorld.THIRD_PERSON_SIDE, TableWorld.THIRD_PERSON_HEIGHT, SeatLayout.SEAT_RADIUS + TableWorld.THIRD_PERSON_BEHIND),
+				Vector3(0, top, -0.12))
 			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
 		"selfshot":
 			rig.snap(Vector3(-0.35, 1.42, 0.15), Vector3(0, 1.19, 1.37))
@@ -89,3 +106,38 @@ func _place_camera(rig: CameraRig, view: String) -> void:
 			rig.snap(Vector3(0, 1.3, 0.2), Vector3(0, 1.1, -1.25))
 		_:
 			push_warning("unknown view " + view)
+
+
+func _place_poker_camera(tavern: Tavern, view: String) -> void:
+	# 德州机位:取自 TableWorld(本机座位 = 1 号)。观战机位下本机的酒客藏起来(规格 §5.5),
+	# 等待厅里桌上还没有筹码与牌
+	var world := _poker_table(tavern)
+	var rig := tavern.camera_rig
+	world.set_patron_visible(POKER_ME, view != "poker_overview")
+	world.poker_root.visible = view != "poker_lobby"
+	for pid in world.patrons:
+		world.patrons[pid].fan.visible = view != "poker_lobby"
+	rig.fill_light.light_energy = 0.0
+	var xform: Transform3D
+	match view:
+		"poker_seat":
+			xform = world.third_person_view(POKER_ME)
+			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
+		"poker_overview":
+			xform = world.overview_view()
+		"poker_lobby":
+			xform = world.lobby_view()
+		_:
+			push_warning("unknown view " + view)
+			return
+	rig.snap(xform.origin, xform.origin - xform.basis.z)
+
+
+func _poker_table(tavern: Tavern) -> TableWorld:
+	if _poker_world == null:
+		_poker_world = TableWorld.new(tavern)
+		tavern.table_root.add_child(_poker_world)
+		_poker_world.configure_table(SeatLayout.POKER_TABLE_RADIUS)
+		tavern.set_table_decor_visible(false)
+		_poker_world.cards.set_stand_visible(false)
+	return _poker_world
