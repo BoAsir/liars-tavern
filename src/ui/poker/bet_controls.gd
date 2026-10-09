@@ -27,7 +27,7 @@ const ROW_GAP := 4
 const PANEL_PADDING := Vector2(10, 6)
 const PRESET_LABELS := ["最小", "½ 池", "¾ 池", "1 池", "全下"]
 const PRESET_FRACTIONS := {1: 0.5, 2: 0.75, 3: 1.0}   # 下标 0 是最小加注,4 是全下
-const HOTKEY_HINT := "F 弃牌 · C/空格 过牌或跟注 · R/回车 加注 · ↑↓ 调一个大盲 · 1–5 预设"
+const HOTKEY_HINT := "F 弃牌 · C/空格/回车 过牌或跟注 · R 加注 · ↑↓ 调一个大盲 · 1–5 预设"
 const FREE_CHECK_HINT := "可以免费过牌"
 const REASON_SHORT := "筹码只够跟注"
 const REASON_ALL_IN := "对手都已全下"
@@ -143,9 +143,9 @@ static func hotkey(keycode: int) -> Dictionary:
 	match keycode:
 		KEY_F:
 			return {"kind": "fold"}
-		KEY_C, KEY_SPACE:
-			return {"kind": "check_call"}
-		KEY_R, KEY_ENTER, KEY_KP_ENTER:
+		KEY_C, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER:
+			return {"kind": "check_call"}   # 回车是默认动作:过牌 / 跟注(用户要求默认选过牌)
+		KEY_R:
 			return {"kind": "raise"}
 		KEY_UP:
 			return {"kind": "step", "delta": 1}
@@ -248,9 +248,10 @@ func _build_button_row() -> HBoxContainer:
 	_button_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fold_button = _action_button("弃牌", false)
 	_fold_button.pressed.connect(_on_fold)
-	_check_call_button = _action_button("过牌", false)
+	# 默认动作是过牌 / 跟注:它是高亮的主按钮,回车也按它;加注要主动点或按 R
+	_check_call_button = _action_button("过牌", true)
 	_check_call_button.pressed.connect(_check_or_call)
-	_raise_button = _action_button("加注到", true)
+	_raise_button = _action_button("加注到", false)
 	_raise_button.pressed.connect(func(): action_chosen.emit(PokerRules.RAISE, _amount))
 	_allin_button = _action_button("全下", false)
 	_allin_button.pressed.connect(func(): action_chosen.emit(PokerRules.ALLIN, 0))

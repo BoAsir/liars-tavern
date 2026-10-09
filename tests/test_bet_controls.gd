@@ -186,8 +186,8 @@ func test_hotkey_map():
 	assert_eq(BetControls.hotkey(KEY_C), {"kind": "check_call"})
 	assert_eq(BetControls.hotkey(KEY_SPACE), {"kind": "check_call"})
 	assert_eq(BetControls.hotkey(KEY_R), {"kind": "raise"})
-	assert_eq(BetControls.hotkey(KEY_ENTER), {"kind": "raise"})
-	assert_eq(BetControls.hotkey(KEY_KP_ENTER), {"kind": "raise"})
+	assert_eq(BetControls.hotkey(KEY_ENTER), {"kind": "check_call"}, "回车是默认动作:过牌 / 跟注")
+	assert_eq(BetControls.hotkey(KEY_KP_ENTER), {"kind": "check_call"})
 	assert_eq(BetControls.hotkey(KEY_UP), {"kind": "step", "delta": 1})
 	assert_eq(BetControls.hotkey(KEY_DOWN), {"kind": "step", "delta": -1})
 	assert_eq(BetControls.hotkey(KEY_1), {"kind": "preset", "index": 0})
@@ -257,3 +257,18 @@ func test_keys_are_ignored_when_it_is_not_my_turn():
 	assert_false(controls.handle_key(KEY_F))
 	assert_false(controls.handle_key(KEY_SPACE))
 	assert_signal_not_emitted(controls, "action_chosen")
+
+
+func test_check_or_call_is_the_highlighted_default_button():
+	# 用户要求:默认选过牌(高亮的主按钮是「过牌 / 跟注」,不是「加注到」)
+	var controls := BetControls.new()
+	add_child_autofree(controls)
+	var primary := UiTheme.button("x", true)
+	var plain := UiTheme.button("x", false)
+	add_child_autofree(primary)
+	add_child_autofree(plain)
+	var bg := func(b: Button) -> Color: return (b.get_theme_stylebox("normal") as StyleBoxFlat).bg_color
+	assert_eq(bg.call(controls._check_call_button), bg.call(primary), "过牌 / 跟注 高亮")
+	assert_eq(bg.call(controls._raise_button), bg.call(plain), "加注不再高亮")
+	assert_string_contains(BetControls.HOTKEY_HINT, "C/空格/回车 过牌或跟注")
+
