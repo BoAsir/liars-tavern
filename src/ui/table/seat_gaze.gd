@@ -65,7 +65,7 @@ func _follow_cursor_with_head(delta: float) -> void:
 	if excluded.call(my_pid):
 		_neck_input = Vector3.ZERO
 	elif active:
-		_neck_input = next_neck_input(_neck_input, _held_neck_direction(), delta, me.neck_reach())
+		_neck_input = next_neck_input(_neck_input, _held_neck_direction(), delta)
 	if active:
 		var ray := _cursor_ray()
 		target = cursor_look_target(ray["origin"], ray["direction"], world.table_radius)
@@ -97,13 +97,13 @@ func _held_neck_direction() -> Vector3:
 	return dir
 
 
-static func next_neck_input(current: Vector3, held: Vector3, delta: float, reach := Patron.NECK_REACH) -> Vector3:
-	# 按住方向键时头朝那个方向持续移动(斜向不更快),不往后、最远到 reach(物种不同:长吻的鳄鱼伸得近一点);
+static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Vector3:
+	# 按住方向键时头朝那个方向持续移动(斜向不更快),不往后、最远到 NECK_REACH(所有物种一样);
 	# 松开就停在原处,按反方向收回到原位就停
 	if held == Vector3.ZERO:
 		return current
-	# 范围由 Patron.clamp_neck 统一限定(不往后):发给别人的探头偏移就是自己的头真正停住的位置
-	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta).limit_length(reach)
+	# 范围由 Patron.clamp_neck 统一限定(不往后、最远 NECK_REACH):发给别人的探头偏移就是自己的头真正停住的位置
+	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta)
 
 
 static func cursor_look_target(origin: Vector3, direction: Vector3, table_radius := SeatLayout.TABLE_RADIUS) -> Vector3:

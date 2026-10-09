@@ -150,17 +150,17 @@ func test_fist_swaps_in_when_holding_the_gun():
 	Engine.time_scale = 1.0
 
 
-func test_crocodile_reaches_less_far():
-	var croc := _patron(7)
-	assert_lt(croc.neck_reach(), Patron.NECK_REACH)
-	croc.set_neck_target(Vector3(0, 0, -2.0))
-	assert_almost_eq(croc._neck_target.length(), croc.neck_reach(), 0.0001)
+func test_every_species_reaches_equally_far():
+	# 2026-10-09 用户要求:所有物种(含长吻的鳄鱼)脖子都一样最远伸到 NECK_REACH
+	for i in Species.count():
+		var p := _patron(i)
+		p.set_neck_target(Vector3(0, 0, -5.0))
+		assert_almost_eq(p._neck_target.length(), Patron.NECK_REACH, 0.0001, Species.IDS[i])
 
 
 func test_snout_tips_and_forward_reach():
 	# 头部往前伸(吻、鼻、帽檐)按放大后的尺寸量:吻尖不超过各物种的下限 × 头的前后放大倍数(HEAD_SCALE × HEAD_DEPTH,
-	# 鳄鱼是 HEAD_SCALE × scale_z),
-	# 伸脖子上限 + 往前伸的长度 ≤ FRONT_REACH_MAX,4 人同时探向桌心吻尖不互穿
+	# 鳄鱼是 HEAD_SCALE × scale_z)
 	for i in Species.count():
 		var p := _patron(i)
 		var id: String = Species.IDS[i]
@@ -170,5 +170,3 @@ func test_snout_tips_and_forward_reach():
 			tip = minf(tip, v.z)
 		var scale_z: float = PatronParts.head_scale(SpeciesLooks.look(i)).z
 		assert_gte(tip, FRONT_TIP.get(id, -0.22) * scale_z - 0.002, id + " 吻尖")
-		assert_lte(p.neck_reach() + p.front_extent(), Patron.FRONT_REACH_MAX + 0.0001, id + " 伸脖子 + 吻长")
-		assert_lte(p.neck_reach(), Patron.NECK_REACH, id)

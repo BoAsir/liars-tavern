@@ -13,10 +13,9 @@ const PAW_SCALE := Vector3(1, 0.8, 1.1)
 const HEAD_PIVOT := Vector3(0, 0.62, -0.02)   # 动森式:下巴压在领口上,看不见脖子(Q 版 0.615;最初 0.65)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
 const NECK_BASE := Vector3(0, 0.55, -0.02)   # 物种 LOOK 按压扁前写,构建时乘 PatronParts.BODY_SQUASH
-const NECK_REACH := 3.0       # 头最远水平伸出(米;原 0.85,后扩到 2.55,2026-10-09 按用户要求定为 3 米,能探过桌心、伸到对面);头平着伸出去,高度不变
-# 头部伸出 + 头部子树往前伸的长度(吻、鼻、帽檐)不超过这么远:动森式大头的长吻物种按实际网格包围盒量(front_extent())
-# 自动少伸一点,伸到最远时吻尖和别的物种的脸停在差不多的位置(原 0.85 + 0.3 的余量照搬到 3 米)
-const FRONT_REACH_MAX := NECK_REACH + 0.3
+# 头最远水平伸出(米;原 0.85,后扩到 2.55,2026-10-09 按用户要求定为 3 米,能探过桌心、伸到对面);头平着伸出去,高度不变。
+# 所有物种一样(含长吻的鳄鱼),不按吻长少伸
+const NECK_REACH := 3.0
 # 头只能往前、往两侧探,不往后(+Z,朝越肩镜头):往后会挡在镜头和自己的手牌之间
 const NECK_MAX_BACK := 0.0
 const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:临界阻尼(2√刚度),头跟手又停得稳,不过冲不回晃
@@ -113,7 +112,6 @@ var _fist: MeshInstance3D      # 握枪时右手换成拳头
 var _legs: MeshInstance3D      # 腿、鞋、尾巴(座位坐标,跟着蹦跳)
 var _look_data: Dictionary     # 物种外观(species/*.gd 的 LOOK)
 var _neck_base := NECK_BASE
-var _neck_reach := NECK_REACH
 var _brow_y := 0.222
 var _brows: Array = []
 var _ears: Array = []
@@ -165,7 +163,6 @@ func _build() -> void:
 	var spec := PatronParts.species(species_index)
 	_look_data = SpeciesLooks.look(species_index)
 	_neck_base = _look_data["neck"].get("base", NECK_BASE) * Vector3(1.0, PatronParts.BODY_SQUASH, 1.0)
-	_neck_reach = minf(NECK_REACH, _look_data.get("anim", {}).get("neck_reach", NECK_REACH))
 	MeshKit.add(self, PatronParts.chair_mesh(), null).name = "Chair"
 	_legs = _add_part(self, PatronParts.part_mesh(spec, "legs"), "Legs")
 	_legs.extra_cull_margin = 0.12   # 尾巴在顶点着色器里摆,会超出包围盒
@@ -179,7 +176,6 @@ func _build() -> void:
 	_neck = MeshKit.pivot(body, _neck_base, "Neck")
 	_add_part(_neck, PatronParts.part_mesh(spec, "neck"), "NeckMesh")
 	_build_head(spec)
-	_neck_reach = minf(_neck_reach, FRONT_REACH_MAX - front_extent())
 	_fit_neck()
 	_arm_l = _build_arm(-1.0, spec)
 	_arm_r = _build_arm(1.0, spec)
@@ -334,25 +330,7 @@ func _blink() -> void:
 # —— 弹簧脖子 ——
 
 func set_neck_target(seat_offset: Vector3) -> void:
-	# 长吻的物种(鳄鱼)伸得近一点:4 人同时探向桌心,吻尖也不互穿
-	_neck_target = clamp_neck(seat_offset).limit_length(_neck_reach)
-
-
-func neck_reach() -> float:
-	return _neck_reach
-
-
-func front_extent() -> float:
-	# 静止时头部子树(头、帽)从头枢轴往前(-Z)伸出多远,按网格包围盒量(不读顶点)
-	var front := 0.0
-	for inst: MeshInstance3D in [head.get_node("HeadMesh"), head.get_node("Hat/HatMesh")]:
-		var xform := Transform3D.IDENTITY   # 构建时还不在场景树里:沿父节点链乘到头枢轴
-		var node: Node3D = inst
-		while node != head:
-			xform = node.transform * xform
-			node = node.get_parent()
-		front = maxf(front, -(xform * inst.get_aabb()).position.z)
-	return front
+	_neck_target = clamp_neck(seat_offset)
 
 
 static func clamp_neck(seat_offset: Vector3) -> Vector3:

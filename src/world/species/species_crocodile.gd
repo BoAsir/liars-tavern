@@ -46,7 +46,7 @@ const LOOK := {
 		Vector3(-0.36, 0.3, 0.3), Vector3(-0.35, 0.13, 0.36), Vector3(-0.32, 0.058, 0.46), Vector3(-0.26, 0.042, 0.58),
 		Vector3(-0.16, 0.03, 0.68), Vector3(-0.045, 0.022, 0.74)], "radius": 0.07, "tip_radius": 0.012,
 		"color": "fur", "material": 4.0, "sway_range": Vector2(0.86, 1.0), "sway": 0.07},
-	"anim": {"look_pitch_min": -0.3, "blink_speed": 1.0, "neck_reach": 0.75},
+	"anim": {"look_pitch_min": -0.3, "blink_speed": 1.0},
 }
 
 # 两颌(Head 局部):上颌宽而罩住下颌,吻尖 z ≥ −0.38
