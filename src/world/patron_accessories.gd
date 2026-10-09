@@ -12,6 +12,7 @@ const MONOCLE_RIM := 0.0028
 const CHAIN_LINKS := 14
 const CHAIN_DROP := 0.13        # 单片眼镜链垂到眼睛下方多远
 const EARRING_RADIUS := 0.011
+const EARRING_AT := Vector2(0.14, 0.78)   # 耳洞的位置:离耳廓中线(耳根全宽的比例)、沿耳朵高度的比例
 const PIPE_STEM := 0.075        # 烟斗:烟杆长、烟斗锅的尺寸
 const PIPE_BOWL := Vector2(0.014, 0.03)
 
@@ -74,11 +75,14 @@ static func monocle(spec: Dictionary, shape: Callable) -> Array:
 # —— 耳环、烟斗 ——
 
 static func earring(spec: Dictionary, shape: Callable) -> Array:
-	# 左耳根外沿挂一只金圈耳环(挂在头上而不是耳朵上:耳朵网格两侧共用,只戴一只)
+	# 左耳靠近耳尖的下沿穿一只金圈耳环(挂在头上而不是耳朵上:耳朵网格两侧共用,只戴一只)。
+	# 圈在耳廓平面里、大半垂在耳缘外面;耳尖已伸出头的轮廓,耳环不会碰到腮帮
 	var e: Dictionary = spec["ears"]
 	var ear := PatronEars.pivot(spec, shape, -1.0)
-	var hole := ear * Vector3(-e["width"] * 0.42, e["height"] * 0.16, -0.002)
-	var hoop := Transform3D(ear.basis.orthonormalized() * Basis(Vector3.UP, PI / 2.0), hole + Vector3(0, -EARRING_RADIUS, 0))
+	var basis := ear.basis.orthonormalized()
+	var low_edge := -1.0 if basis.x.y >= 0.0 else 1.0
+	var hole := ear * Vector3(low_edge * e["width"] * EARRING_AT.x, e["height"] * EARRING_AT.y, -0.002)
+	var hoop := Transform3D(basis, hole + basis.x * low_edge * EARRING_RADIUS * 0.7)
 	return _tagged(_ring(hoop, EARRING_RADIUS, WIRE * 1.3), PatronSkin.BRASS)
 
 

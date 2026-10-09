@@ -10,7 +10,7 @@ class_name PatronSpecies
 #   snout     口鼻:length 前伸、spread 覆盖角(度)、taper 收细、pitch 下倾(度)、flat 端面压平(猪)
 #   nose      鼻子:shape(oval/disc/beak 带钩的喙/dots 两个小鼻孔)、size、heart 上宽下窄、raise、sink、
 #             scale(喙的大小)
-#   markings  毛色斑块(PatronHead.markings,light 浅色 / dark 深色);stripes 虎斑
+#   markings  毛色斑块(PatronHead.markings,light 浅色 / dark 深色;band 横贯脸部的色带,着色器逐像素画);stripes 虎斑
 #   eyes      眼睛:yaw/pitch 位置(弧度,头心方向)、radius、iris 虹膜色、pupil(round/slit/bar)、
 #             open 平时上眼睑的开度(0 闭 ~ 1 全开)、lashes 外眼角睫毛根数、sink 眼珠埋进头里的比例(青蛙鼓出来)
 #   brows     眉毛:yaw/pitch 中心、span 长度(弧度)、width、height
@@ -93,13 +93,13 @@ const ALL := [
 	},
 	{
 		"id": "pig", "label": "猪",
-		"fur": Color(0.76, 0.42, 0.41), "muzzle": Color(0.83, 0.49, 0.49), "dark": Color(0.42, 0.22, 0.2),
+		"fur": Color(0.68, 0.36, 0.36), "muzzle": Color(0.76, 0.42, 0.43), "dark": Color(0.4, 0.2, 0.19),
 		"hide": "skin",
 		"coat": Color(0.2, 0.3, 0.17), "accent": Color(0.85, 0.3, 0.22),
 		"palette": {
-			"nose": Color(0.82, 0.39, 0.45), "iris": Color(0.38, 0.6, 0.8), "vest": Color(0.78, 0.6, 0.26),
+			"nose": Color(0.75, 0.33, 0.4), "iris": Color(0.38, 0.6, 0.8), "vest": Color(0.78, 0.6, 0.26),
 			"pad": Color(0.36, 0.24, 0.26), "hat": Color(0.4, 0.3, 0.2), "hat_band": Color(0.3, 0.22, 0.14),
-			"trousers": Color(0.34, 0.27, 0.2), "skin": Color(0.85, 0.46, 0.47), "inner": Color(0.86, 0.43, 0.47),
+			"trousers": Color(0.34, 0.27, 0.2), "skin": Color(0.74, 0.38, 0.4), "inner": Color(0.78, 0.36, 0.42),
 			"claw": Color(0.42, 0.3, 0.3),
 		},
 		"patterns": {"coat": ["check", 14.0], "hat": ["tweed", 16.0], "trousers": ["tweed", 18.0]},
@@ -192,7 +192,7 @@ const ALL := [
 			"nose": Color(0.06, 0.05, 0.05), "iris": Color(0.55, 0.32, 0.1), "vest": Color(0.24, 0.17, 0.12),
 			"trim": Color(0.3, 0.2, 0.08), "tie": Color(0.1, 0.09, 0.1), "pad": Color(0.12, 0.1, 0.1),
 			"hat": Color(0.24, 0.25, 0.27), "hat_band": Color(0.08, 0.08, 0.09), "trousers": Color(0.22, 0.2, 0.18),
-			"inner": Color(0.3, 0.26, 0.25), "petal": Color(0.2, 0.55, 0.5),
+			"inner": Color(0.3, 0.26, 0.25), "pocket": Color(0.2, 0.55, 0.5),
 		},
 		"patterns": {"coat": ["check", 22.0], "trousers": ["tweed", 16.0], "hat": ["velvet", 0.0]},
 		"ink": Color(0.22, 0.14, 0.06),
@@ -202,15 +202,13 @@ const ALL := [
 		"markings": [
 			{"dir": Vector3(0, -0.5, -1), "size": 0.6, "soft": 0.1, "light": 1.0, "below": 0.0},
 			{"dir": Vector3(0.3, 0.68, -0.68), "size": 0.17, "soft": 0.05, "light": 1.0, "mirror": true},
-			{"dir": Vector3(0.38, 0.17, -0.9), "size": 0.27, "soft": 0.04, "dark": 1.0, "mirror": true},
-			{"dir": Vector3(0.75, 0.1, -0.65), "size": 0.24, "soft": 0.05, "dark": 1.0, "mirror": true},
-			{"dir": Vector3(0.0, 0.14, -1), "size": 0.13, "soft": 0.04, "dark": 1.0},
+			{"band": {"pitch": 0.16, "height": 0.16, "waist": 0.06, "yaw": 1.35, "sag": 0.16}, "soft": 0.045, "dark": 1.0},
 		],
 		"eyes": {"yaw": 0.4, "pitch": 0.18, "radius": 0.03, "open": 0.84, "lashes": 0},
 		"brows": {"yaw": 0.4, "pitch": 0.5, "span": 0.34, "width": 0.01, "height": 0.004},
 		"mouth": {"kind": "cat", "width": 0.26, "drop": 0.3},
-		"ears": {"kind": "cat", "yaw": 0.8, "pitch": 0.85, "height": 0.078, "width": 0.08, "tilt": 24.0,
-			"lean": -8.0, "tip": 0.0, "rim": 1.0, "inner": "inner", "tuft": true},
+		"ears": {"kind": "cat", "yaw": 0.95, "pitch": 0.62, "height": 0.072, "width": 0.078, "tilt": 40.0,
+			"lean": -8.0, "tip": 0.0, "rim": 1.0, "inner": "inner", "tuft": false},
 		"whiskers": {"count": 3, "yaw": 0.25, "pitch": -0.05, "fan": 0.2, "length": 0.08},
 		"tufts": {"count": 3, "yaw": 1.0, "pitch": -0.2, "step": 0.15, "length": 0.06, "width": 0.022},
 		"body": {"belly": 0.04, "chest": 1.0},
@@ -218,7 +216,7 @@ const ALL := [
 			"shoes": "oxford"},
 		"paws": {"kind": "paw", "dark": true},
 		"tail": {"kind": "bushy", "side": 1.0, "length": 0.6, "radius": 0.07, "tip": 0.12, "rings": 7},
-		"hat": {"kind": "fedora", "size": 0.9, "pos": Vector3(0.0, 0.236, 0.012), "rot": Vector3(-7, 0, 9)},
+		"hat": {"kind": "fedora", "size": 0.84, "pos": Vector3(0.0, 0.234, 0.018), "rot": Vector3(-7, 0, 4)},
 		"accessories": ["earring"],
 	},
 	{
@@ -262,7 +260,7 @@ const ALL := [
 		"palette": {
 			"nose": Color(0.1, 0.15, 0.06), "iris": Color(0.95, 0.75, 0.15), "vest": Color(0.4, 0.27, 0.17),
 			"trim": Color(0.52, 0.46, 0.34), "pad": Color(0.75, 0.8, 0.5), "hat": Color(0.12, 0.32, 0.22),
-			"hat_band": Color(0.42, 0.62, 0.3), "petal": Color(0.98, 0.68, 0.78), "trousers": Color(0.3, 0.22, 0.2),
+			"hat_band": Color(0.42, 0.62, 0.3), "pocket": Color(0.98, 0.68, 0.78), "trousers": Color(0.3, 0.22, 0.2),
 			"scarf": Color(0.78, 0.12, 0.12), "mouth": Color(0.4, 0.1, 0.12), "tongue": Color(0.9, 0.42, 0.5),
 		},
 		"patterns": {"coat": ["tweed", 20.0], "scarf": ["dots", 60.0], "vest": ["stripes", 30.0]},

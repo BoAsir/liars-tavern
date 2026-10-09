@@ -144,7 +144,7 @@ static func _fedora() -> Array:
 		_tagged(PatronGeo.transformed(crown, squash), PatronSkin.HAT),
 		_tagged(PatronGeo.transformed(_band(FEDORA_BAND), squash), PatronSkin.HAT_BAND),
 		_tagged(PatronGeo.transformed(_lining(0.094), squash), PatronSkin.LINING),
-		_tagged(PatronGeo.transformed(feather, feather_place), PatronSkin.PETAL),
+		_tagged(PatronGeo.transformed(feather, feather_place), PatronSkin.POCKET),
 	]
 
 
@@ -199,7 +199,7 @@ static func _lotus(at: Vector3) -> Array:
 			var petal := PatronGeo.sphere(Vector3(length * PETAL_ASPECT, 0.0035, length * 0.5), 8, 5)
 			var tilt := Basis(Vector3.UP, a) * Basis(Vector3.RIGHT, rise)
 			parts.append(_tagged(PatronGeo.transformed(petal, Transform3D(tilt, at + tilt * Vector3(0, 0, -length * 0.45))),
-				PatronSkin.PETAL))
+				PatronSkin.POCKET))
 	parts.append(_tagged(PatronGeo.sphere(Vector3(0.008, 0.005, 0.008), 8, 5), PatronSkin.BRASS, at + Vector3(0, 0.007, 0)))
 	return parts
 

@@ -9,12 +9,13 @@ const SHADER := preload("res://src/world/shaders/patron.gdshader")
 const SLOT := "skin"        # MeshBatch 槽位名:实例化时绑定到该酒客的材质
 const SLOTS := 32           # 与着色器的 SLOTS 一致
 const FADE_TIME := 1.4
+const BARE_RIM := 0.4
 
 # 槽位(写进顶点色 alpha)
 enum {
 	FUR, MUZZLE, DARK, SKIN, NOSE, EYE, IRIS, MOUTH, TONGUE, TEETH, LASH, WHISKER, CLAW, PAD,
 	COAT, TRIM, VEST, SHIRT, TIE, POCKET, BRASS, TROUSERS, SHOES, SOLE, HAT, HAT_BAND, STONE, LINING, INNER,
-	WOOD, SCARF, PETAL,
+	WOOD, SCARF, FACE,
 }
 # 物种表 palette / patterns 里用的槽位名
 const SLOT_NAMES := {
@@ -22,7 +23,7 @@ const SLOT_NAMES := {
 	"mouth": MOUTH, "tongue": TONGUE, "teeth": TEETH, "lash": LASH, "whisker": WHISKER, "claw": CLAW, "pad": PAD,
 	"coat": COAT, "trim": TRIM, "vest": VEST, "shirt": SHIRT, "tie": TIE, "pocket": POCKET, "brass": BRASS,
 	"trousers": TROUSERS, "shoes": SHOES, "sole": SOLE, "hat": HAT, "hat_band": HAT_BAND, "stone": STONE,
-	"lining": LINING, "inner": INNER, "wood": WOOD, "scarf": SCARF, "petal": PETAL,
+	"lining": LINING, "inner": INNER, "wood": WOOD, "scarf": SCARF, "face": FACE,
 }
 # 质感类型(与着色器的 K_* 一致)
 enum { KIND_FUR, KIND_SKIN, KIND_GLOSS, KIND_EYE, KIND_IRIS, KIND_CLOTH, KIND_SATIN, KIND_METAL }
@@ -42,7 +43,7 @@ const SURFACES := {
 	BRASS: [KIND_METAL, 0.3, 0.0], TROUSERS: [KIND_CLOTH, 0.85, 0.15], SHOES: [KIND_GLOSS, 0.3, 0.0],
 	SOLE: [KIND_CLOTH, 0.9, 0.0], HAT: [KIND_CLOTH, 0.8, 0.25], HAT_BAND: [KIND_SATIN, 0.4, 0.3],
 	STONE: [KIND_GLOSS, 0.1, 0.0], LINING: [KIND_SATIN, 0.45, 0.2], INNER: [KIND_FUR, 0.7, 0.2],
-	WOOD: [KIND_GLOSS, 0.35, 0.0], SCARF: [KIND_CLOTH, 0.62, 0.25], PETAL: [KIND_SKIN, 0.5, 0.25],
+	WOOD: [KIND_GLOSS, 0.35, 0.0], SCARF: [KIND_CLOTH, 0.62, 0.25], FACE: [KIND_FUR, 0.82, 0.3],
 }
 # 物种表没给时的通用颜色(sRGB)
 const DEFAULT_COLORS := {
@@ -52,7 +53,6 @@ const DEFAULT_COLORS := {
 	SHIRT: Color(0.88, 0.86, 0.81), BRASS: Color(0.8, 0.58, 0.26), SHOES: Color(0.1, 0.06, 0.045),
 	SOLE: Color(0.07, 0.045, 0.035), STONE: Color(0.75, 0.1, 0.14), LINING: Color(0.42, 0.08, 0.1),
 	SKIN: Color(0.9, 0.62, 0.6), WOOD: Color(0.3, 0.16, 0.08), SCARF: Color(0.72, 0.12, 0.12),
-	PETAL: Color(0.92, 0.55, 0.62),
 }
 
 
@@ -67,7 +67,7 @@ static func palette_of(spec: Dictionary) -> Dictionary:
 	var accent: Color = spec["accent"]
 	var colors := DEFAULT_COLORS.duplicate()
 	colors.merge({
-		FUR: spec["fur"], MUZZLE: spec["muzzle"], DARK: spec["dark"], NOSE: spec["dark"].darkened(0.5),
+		FUR: spec["fur"], FACE: spec["fur"], MUZZLE: spec["muzzle"], DARK: spec["dark"], NOSE: spec["dark"].darkened(0.5),
 		COAT: coat, TRIM: coat.darkened(0.25), VEST: coat.lightened(0.15), TIE: accent, POCKET: accent,
 		TROUSERS: coat.darkened(0.35), HAT: spec["dark"].darkened(0.4), HAT_BAND: accent, INNER: spec["muzzle"],
 	}, true)
@@ -94,8 +94,11 @@ static func material(spec: Dictionary) -> ShaderMaterial:
 		for name in patterns:
 			if SLOT_NAMES[name] == slot:
 				pattern = patterns[name]
-		looks.append(Vector4(surface[1], surface[2], PATTERNS[pattern[0]], pattern[1]))
-		kinds.append(KIND_SKIN if bare and surface[0] == KIND_FUR else surface[0])
+		var skin_instead: bool = bare and surface[0] == KIND_FUR
+		# 光皮肤(猪、青蛙)的绒面边缘光弱一些:浅色皮肤在暖光下本来就亮,边缘光再一加会发白
+		var rim: float = surface[2] * (BARE_RIM if skin_instead else 1.0)
+		looks.append(Vector4(surface[1], rim, PATTERNS[pattern[0]], pattern[1]))
+		kinds.append(KIND_SKIN if skin_instead else surface[0])
 	mat.set_shader_parameter("palette", colors)
 	mat.set_shader_parameter("look", looks)
 	mat.set_shader_parameter("kinds", kinds)
@@ -103,7 +106,19 @@ static func material(spec: Dictionary) -> ShaderMaterial:
 	mat.set_shader_parameter("dark_slot", DARK)
 	mat.set_shader_parameter("pupil_shape", PUPILS.get(spec.get("eyes", {}).get("pupil", "round"), 0))
 	mat.set_shader_parameter("ink", spec.get("ink", (spec["coat"] as Color).darkened(0.65)))
+	_set_face_band(mat, spec)
 	return mat
+
+
+static func _set_face_band(mat: ShaderMaterial, spec: Dictionary) -> void:
+	# 物种表 markings 里的色带(浣熊眼罩)交给着色器逐像素画;没有色带的物种深浅为 0
+	mat.set_shader_parameter("face_slot", FACE)
+	for patch in spec.get("markings", []):
+		if patch.has("band"):
+			var b: Dictionary = patch["band"]
+			mat.set_shader_parameter("face_band", Vector4(b["pitch"], b["height"], b.get("waist", b["height"]), b["yaw"]))
+			mat.set_shader_parameter("face_band_shape", Vector3(b.get("sag", 0.0), patch.get("soft", 0.05), patch.get("dark", 1.0)))
+			return
 
 
 static func fade_out(tween: Tween, mat: ShaderMaterial) -> void:

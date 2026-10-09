@@ -6,7 +6,7 @@ class_name PatronHead
 # 换头型时眼睛、眉毛、嘴自动贴着新表面走。
 
 
-const CENTER := Vector3(0, 0.1, 0)    # 比头部枢轴高 0.1 米:头坐得低一点,领口上方露出的脖子短
+const CENTER := Vector3(0, 0.1, 0)    # 比头部枢轴高 0.1 米:头坐得低一点,领口上方露出的脖子短(着色器 HEAD_CENTER 与之一致)
 const HEAD_SEGMENTS := 36
 const HEAD_RINGS := 24
 const NORMAL_STEP := 0.01     # 数值求法线的角度步长(弧度)
@@ -107,21 +107,25 @@ static func skull(spec: Dictionary) -> Array:
 	var to_axis := Basis(Quaternion(Vector3.UP, snout_axis(spec)))
 	var arrays := PatronGeo.ellipsoid_fn(func(d: Vector3) -> Vector3: return shape.call(to_axis * d),
 		HEAD_SEGMENTS, HEAD_RINGS, CENTER)
-	var marks := markings(spec)
+	# 色带(浣熊眼罩)不烘进顶点色,由着色器按 FACE 槽位逐像素画
+	var marks := markings(spec, false)
 	return PatronGeo.colored(arrays, func(v: Vector3) -> Color:
 		var d := _dir_of(shape, v)
 		var m: Vector2 = marks.call(d)
-		return PatronSkin.tag(PatronSkin.FUR, m.x, m.y, _occlusion(d)))
+		return PatronSkin.tag(PatronSkin.FACE, m.x, m.y, _occlusion(d)))
 
 
-static func markings(spec: Dictionary) -> Callable:
+static func markings(spec: Dictionary, with_bands := true) -> Callable:
 	# 返回 fn(方向) -> Vector2(浅色比例, 深色比例):口鼻/下巴/腮的浅色、虎斑、眼周等,全由物种表里的斑块描述。
-	# 斑块:{"dir", "size"(角度半径,弧度), "soft", "light" 或 "dark", "mirror", "below"(只取某高度以下)}
+	# 斑块:{"dir", "size"(角度半径,弧度), "soft", "light" 或 "dark", "mirror", "below"(只取某高度以下)},
+	# 或横贯脸部的色带 {"band": {...}, "soft", "dark"}(见 _band)
 	var patches: Array = spec.get("markings", [])
 	var stripes: Dictionary = spec.get("stripes", {})
 	return func(d: Vector3) -> Vector2:
 		var m := Vector2.ZERO
 		for patch in patches:
+			if patch.has("band") and not with_bands:
+				continue
 			var amount := _patch(patch, d)
 			if patch.has("dark"):
 				m.y = maxf(m.y, amount * patch["dark"])
@@ -133,9 +137,11 @@ static func markings(spec: Dictionary) -> Callable:
 
 
 static func _patch(patch: Dictionary, d: Vector3) -> float:
+	var soft: float = patch.get("soft", 0.15)
+	if patch.has("band"):
+		return _band(patch["band"], d, soft)
 	var center: Vector3 = (patch["dir"] as Vector3).normalized()
 	var size: float = patch["size"]
-	var soft: float = patch.get("soft", 0.15)
 	var probe := d
 	if patch.get("mirror", false):
 		probe.x = absf(d.x) * signf(center.x)
@@ -144,6 +150,16 @@ static func _patch(patch: Dictionary, d: Vector3) -> float:
 	if patch.has("below"):
 		amount *= smoothstep(patch["below"] + 0.08, patch["below"] - 0.08, d.y)
 	return amount
+
+
+static func _band(band: Dictionary, d: Vector3, soft: float) -> float:
+	# 横贯脸部、左右对称的一条色带(浣熊的眼罩):pitch 中心高度、height 半高、waist 鼻梁处的半高、
+	# yaw 两侧延伸到的偏航角、sag 往两侧下垂多少(弧度)
+	var yaw := absf(atan2(d.x, -d.z))
+	var pitch := asin(clampf(d.y, -1.0, 1.0))
+	var center: float = band["pitch"] - band.get("sag", 0.0) * smoothstep(0.4, band["yaw"], yaw)
+	var half: float = lerpf(band.get("waist", band["height"]), band["height"], smoothstep(0.0, 0.35, yaw))
+	return smoothstep(half + soft, half - soft, absf(pitch - center)) * smoothstep(band["yaw"] + soft, band["yaw"] - soft, yaw)
 
 
 static func _stripes(stripes: Dictionary, d: Vector3) -> float:

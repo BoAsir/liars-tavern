@@ -37,6 +37,12 @@ uniform vec4 ink : source_color = vec4(0.1, 0.08, 0.06, 1.0);   // 格纹、条�
 uniform int pupil_shape = 0;       // 0 圆瞳  1 竖缝(猫)  2 横条
 uniform float pupil_size = 0.42;   // 瞳孔半径占虹膜半径的比例
 uniform float death : hint_range(0.0, 1.0) = 0.0;   // 出局褪色:0 → 1 在 1.4 秒内补间
+// 头部的色带斑纹(浣熊的眼罩)逐像素算:烘进顶点色的话,头部网格的分辨率画不出干净的边。
+// 只作用于头部网格(face_slot 槽位,部件坐标 = 头部坐标,头心与 PatronHead.CENTER 一致)
+uniform int face_slot = 31;
+uniform vec4 face_band = vec4(0.0);        // x 中心俯仰  y 半高  z 鼻梁处的半高  w 两侧延伸到的偏航(弧度)
+uniform vec3 face_band_shape = vec3(0.0);  // x 往两侧下垂  y 边缘软硬  z 深浅(0 = 没有色带)
+const vec3 HEAD_CENTER = vec3(0.0, 0.1, 0.0);
 
 varying flat int v_slot;
 varying flat int v_kind;
@@ -63,9 +69,26 @@ float lines(float coord, float width) {
 	return mix(line, width * 2.0, clamp(w * 2.0 - 0.6, 0.0, 1.0));
 }
 
+float face_band_mask(vec3 p) {
+	vec3 d = normalize(p - HEAD_CENTER);
+	float yaw = abs(atan(d.x, -d.z));
+	float pitch = asin(clamp(d.y, -1.0, 1.0));
+	float soft = face_band_shape.y;
+	float center = face_band.x - face_band_shape.x * smoothstep(0.4, face_band.w, yaw);
+	// 鼻梁处窄、眼周最宽,往两侧越走越细,末端收成尖而不是一刀切
+	float taper = 1.0 - 0.75 * smoothstep(0.5 * face_band.w, face_band.w, yaw);
+	float half_height = mix(face_band.z, face_band.y, smoothstep(0.0, 0.35, yaw)) * taper;
+	return smoothstep(half_height + soft, half_height - soft, abs(pitch - center))
+		* smoothstep(face_band.w, 0.8 * face_band.w, yaw);
+}
+
 vec3 marked(vec3 base) {
-	// 毛色斑纹:顶点色 g 往浅色(口鼻色)、b 往深色混合
-	return mix(mix(base, palette[light_slot].rgb, v_tag.g), palette[dark_slot].rgb, v_tag.b);
+	// 毛色斑纹:顶点色 g 往浅色(口鼻色)、b 往深色混合;头部再叠上逐像素的色带
+	float dark = v_tag.b;
+	if (v_slot == face_slot && face_band_shape.z > 0.0) {
+		dark = max(dark, face_band_mask(v_local) * face_band_shape.z);
+	}
+	return mix(mix(base, palette[light_slot].rgb, v_tag.g), palette[dark_slot].rgb, dark);
 }
 
 vec3 fur(vec3 base) {

@@ -193,7 +193,8 @@ func _seat_patrons(tavern: Tavern) -> void:
 func _replace(pid: int, species_index: int) -> void:
 	var old: Patron = world.patrons[pid]
 	var fresh := Patron.new(species_index)
-	fresh.transform = old.transform
+	# 原来的酒客可能还在登场缩放(0.01 → 1),只取朝向与位置
+	fresh.transform = Transform3D(old.transform.basis.orthonormalized(), old.transform.origin)
 	old.free()
 	world.add_child(fresh)
 	world.patrons[pid] = fresh
