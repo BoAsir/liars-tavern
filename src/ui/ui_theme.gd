@@ -191,6 +191,40 @@ static func side_column(host: Control, at_right: bool, side_margin: int, edge_ma
 	return column
 
 
+const SETTLEMENT_DOCK := 0.55       # 结算面板停在屏幕右侧这一段(从画面宽度的 55% 到右边)里居中
+const SETTLEMENT_SCRIM := 0.6       # 面板后面的压暗:左边全透明,到面板处最暗这么多
+
+
+static func settlement_dock(host: Control) -> Control:
+	# 结算面板的外框(规格 2026-10-09-winner-celebration):面板停在屏幕右侧、竖直居中,左边留给跳舞的胜者;
+	# 压暗只在右侧渐变,左边的胜者、礼炮和彩纸不被压暗。返回放面板的容器;压暗层是 host 的第一个孩子,名字 Scrim
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.32, SETTLEMENT_DOCK, 1.0])
+	gradient.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, SETTLEMENT_SCRIM),
+		Color(0, 0, 0, SETTLEMENT_SCRIM)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 4
+	var scrim := TextureRect.new()
+	scrim.name = "Scrim"
+	scrim.texture = texture
+	scrim.stretch_mode = TextureRect.STRETCH_SCALE
+	scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(scrim)
+	var dock := CenterContainer.new()
+	dock.name = "Dock"
+	dock.anchor_left = SETTLEMENT_DOCK
+	dock.anchor_right = 1.0
+	dock.anchor_top = 0.0
+	dock.anchor_bottom = 1.0
+	dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(dock)
+	return dock
+
+
 static func flat(color: Color, radius: int) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = color

@@ -1,5 +1,6 @@
 extends GutTest
-# 角色层:物种按玩家稳定分配、复活时复位幸存者的姿势、清理出局时打飞的帽子;
+# 角色层:酒客用房主分配的物种(子项目② §3.5;不带 species 键的离线调用按本地第一个空着的分配)、
+# 复活时复位幸存者的姿势、清理出局时打飞的帽子、主菜单的形象预览;
 # 德州:桌子放大后的座位与机位(规格 §5.5)、沿圆弧换座、离桌、铭牌挂点、拆台(§5.1)。
 
 
@@ -21,7 +22,14 @@ func after_each():
 
 
 func _arrange(pids: Array) -> void:
+	# 不带 species 键:离线工具与测试的调用方式,走本地「第一个空着的」兜底
 	world.arrange(pids.map(func(pid): return {"pid": pid}), pids[0], true, false)
+
+
+func _seat(species_by_pid: Array, in_game := false) -> void:
+	# [[pid, species], ...]:带房主分配的形象;等待厅(in_game 为假)里没有形象的人先不建
+	var players := species_by_pid.map(func(pair: Array) -> Dictionary: return {"pid": pair[0], "species": pair[1]})
+	world.arrange(players, species_by_pid[0][0], true, in_game, not in_game)
 
 
 func _species() -> Dictionary:
@@ -42,7 +50,7 @@ func _right_arm_points_at(patron: Patron, target: Vector3) -> bool:
 	return hand.normalized().distance_to((target - Patron.SHOULDER).normalized()) < 0.01
 
 
-# —— 物种 ——
+# —— 物种:不带 species 键的本地兜底(原意图「按人稳定、同桌不撞脸」不变)——
 
 func test_new_patrons_take_distinct_species_in_seat_order():
 	_arrange([1, 2, 3])
@@ -56,6 +64,78 @@ func test_newcomer_takes_the_species_a_leaver_freed_and_others_keep_theirs():
 	assert_eq(_species(), {1: 0, 3: 2, 4: 1})
 
 
+# —— 物种:房主分配(子项目② §3.5)——
+
+func test_assigned_species_is_used_as_is():
+	_seat([[1, 7], [2, 4], [3, 0]])
+	assert_eq(_species(), {1: 7, 2: 4, 3: 0})
+	assert_eq(world.species_index_of(2), 4)
+
+
+func test_species_change_swaps_in_a_new_patron_at_the_same_seat():
+	_seat([[1, 7], [2, 4]])
+	var old: Patron = world.patrons[2]
+	var place := old.transform
+	await wait_seconds(0.6)   # 登场放大播完
+	_seat([[1, 7], [2, 5]])
+	var fresh: Patron = world.patrons[2]
+	assert_ne(fresh, old, "换成新实例")
+	assert_eq(fresh.species_index, 5)
+	assert_almost_eq(fresh.position, place.origin, Vector3.ONE * 0.0001, "原地换人")
+	assert_true(old.is_inside_tree(), "旧的冒烟缩小后才释放")
+	await wait_seconds(0.5)
+	assert_false(is_instance_valid(old))
+	_seat([[1, 7], [2, 5]])
+	assert_eq(world.patrons[2], fresh, "物种没变:不重建")
+
+
+func test_several_changes_in_one_frame_keep_only_the_last():
+	_seat([[1, 7], [2, 4]])
+	var first: Patron = world.patrons[2]
+	await wait_process_frames(1)
+	_seat([[1, 7], [2, 5]])
+	var middle: Patron = world.patrons[2]
+	_seat([[1, 7], [2, 6]])
+	assert_eq(world.patrons[2].species_index, 6)
+	assert_true(middle.is_queued_for_deletion(), "同一帧里刚建的直接收走,不再冒一次烟")
+	assert_false(first.is_queued_for_deletion(), "原来的那个照常冒烟离场")
+
+
+func test_unassigned_players_wait_in_the_lobby_until_the_host_assigns_them():
+	_seat([[1, 7], [2, -1]])
+	assert_false(world.patrons.has(2), "挑选中…:先不建角色")
+	assert_true(world.seat_angles.has(2), "座位照排")
+	_seat([[1, 7], [2, 3]])
+	assert_eq(world.patrons[2].species_index, 3)
+
+
+func test_junk_species_counts_as_unassigned_in_the_lobby():
+	_seat([[1, 7], [2, 99], [3, "x"], [4, 2.0]])
+	assert_eq(world.patrons.keys(), [1])
+
+
+func test_in_game_unassigned_players_get_a_deterministic_local_fallback():
+	# 对局里牌桌直接下标访问角色,缺了会崩:按座位顺序补第一个空着的,不和已分配的撞;各端同一份座位表,结果一致
+	_seat([[1, 0], [2, -1], [3, 1], [4, "x"]], true)
+	assert_eq(_species(), {1: 0, 2: 2, 3: 1, 4: 3})
+	_seat([[1, 0], [2, -1], [3, 1], [4, "x"]], true)
+	assert_eq(_species(), {1: 0, 2: 2, 3: 1, 4: 3}, "两次调用结果一致")
+	assert_engine_error_count(0)
+
+
+func test_revive_keeps_the_assigned_species():
+	_seat([[1, 6], [2, 3]], true)
+	world.patrons[2].die()
+	world.revive_all()
+	assert_eq(_species(), {1: 6, 2: 3})
+
+
+func test_species_index_of_a_player_without_patron():
+	_seat([[1, 7], [2, -1]])
+	assert_eq(world.species_index_of(2), Species.UNASSIGNED)
+	assert_eq(world.species_index_of(99), Species.UNASSIGNED)
+
+
 func test_revived_patron_keeps_its_species():
 	_arrange([1, 2, 3])
 	var old: Patron = world.patrons[2]
@@ -66,11 +146,12 @@ func test_revived_patron_keeps_its_species():
 	assert_eq(_species(), {1: 0, 2: 1, 3: 2})
 
 
-func test_species_of_matches_the_patron_model():
+func test_species_index_of_matches_the_patron_model():
+	# species_of(外观字典)换成 species_index_of(物种下标):等待厅直接读名单里的 species
 	_arrange([1, 2, 3])
 	_arrange([1, 3])
-	assert_eq(world.species_of(3), PatronParts.species(2))
-	assert_eq(world.species_of(99), {}, "没有角色的玩家")
+	assert_eq(world.species_index_of(3), 2)
+	assert_eq(world.species_index_of(99), Species.UNASSIGNED, "没有角色的玩家")
 
 
 # —— 复活时复位幸存者 ——
@@ -117,6 +198,71 @@ func test_clear_removes_knocked_off_hats():
 	assert_eq(_debris().size(), 0)
 
 
+# —— 主菜单空椅子 ——
+
+func _empty_chairs() -> Array:
+	return world.get_children().filter(func(n: Node) -> bool: return String(n.name).begins_with("EmptyChair"))
+
+
+func test_cleared_table_shows_four_shared_empty_chairs():
+	world.clear()
+	var chairs := _empty_chairs()
+	assert_eq(chairs.size(), 4)
+	for chair: MeshInstance3D in chairs:
+		assert_true(chair.visible)
+		assert_same(chair.mesh, chairs[0].mesh, "共用一份椅子网格(自动实例化)")
+
+
+func _preview() -> Array:
+	return world.get_children().filter(func(n: Node) -> bool:
+		return n is Patron and not n.is_queued_for_deletion() and not world.patrons.values().has(n))
+
+
+func test_menu_preview_sits_in_chair_zero():
+	world.clear()
+	world.show_menu_preview(5)
+	var shown := _preview()
+	assert_eq(shown.size(), 1)
+	assert_eq(shown[0].species_index, 5)
+	assert_almost_eq(shown[0].position, world.seat_transform(0.0).origin, Vector3.ONE * 0.0001)
+	var chairs := _empty_chairs()
+	assert_false(chairs.filter(func(c): return c.name == "EmptyChair0")[0].visible, "0 号空椅子让给预览酒客")
+	assert_eq(chairs.filter(func(c): return c.visible).size(), 3)
+
+
+func test_menu_preview_swaps_species_with_smoke():
+	world.clear()
+	world.show_menu_preview(1)
+	var old: Patron = _preview()[0]
+	world.show_menu_preview(1)
+	assert_eq(_preview(), [old], "同一物种不重建")
+	world.show_menu_preview(6)
+	assert_ne(world._menu_preview, old)
+	assert_eq(world._menu_preview.species_index, 6)
+	await wait_seconds(0.5)
+	assert_false(is_instance_valid(old), "旧的冒烟离场")
+
+
+func test_arrange_and_clear_remove_the_menu_preview():
+	world.clear()
+	world.show_menu_preview(2)
+	_arrange([1, 2])
+	assert_eq(_preview().size(), 0, "进等待厅:预览收走")
+	world.clear()
+	world.show_menu_preview(2)
+	world.clear()
+	assert_eq(_preview().size(), 0)
+	for chair: MeshInstance3D in _empty_chairs():
+		assert_true(chair.visible, "4 把空椅子都回来")
+
+
+func test_arranging_players_hides_the_empty_chairs():
+	_arrange([1, 2])
+	for chair: MeshInstance3D in _empty_chairs():
+		assert_false(chair.visible, "有真人酒客时空椅子收起(酒客自带椅子)")
+	world.clear()
+	for chair: MeshInstance3D in _empty_chairs():
+		assert_true(chair.visible)
 
 
 # —— 德州:桌子放大与机位 ——
@@ -169,9 +315,11 @@ func test_liars_table_keeps_its_camera_views():
 func test_poker_table_uses_the_spec_camera_views():
 	world.configure_table(POKER_R)
 	_arrange([1, 2])
-	_assert_view(world.third_person_view(1), Vector3(0.55, 1.92, 2.6), Vector3(0, 0.78, -0.12), "越肩")
-	_assert_view(world.third_person_view(2), Vector3(-0.55, 1.92, -2.6), Vector3(0, 0.78, 0.12), "对面座位的越肩")
-	_assert_view(world.overview_view(), Vector3(0, 2.0, 2.6), Vector3(0, 0.78, 0.0), "观战")
+	# 动森式大头之后铭牌挂高(TableWorld.NAMEPLATE_HEIGHT 1.74 起、错开高低),越肩与观战机位跟着抬高一点
+	# (Q 版 (0.55, 1.92, 2.6) / (0, 2.0, 2.6));再高到帽顶的连线就擦到吊灯罩(test_poker_view_layout)
+	_assert_view(world.third_person_view(1), Vector3(0.6, 2.05, 2.55), Vector3(0, 0.78, -0.12), "越肩")
+	_assert_view(world.third_person_view(2), Vector3(-0.6, 2.05, -2.55), Vector3(0, 0.78, 0.12), "对面座位的越肩")
+	_assert_view(world.overview_view(), Vector3(0, 2.1, 2.7), Vector3(0, 0.78, 0.0), "观战")
 	_assert_view(world.lobby_view(), Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1), "等待厅")
 
 
@@ -274,15 +422,19 @@ func test_remove_patron_of_an_unknown_player_is_harmless():
 
 
 func test_nameplate_anchor_sits_above_the_seat_origin():
+	# 动森式大头之后挂在最高的头顶之上(1.74;Q 版 1.62),绕桌序号为偶数的座位(含本机)再高一档,相邻铭牌错开
 	world.configure_table(POKER_R)
 	_arrange([1, 2, 3, 4, 5, 6, 7, 8])
-	assert_eq(TableWorld.NAMEPLATE_HEIGHT, 1.62)
+	assert_eq(TableWorld.NAMEPLATE_HEIGHT, 1.74)
 	for pid in world.patrons:
 		var seat := world.seat_transform(world.seat_angles[pid]).origin
-		assert_almost_eq(world.nameplate_anchor(pid), seat + Vector3(0, 1.62, 0), Vector3.ONE * 0.0001)
+		var high: bool = (pid - 1) % 2 == 0
+		var height := TableWorld.NAMEPLATE_HEIGHT + (TableWorld.NAMEPLATE_STAGGER if high else 0.0)
+		assert_almost_eq(world.nameplate_anchor(pid), seat + Vector3(0, height, 0), Vector3.ONE * 0.0001)
 	world.remove_patron(5)
 	var empty_seat := world.seat_transform(world.seat_angles[5]).origin
-	assert_almost_eq(world.nameplate_anchor(5), empty_seat + Vector3(0, 1.62, 0), Vector3.ONE * 0.0001, "离桌后仍按座位算")
+	assert_almost_eq(world.nameplate_anchor(5), empty_seat + Vector3(0, TableWorld.NAMEPLATE_HEIGHT + TableWorld.NAMEPLATE_STAGGER, 0),
+		Vector3.ONE * 0.0001, "离桌后仍按座位算")
 
 
 func test_angle_of_inverts_the_seat_direction():

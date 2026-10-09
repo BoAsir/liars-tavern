@@ -1,152 +1,183 @@
 extends GutTest
-# 3D 左轮:其他代码依赖的节点名、枢轴位置与常量不变;扳击锤时击锤转起、转轮转过一膛;
-# 四把枪共用同一份缓存网格(每局重建不再拼装);侧放在桌上时不陷进桌布、也不悬空;
-# 左轮专用的程序化几何三角形都朝外。
+# 左轮模型与规则一致:弹膛孔数等于 Revolver.CHAMBERS,每扳一次击锤转轮转一格。
 
 
-const HAMMER_PIVOT := Vector3(0, 0.06, 0.022)
-const FELT_THICKNESS := 0.004      # 桌布顶面高出 TABLE_TOP 的厚度(TavernTable)
-const MAX_HOVER := 0.006           # 侧放时最低点离桌布不超过这么多,看上去是贴着桌面的
-const SHADOW_SHARE := 0.6          # 投影三角形占预算的上限
-const REVOLVER_TRIANGLES := 6000
-const TWEEN_WAIT := 0.3
-
-
-func _gun() -> Revolver3D:
+func test_drum_has_one_bore_per_chamber():
 	var gun := Revolver3D.new()
 	add_child_autofree(gun)
-	return gun
+	var bores := gun.drum.get_children().filter(func(n): return n.name.begins_with("Chamber"))
+	assert_eq(bores.size(), Revolver.CHAMBERS)
 
 
-# —— 结构与常量 ——
-
-func test_node_structure_and_pivots_are_preserved():
-	var gun := _gun()
-	assert_not_null(gun.get_node_or_null("Body"), "有 Body")
-	assert_eq(gun.drum, gun.get_node_or_null("Body/Drum"), "转轮枢轴是 Body/Drum")
-	assert_eq(gun.hammer, gun.get_node_or_null("Body/Hammer"), "击锤枢轴是 Body/Hammer")
-	assert_eq(gun.drum.position, Revolver3D.DRUM_POS, "转轮枢轴在 DRUM_POS")
-	assert_eq(gun.hammer.position, HAMMER_PIVOT, "击锤枢轴位置不变")
-	assert_eq(gun.muzzle.position, Revolver3D.MUZZLE_POS, "枪口标记在 MUZZLE_POS")
-	assert_almost_eq(Revolver3D.BARREL_LENGTH, 0.15, 0.0001, "枪管长度常量不变")
+func test_cocking_advances_the_drum_one_chamber():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	var before := gun.drum.rotation.z
+	await gun.cock_hammer(0.05).finished
+	assert_almost_eq(gun.drum.rotation.z - before, TAU / Revolver.CHAMBERS, 0.0001)
 
 
-func test_muzzle_marker_sits_at_the_barrel_tip():
-	# 枪口火焰从标记点喷出:枪身网格最靠前的地方就是枪口
-	var gun := _gun()
-	var frame: MeshInstance3D = gun.get_node("Body/Frame")
-	var front := frame.mesh.get_aabb().position.z
-	assert_almost_eq(front, Revolver3D.MUZZLE_POS.z, 0.002, "枪管前端与枪口标记对齐")
+func test_revolver_is_three_shared_meshes():
+	# 合批:机身 / 转轮 / 击锤各一个实例,所有左轮共用同一份网格(自动实例化)
+	var a := Revolver3D.new()
+	var b := Revolver3D.new()
+	add_child_autofree(a)
+	add_child_autofree(b)
+	var meshes_a := a.find_children("*", "MeshInstance3D", true, false)
+	var meshes_b := b.find_children("*", "MeshInstance3D", true, false)
+	assert_eq(meshes_a.size(), 3)
+	for i in meshes_a.size():
+		assert_same(meshes_a[i].mesh, meshes_b[i].mesh, meshes_a[i].name)
 
 
-func test_drum_has_one_marker_per_chamber():
-	var gun := _gun()
-	var mouths := gun.drum.find_children("Chamber*", "Marker3D", false, false)
-	assert_eq(mouths.size(), Revolver.CHAMBERS, "每膛一个膛口标记")
+func test_chambers_are_markers():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	for node in gun.drum.get_children().filter(func(n): return n.name.begins_with("Chamber")):
+		assert_true(node is Marker3D, node.name)
 
 
-# —— 动作 ——
-
-func test_cock_hammer_raises_the_hammer_and_turns_one_chamber():
-	var gun := _gun()
-	gun.cock_hammer(0.05)
-	await wait_seconds(TWEEN_WAIT)
-	assert_almost_eq(gun.hammer.rotation.x, deg_to_rad(Revolver3D.HAMMER_COCKED_DEG), 0.001, "击锤扳起")
-	assert_almost_eq(gun.drum.rotation.z, TAU / Revolver.CHAMBERS, 0.001, "转轮转过一膛")
-	gun.release_hammer()
-	await wait_seconds(TWEEN_WAIT)
-	assert_almost_eq(gun.hammer.rotation.x, 0.0, 0.001, "击锤落下")
+func test_spinning_stops_on_a_whole_chamber():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	await gun.spin_drum(0.05, 2.37).finished
+	await gun.cock_hammer(0.05).finished
+	var step := TAU / Revolver.CHAMBERS
+	var rest := fposmod(gun.drum.rotation.z, step)
+	assert_true(rest < 0.001 or step - rest < 0.001, "停在整格(余 %.4f)" % rest)
 
 
-# —— 缓存与预算 ——
-
-func test_revolvers_share_cached_meshes():
-	var a := _meshes(_gun())
-	var b := _meshes(_gun())
-	assert_gt(a.size(), 0, "左轮有网格")
-	assert_eq(a, b, "两把枪的每个网格都是同一份缓存")
-
-
-func test_shadow_casting_share_stays_small():
-	var gun := _gun()
-	var shadow := 0
-	for node in gun.find_children("*", "MeshInstance3D", true, false):
-		var mi := node as MeshInstance3D
-		if mi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
-			for s in mi.mesh.get_surface_count():
-				shadow += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	assert_gt(shadow, 0, "枪身投影")
-	assert_lte(shadow, int(REVOLVER_TRIANGLES * SHADOW_SHARE), "投影三角形不超过预算的六成")
+func test_a_chamber_lines_up_with_the_barrel():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	var chamber: Marker3D = gun.drum.get_node("Chamber1")
+	var p := gun.to_local(chamber.global_position)
+	assert_almost_eq(p.x, 0.0, 0.0005)
+	assert_almost_eq(p.y, Revolver3D.MUZZLE_POS.y, 0.002)
 
 
-# —— 侧放在桌上 ——
+# —— 重塑后的左轮(子项目③ §2)——
 
-func test_lying_revolvers_rest_on_the_felt():
-	var tavern := Tavern.new()
-	add_child_autofree(tavern)
-	var world := TableWorld.new(tavern)
-	tavern.table_root.add_child(world)
-	world.arrange([{"pid": 1}, {"pid": 2}, {"pid": 3}, {"pid": 4}], 1, true, true)
-	var felt_top := SeatLayout.TABLE_TOP + FELT_THICKNESS
-	for pid in world.revolvers:
-		var lowest := _lowest_point(world.revolvers[pid])
-		assert_gte(lowest, felt_top - 0.0005, "左轮 %d 不陷进桌布" % pid)
-		assert_lte(lowest, felt_top + MAX_HOVER, "左轮 %d 贴着桌面,不悬空" % pid)
+const SceneCensus := preload("res://tools/scene_census.gd")
 
 
-# —— 程序化几何 ——
-
-func test_slab_faces_outward_on_curved_and_sharp_outlines():
-	_assert_faces_out(RevolverShapes.slab(RevolverModel.guard_outline(), 0.012, 0.0015), "扳机护圈")
-	_assert_faces_out(RevolverShapes.slab(RevolverModel.hammer_outline(), 0.008, 0.0005), "带齿的击锤")
-	var clockwise := RevolverModel.guard_outline()
-	clockwise.reverse()
-	_assert_faces_out(RevolverShapes.slab(clockwise, 0.012, 0.0015), "顺时针给出的轮廓")
-
-
-func test_drum_and_panel_shapes_face_outward():
-	var panel := RevolverShapes.ccw(RevolverModel.raked(RevolverModel.PANEL_OUTLINE))
-	_assert_faces_out(RevolverShapes.domed_panel(panel, RevolverModel.rake_point(RevolverModel.PANEL_CENTER), 0.01,
-		PackedFloat32Array(RevolverModel.PANEL_RINGS)), "握把片")
-	var rays := RevolverShapes.sector_rays(6, 0.013, 0.021, 12)
-	_assert_faces_out(RevolverShapes.holed_disc(0.021, 6, 0.013, 0.005, rays, 90.0), "转轮前脸")
-
-
-# —— 工具 ——
-
-func _meshes(gun: Revolver3D) -> Array:
-	var out := []
-	for node in gun.find_children("*", "MeshInstance3D", true, false):
-		out.append((node as MeshInstance3D).mesh)
+func _verts(inst: MeshInstance3D, xform: Transform3D) -> PackedVector3Array:
+	# 无头测试里网格数组在 CPU 上,可以直接读(src 里禁止)
+	var out := PackedVector3Array()
+	for s in inst.mesh.get_surface_count():
+		for v: Vector3 in inst.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+			out.append(xform * v)
 	return out
 
 
-func _lowest_point(gun: Revolver3D) -> float:
-	var lowest := INF
-	for node in gun.find_children("*", "MeshInstance3D", true, false):
-		var mi := node as MeshInstance3D
-		var xform := mi.global_transform
-		for s in mi.mesh.get_surface_count():
-			for v in (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-				lowest = minf(lowest, (xform * v).y)
-	return lowest
+func _in_gun(gun: Revolver3D, node: Node3D) -> Transform3D:
+	# 节点相对枪根的变换(不依赖是否在场景树里)
+	var t := Transform3D.IDENTITY
+	var n: Node = node
+	while n != gun:
+		t = (n as Node3D).transform * t
+		n = n.get_parent()
+	return t
 
 
-func _assert_faces_out(arrays: Array, label: String) -> void:
-	# Godot 正面为顺时针:三角形 (a,b,c) 的外法线 ∝ (c-a)×(b-a),应与顶点法线同向
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var wrong := 0
-	var checked := 0
-	for t in range(0, indices.size(), 3):
-		var a := verts[indices[t]]
-		var face := (verts[indices[t + 2]] - a).cross(verts[indices[t + 1]] - a)
-		if face.length() < 1e-12:
-			continue
-		checked += 1
-		var avg := normals[indices[t]] + normals[indices[t + 1]] + normals[indices[t + 2]]
-		if face.normalized().dot(avg.normalized()) <= 0.0:
-			wrong += 1
-	assert_gt(checked, 0, label + ":有三角形")
-	assert_eq(wrong, 0, label + ":所有三角形朝外(%d/%d 朝内)" % [wrong, checked])
+func _assert_a_chamber_on_the_barrel_axis(gun: Revolver3D, label: String) -> void:
+	var hits := 0
+	for marker in gun.drum.get_children().filter(func(n): return n.name.begins_with("Chamber")):
+		var p := _in_gun(gun, marker).origin
+		if absf(p.x) < 0.0005 and absf(p.y - Revolver3D.BARREL_Y) < 0.0005:
+			hits += 1
+	assert_eq(hits, 1, label + ":恰好一个弹膛与枪管同轴")
+
+
+func test_a_chamber_lines_up_with_the_barrel_after_cocking_and_spinning():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	_assert_a_chamber_on_the_barrel_axis(gun, "初始")
+	await gun.cock_hammer(0.05).finished
+	_assert_a_chamber_on_the_barrel_axis(gun, "扳击锤之后")
+	await gun.spin_drum(0.05, 2.37).finished
+	_assert_a_chamber_on_the_barrel_axis(gun, "转轮之后")
+	assert_almost_eq(Revolver3D.aligned_angle(0.3 * Revolver3D.CHAMBER_STEP), 0.0, 1e-6)
+	assert_almost_eq(Revolver3D.aligned_angle(2.6 * Revolver3D.CHAMBER_STEP), 3.0 * Revolver3D.CHAMBER_STEP, 1e-6)
+
+
+func test_drum_mesh_is_five_fold_symmetric():
+	# 五个弹膛外观完全一样:转轮网格每个顶点绕 Z 转一格后,都能在 0.1 mm 内找到原有顶点(空间哈希)
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	var drum_mesh: MeshInstance3D = gun.drum.get_node("DrumMesh")
+	var verts := _verts(drum_mesh, Transform3D.IDENTITY)
+	var cell := 0.0005
+	var grid := {}
+	for v in verts:
+		var key := Vector3i((v / cell).floor())
+		if not grid.has(key):
+			grid[key] = []
+		grid[key].append(v)
+	var turn := Basis(Vector3.BACK, Revolver3D.CHAMBER_STEP)
+	var missing := 0
+	for v in verts:
+		var r := turn * v
+		var key := Vector3i((r / cell).floor())
+		var found := false
+		for dx in [-1, 0, 1]:
+			for dy in [-1, 0, 1]:
+				for dz in [-1, 0, 1]:
+					for w in grid.get(key + Vector3i(dx, dy, dz), []):
+						if w.distance_to(r) < 0.0001:
+							found = true
+		if not found:
+			missing += 1
+	assert_eq(missing, 0, "转一格后找不到对应顶点的个数")
+	var others := gun.drum.get_children().filter(func(n): return not (n is Marker3D) and n != drum_mesh)
+	assert_eq(others, [], "转轮下除弹膛标记外只有网格")
+
+
+func test_guns_share_meshes_and_stay_in_budget():
+	var a := Revolver3D.new()
+	var b := Revolver3D.new()
+	add_child_autofree(a)
+	add_child_autofree(b)
+	var census := SceneCensus.count(a)
+	assert_eq(census["meshes"], 3, "机身 / 转轮 / 击锤各一个实例")
+	assert_lte(census["triangles"], 8000)
+	var surfaces := 0
+	for inst: MeshInstance3D in a.find_children("*", "MeshInstance3D", true, false):
+		surfaces += inst.mesh.get_surface_count()
+	assert_eq(surfaces, 4, "机身两个 surface(钢件 + 胡桃木握把),转轮与击锤各一个")
+	for name in ["Body/BodyMesh", "Body/Drum/DrumMesh", "Body/Hammer/HammerMesh"]:
+		assert_same(a.get_node(name).mesh, b.get_node(name).mesh, name)
+
+
+func _lowest(points: PackedVector3Array, basis: Basis) -> float:
+	var low := INF
+	for v in points:
+		low = minf(low, (basis * v).y)
+	return low
+
+
+func test_rest_constants_match_the_mesh():
+	var gun := Revolver3D.new()
+	add_child_autofree(gun)
+	var drum := _verts(gun.drum.get_node("DrumMesh"), _in_gun(gun, gun.drum.get_node("DrumMesh")))
+	var body := _verts(gun.get_node("Body/BodyMesh"), Transform3D.IDENTITY)
+	var cap := PackedVector3Array()
+	for v in body:
+		if v.y < -0.066:
+			cap.append(v)   # 握把下端与黄铜底帽
+	var all := drum + body
+	# 地上:转轮与底帽同时着地,最低点离原点 REST_HALF_WIDTH
+	var floor_basis := Basis(Vector3.BACK, PI / 2.0 + Revolver3D.REST_ROLL)
+	assert_almost_eq(_lowest(drum, floor_basis), _lowest(cap, floor_basis), 0.0005, "地上:转轮与底帽一样低")
+	assert_almost_eq(-_lowest(all, floor_basis), Revolver3D.REST_HALF_WIDTH, 0.0005, "地上:最低点")
+	# 桌上:转轮比底帽高出毡面厚度,转轮最低点离原点 TABLE_REST_LIFT
+	var table_basis := Basis(Vector3.BACK, PI / 2.0 + Revolver3D.TABLE_REST_ROLL)
+	assert_almost_eq(_lowest(drum, table_basis) - _lowest(cap, table_basis), SeatLayout.FELT_TOP - SeatLayout.TABLE_TOP, 0.0005,
+		"桌上:转轮比底帽高 4 mm")
+	assert_almost_eq(-_lowest(drum, table_basis), Revolver3D.TABLE_REST_LIFT, 0.0005, "桌上:转轮最低点")
+	# 枪口标记在枪口冠前方,离握持点不超过 0.27
+	var crown := INF
+	for v in body:
+		crown = minf(crown, v.z)
+	assert_lte(Revolver3D.MUZZLE_POS.z, crown, "枪口标记不在枪管里")
+	assert_lte(absf(Revolver3D.MUZZLE_POS.z), 0.27)

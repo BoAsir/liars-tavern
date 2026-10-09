@@ -1,20 +1,39 @@
 extends SceneTree
 # 性能探针:在离屏 SubViewport 里按指定分辨率渲染酒馆 + 展台,逐项关闭渲染特性,打印整帧耗时(毫秒)。
 # 需要窗口渲染(不能 --headless);离屏渲染,不会占满屏幕,也不受显示器刷新率限制。
-# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat] [--frames=120] [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>] [--showcase=liars|poker]
-# 不给 --cases 时逐项单独测一遍全部开关。--showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、
-# 7 个底池,约 900 枚筹码),机位取自 TableWorld;德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(规格 §8)。
-# 每行另打印该配置下一帧的绘制调用数(draw calls)。
+# 用法:godot --path . -s tools/perf_probe.gd -- [--size=3840x2160] [--view=seat,menu] [--frames=120]
+#        [--cases=fsr-0.5+post-off,ssil-off] [--shot=<目录>] [--assert-budget]
+# 不给 --cases 时逐项单独测一遍全部开关。--view 可用逗号给多个机位(机位表见 tools/camera_views.gd)。
+# 每帧都让投影灯的阴影图失效重画(游戏里酒客呼吸、吊灯摆动,阴影图每帧都在重画);
+# 每组打印整帧耗时、CPU 渲染线程耗时与可见 / 阴影 draw call、物体、图元。
+# --assert-budget:按 tools/perf_budget.gd 核对 budget 那一组(游戏实际渲染配置),超预算时退出码为 1。
+# --showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、7 个底池,约 900 枚筹码),
+# 机位 seat / overview 取自 TableWorld;--showcase=bomb_cat 用炸弹猫 6 人大桌展台(手牌、牌堆、弃牌堆、自己举着 8 张),
+# 机位 bomb_seat / bomb_overview / bomb_fp / bomb_close(预算见 tools/perf_budget.gd:bomb_seat、bomb_fp ≤ 700 draw call);第一人称 fp 两种展台都有(取自 TableWorld.first_person_view);德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(德州规格 §8)。
+# --celebrate:展台上开演结算庆祝(tools/celebrate_stage.gd,第一炮的彩纸正飘着时开测),机位 celebrate(胜者特写环绕)/
+# celebrate_table(整桌环绕),三种展台都能用;预算同其余机位(≤ 900 draw call)。
 
-
+const CameraViews := preload("res://tools/camera_views.gd")
+const CelebrateStage := preload("res://tools/celebrate_stage.gd")
+const PerfBudget := preload("res://tools/perf_budget.gd")
+const SceneCensus := preload("res://tools/scene_census.gd")
 const WARMUP_FRAMES := 60
-const SHOWCASES := {"liars": "res://tools/showcase.gd", "poker": "res://tools/poker_showcase.gd"}
+const BIAS_NUDGE := 0.00001   # 每帧来回微调投影灯的 shadow_bias,让阴影图失效重画(画面看不出差别)
+const SHOWCASES := {"liars": "res://tools/showcase.gd", "poker": "res://tools/poker_showcase.gd",
+	"bomb_cat": "res://tools/bomb_cat_showcase.gd"}
+# ④ 建的顶层节点(room-off / decor-off 用;同 tests/test_tavern_build.gd)
+const ROOM_NODES := ["Room", "Fireplace", "Bar", "Window", "WindowView", "Door", "DoorView", "Decor_", "WallProps_", "Clock",
+	"Pendulum", "Piano", "PianoBench", "CoatRack", "Barrel", "Crate", "Clutter", "Rugs", "Sconce", "Decals", "SmokeLayer", "HearthHaze"]
 
 var opts := {}
 var _viewport: SubViewport
 var _tavern: Tavern
 var _post_fx: PostFx
 var _world: TableWorld = null   # 德州展台的牌桌:机位从它取
+var _liars_world: TableWorld = null   # 骗子酒馆展台的牌桌:第一人称机位 fp 从它取
+var _bomb: Node = null                 # 炸弹猫展台:bomb_* 机位从它取
+var _celebrate_world: TableWorld = null   # --celebrate:开演庆祝的牌桌
+var _kind := "liars"
 
 
 func _initialize() -> void:
@@ -35,6 +54,7 @@ func _run() -> void:
 	root.add_child(_viewport)
 	_tavern = Tavern.new()
 	_viewport.add_child(_tavern)
+	await RoomTextures.build(_viewport)   # 墙地噪声与墙饰图集:不等的话测的是回退贴图
 	_post_fx = PostFx.new()
 	_viewport.add_child(_post_fx)
 	var kind: String = opts.get("showcase", "liars")
@@ -48,28 +68,56 @@ func _run() -> void:
 	_viewport.add_child(showcase)
 	await showcase.build(_tavern)
 	_world = showcase.get("world") if kind == "poker" else null
-	_place_camera(opts.get("view", "seat"))
-	print("%s / %s  size=%s view=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
-		_viewport.size, opts.get("view", "seat"), _viewport.msaa_3d])
+	_bomb = showcase if kind == "bomb_cat" else null
+	_liars_world = showcase.get("world") if kind == "liars" else null
+	_kind = kind
+	if opts.has("celebrate"):
+		_celebrate_world = showcase.get("world")
+		CelebrateStage.stage(_celebrate_world, kind)
+		await create_timer(1.6).timeout   # 第一炮(0.55 秒)的彩纸飞到半空
+	var rid := _viewport.get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(rid, true)
+	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
+		_viewport.size, _viewport.msaa_3d])
+	print("census ", SceneCensus.count(_viewport))
+	print("texture memory %.1f MB" % (RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576.0))
 	var toggles := _toggles()
 	var cases: PackedStringArray = opts["cases"].split(",") if opts.has("cases") else PackedStringArray(toggles.keys())
-	var base := await _measure()
-	_report("baseline (all on)", base, base)
-	_shot("baseline")
-	for case in cases:
-		var undos := []
-		for name in case.split("+"):
-			if not toggles.has(name):
-				push_error("unknown toggle %s (known: %s)" % [name, ", ".join(toggles.keys())])
-				quit(1)
-				return
-			undos.append(toggles[name].call())
-		_report(case, await _measure(), base)
-		_shot(case)
-		undos.reverse()
-		for undo in undos:
-			undo.call()
-	_report("baseline again (drift check)", await _measure(), base)
+	if opts.has("assert-budget") and not cases.has("budget"):
+		cases.append("budget")
+	var failures := PackedStringArray()
+	for view in opts.get("view", "seat").split(","):
+		if not _place_camera(view):
+			push_error("unknown view %s (known: %s)" % [view, ", ".join(CameraViews.NAMES)])
+			quit(1)
+			return
+		print("== view %s" % view)
+		var base := await _measure()
+		_report("baseline (all on)", base, base)
+		_shot("%s-baseline" % view)
+		for case in cases:
+			var undos := []
+			for name in case.split("+"):
+				if not toggles.has(name):
+					push_error("unknown toggle %s (known: %s)" % [name, ", ".join(toggles.keys())])
+					quit(1)
+					return
+				undos.append(toggles[name].call())
+			var m := await _measure()
+			_report(case, m, base)
+			_shot("%s-%s" % [view, case])
+			if case == "budget" and opts.has("assert-budget"):
+				failures.append_array(PerfBudget.violations(view, _budget_stats(m)))
+			undos.reverse()
+			for undo in undos:
+				undo.call()
+		_report("baseline again (drift check)", await _measure(), base)
+	if opts.has("assert-budget"):
+		for message in failures:
+			print("OVER BUDGET: ", message)
+		print("BUDGET %s" % ("FAIL" if failures.size() > 0 else "OK"))
+		quit(1 if failures.size() > 0 else 0)
+		return
 	quit()
 
 
@@ -105,7 +153,38 @@ func _toggles() -> Dictionary:
 		"ssao-low": func(): return _ssao_quality(RenderingServer.ENV_SSAO_QUALITY_LOW),
 		"fog-small": _fog_small,
 		"soft-shadow-hard": func(): return _soft_shadows(RenderingServer.SHADOW_QUALITY_HARD),
+		"patrons-off": func(): return _hide(_viewport.find_children("*", "Patron", true, false)),
+		"revolvers-off": func(): return _hide(_viewport.find_children("*", "Revolver3D", true, false)),
+		"bottles-off": func(): return _hide(_bottles()),
+		# ④ 房间子预算:只隐藏 ④ 建的网格、MultiMesh、贴花与雾,灯一律不动
+		"room-off": func(): return _hide(_room_visuals(false)),
+		"decor-off": func(): return _hide(_room_visuals(true)),
 	}
+
+
+func _room_visuals(decor_only: bool) -> Array:
+	# ④ 建的可视节点:decor_only 时只取墙饰、地毯与外景(decor 材质的网格)
+	var out := []
+	for node in _tavern.find_children("*", "", true, false):
+		var visual: bool = node is GeometryInstance3D or node is Decal or node is FogVolume
+		if not visual or node is Light3D or node is GPUParticles3D:
+			continue
+		if node is GeometryInstance3D and node.material_override is ShaderMaterial \
+				and node.material_override.shader == WorldMaterials.FLAME_SHADER:
+			continue   # 火焰片不是 ④ 新建的
+		if decor_only:
+			var mesh: Mesh = node.mesh if node is MeshInstance3D else null
+			if mesh != null and mesh.get_surface_count() > 0 and mesh.surface_get_material(0) == WorldMaterials.decor():
+				out.append(node)
+			continue
+		var top: Node = node
+		while top.get_parent() != _tavern:
+			top = top.get_parent()
+		for prefix in ROOM_NODES:
+			if String(top.name).begins_with(prefix) and not (top.name == &"Bar" and node is MultiMeshInstance3D and String(node.name).begins_with("Bottles")):
+				out.append(node)
+				break
+	return out
 
 
 func _budget() -> Callable:
@@ -225,23 +304,116 @@ func _plain_materials() -> Callable:
 
 func _measure() -> Dictionary:
 	# Metal 上 viewport_get_measured_render_time_gpu 恒为 0,窗口呈现又会被系统按刷新率节流:
-	# 先走几帧让改动生效,再连续 force_draw(不交换缓冲、不等垂直同步),GPU 排满后吞吐就是每帧 GPU 耗时
+	# 先走几帧让改动生效,再连续 force_draw(不交换缓冲、不等垂直同步),GPU 排满后吞吐就是每帧 GPU 耗时。
+	# force_draw 期间场景不动,阴影图会一直沿用缓存:每帧微调投影灯的参数让它重画,和游戏里一致
 	for i in WARMUP_FRAMES:
 		await process_frame
 	var frames := int(opts.get("frames", "120"))
 	var times := PackedFloat64Array()
+	var cpu := 0.0
+	var rid := _viewport.get_viewport_rid()
+	var lights := _viewport.find_children("*", "Light3D", true, false).filter(func(l): return l.shadow_enabled and l.visible)
+	_nudge(lights, 0)
 	RenderingServer.force_draw(false)
 	var last := Time.get_ticks_usec()
 	for i in frames:
+		_nudge(lights, i + 1)
 		RenderingServer.force_draw(false)
 		var now := Time.get_ticks_usec()
 		times.append((now - last) / 1000.0)
 		last = now
+		cpu += RenderingServer.viewport_get_measured_render_time_cpu(rid)
 	times.sort()
 	var total := 0.0
 	for t in times:
 		total += t
-	return {"avg": total / frames, "p95": times[int(frames * 0.95)]}
+	var info := func(type: RenderingServer.ViewportRenderInfoType, what: RenderingServer.ViewportRenderInfo) -> int:
+		return RenderingServer.viewport_get_render_info(rid, type, what)
+	var visible_dc: int = info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+	var shadow_dc: int = info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+	_nudge(lights, 0)
+	return {
+		"avg": total / frames, "p95": times[int(frames * 0.95)], "cpu": cpu / frames,
+		"visible_dc": visible_dc, "shadow_dc": shadow_dc,
+		"objects": info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME)
+			+ info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME),
+		"primitives": info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME)
+			+ info.call(RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME),
+	}
+
+
+func _place_camera(view: String) -> bool:
+	if CelebrateStage.VIEWS.has(view) and _celebrate_world != null:
+		var xform := CelebrateStage.view(_celebrate_world, _kind, view, float(_viewport.size.x) / _viewport.size.y)
+		_tavern.camera_rig.stop_follow()
+		_tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
+		_tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
+		_tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(_celebrate_world, _kind, view)
+		return true
+	if _bomb != null and view.begins_with("bomb_"):
+		var bomb_world: TableWorld = _bomb.world
+		if view == "bomb_fp":
+			CameraViews.place_first_person(_tavern.camera_rig, bomb_world, 1, view)
+			return true
+		CameraViews.leave_first_person(bomb_world, 1)
+		_bomb.cards.present_my_fan()
+		_tavern.camera_rig.stop_follow()
+		_tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
+		var bomb_xform: Transform3D = _bomb.view(view)
+		_tavern.camera_rig.snap(bomb_xform.origin, bomb_xform.origin - bomb_xform.basis.z)
+		_tavern.camera_rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT if view == "bomb_seat" else 0.0
+		return true
+	if view == "fp" or view == "poker_fp":
+		# 第一人称(V 切换):自己的头只投影不渲染,手牌拿在镜头右下方
+		var fp_world := _world if _world != null else _liars_world
+		CameraViews.place_first_person(_tavern.camera_rig, fp_world, 1, view)
+		return true
+	for w in [_world, _liars_world]:
+		if w != null:
+			CameraViews.leave_first_person(w, 1)
+	if _world != null:
+		# 德州展台:本机座位 = 1 号的越肩或观战机位
+		var xform := _world.overview_view() if view == "overview" else _world.third_person_view(1)
+		_tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
+		_tavern.camera_rig.fill_light.light_energy = 0.0 if view == "overview" else TableWorld.SEAT_FILL_LIGHT
+		return true
+	return CameraViews.place(_tavern.camera_rig, view)
+
+
+func _nudge(lights: Array, frame: int) -> void:
+	# 偶数帧还原、奇数帧加一点:灯参数一变,这盏灯的阴影图就整张重画
+	for light in lights:
+		light.shadow_bias = snappedf(light.shadow_bias, BIAS_NUDGE * 2.0) + (BIAS_NUDGE if frame % 2 == 1 else 0.0)
+
+
+func _budget_stats(m: Dictionary) -> Dictionary:
+	# 探针的测量结果换成 PerfBudget 用的统计键;灯数等清点项来自 SceneCensus
+	var stats := SceneCensus.count(_viewport)
+	stats.merge({
+		"draw_calls": m["visible_dc"] + m["shadow_dc"], "visible_draw_calls": m["visible_dc"],
+		"shadow_draw_calls": m["shadow_dc"], "objects": m["objects"], "primitives": m["primitives"],
+		"frame_ms": m["avg"], "cpu_ms": m["cpu"],
+	}, true)
+	return stats
+
+
+func _hide(nodes: Array) -> Callable:
+	var shown := nodes.filter(func(n: Node3D): return n.visible)
+	for node in shown:
+		node.visible = false
+	return func():
+		for node in shown:
+			node.visible = true
+
+
+func _bottles() -> Array:
+	# 吧台搁板上的酒瓶:合批前是一件件圆柱,合批后是 MultiMesh
+	var out := []
+	for bar in _viewport.find_children("Bar", "Node3D", true, false):
+		for child in bar.get_children():
+			if child is MultiMeshInstance3D or (child is MeshInstance3D and child.mesh is CylinderMesh and child.position.y > 1.5):
+				out.append(child)
+	return out
 
 
 func _shot(label: String) -> void:
@@ -254,25 +426,6 @@ func _shot(label: String) -> void:
 
 
 func _report(label: String, m: Dictionary, base: Dictionary) -> void:
-	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)  draw calls %d" % [
-		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"],
-		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
-
-
-func _place_camera(view: String) -> void:
-	var rig := _tavern.camera_rig
-	var top := SeatLayout.TABLE_TOP
-	if _world != null:
-		# 德州展台:本机座位 = 1 号的越肩或观战机位
-		var xform := _world.overview_view() if view == "overview" else _world.third_person_view(1)
-		rig.snap(xform.origin, xform.origin - xform.basis.z)
-		rig.fill_light.light_energy = 0.0 if view == "overview" else TableWorld.SEAT_FILL_LIGHT
-		return
-	match view:
-		"menu":
-			rig.snap(Vector3(2.6, 2.1, 2.9), Vector3(-0.4, 0.9, -0.8))
-		"overhead":
-			rig.snap(Vector3(0, 2.6, 1.6), Vector3(0, top, 0))
-		_:
-			rig.snap(Vector3(0.55, 1.92, 2.1), Vector3(0, top, -0.12))
-			rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT
+	print("%-30s frame %6.2f ms  p95 %6.2f ms  (%+6.2f ms vs base, %5.1f fps)  cpu %5.2f ms  dc %4d (vis %4d + shadow %4d)  obj %5d  prims %7d" % [
+		label, m["avg"], m["p95"], m["avg"] - base["avg"], 1000.0 / m["avg"], m["cpu"],
+		m["visible_dc"] + m["shadow_dc"], m["visible_dc"], m["shadow_dc"], m["objects"], m["primitives"]])

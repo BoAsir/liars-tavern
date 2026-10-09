@@ -9,6 +9,8 @@ const CARD_FAN_DEGREES := 3.0
 const TONES := {"brass": UiTheme.BRASS_BRIGHT, "truth": UiTheme.TRUTH, "lie": UiTheme.LIE}
 # 牌面小图上记着自己的牌值:牌面纹理生成完后按它重新取(refresh_cards)
 const CARD_META := &"rulebook_card"
+const BOMB_CARD_META := &"rulebook_bomb_card"   # 炸弹猫牌面小图记着牌 id(字符串)
+const BOMB_CARD_SIZE := Vector2(60, 87)
 
 # 德州牌型表
 const HAND_CARD_SIZE := Vector2(40, 58)     # 规格 §6.6:示例小牌不超过 40×58
@@ -39,6 +41,8 @@ static func build(block: Dictionary) -> Control:
 			return _keys(block["items"])
 		"hands":
 			return _hands(block)
+		"bomb_cards":
+			return _bomb_cards(block["items"])
 	push_warning("说明书:未知的块类型 %s" % block["type"])
 	return Control.new()
 
@@ -48,6 +52,8 @@ static func refresh_cards(root: Node) -> void:
 	for face in root.find_children("*", "TextureRect", true, false):
 		if face.has_meta(CARD_META):
 			(face as TextureRect).texture = CardFaces.texture(face.get_meta(CARD_META))
+		elif face.has_meta(BOMB_CARD_META):
+			(face as TextureRect).texture = BombCatFaces.texture(face.get_meta(BOMB_CARD_META))
 
 
 static func _card_face(card: int, card_size: Vector2) -> TextureRect:
@@ -124,6 +130,38 @@ static func _cards(items: Array) -> Control:
 		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		col.add_child(caption)
 	return row
+
+
+# —— 炸弹猫的牌:每张一行(小牌面、名字、张数、一行说明),两列 ——
+
+static func _bomb_cards(items: Array) -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 22)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for item in items:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(row)
+		var face := TextureRect.new()
+		face.texture = BombCatFaces.texture(item["id"])
+		face.set_meta(BOMB_CARD_META, item["id"])
+		face.custom_minimum_size = BOMB_CARD_SIZE
+		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		row.add_child(face)
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 2)
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_child(col)
+		col.add_child(UiTheme.label(item["name"], 20, UiTheme.BRASS_BRIGHT, UiTheme.display_font()))
+		col.add_child(_paragraph(item["text"], 15, UiTheme.PARCHMENT))
+		col.add_child(_paragraph(item["count"], 13, UiTheme.MUTED))
+	return grid
 
 
 # —— 二选一对照:出牌/质疑、真话/假话 ——

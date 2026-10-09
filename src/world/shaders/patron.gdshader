@@ -1,202 +1,108 @@
-// 酒客材质:所有酒客共用这一个着色器,每名酒客一份材质实例(出局时单独褪色)。
-// 一个合批表面里混着毛皮、布料、缎面、黄铜、眼睛等部件:顶点色 alpha 存槽位编号(PatronSkin 的槽位),
-// 颜色取自本酒客的调色板,质感按槽位的类型选用——所以每个动画枢轴只需一次绘制调用,不必按材质拆表面。
-// 顶点色 rgb:r = 烘焙的明暗(1 为不变),g = 往浅色(口鼻色)混合,b = 往深色混合,毛皮斑纹与渐变都烘在顶点里。
-// CUSTOM0 = 部件自身坐标(MeshBatch 写入,眼珠、眼白按单位球建模,图案与网格大小无关);UV = 布料图案坐标(米)。
+// 酒客共享材质:颜色、粗糙度、金属度来自 MeshForge 顶点数据(COLOR = sRGB albedo + AO,UV2 = 粗糙度/金属度),
+// CUSTOM0 = (材质类, 尾巴摆动权重, 部件种子, 薄片透光)。所有酒客共用一份;出局褪色、尾巴摆动都是实例参数。
+// 材质类:0 毛 1 布 2 皮革 3 金属 4 鳞 5 甲 6 格纹 7 草编 8 针织 9 光滑皮毛(脖子:拉长也不出条纹)
+// 动森式软胶玩具质感(2026-10-08):共享的柔和卡通光照(toon_light.gdshaderinc),哑光;材质类的花纹幅度很小、尺度放大,
+// 远看是干净的色块,近看有一点点手绘感(没有细毛丝、细织纹)。格纹、条纹按大印花画。
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
+#include "res://src/world/shaders/vertex_pbr.gdshaderinc"
 #include "res://src/world/shaders/noise.gdshaderinc"
+// 角色:过渡带更宽、暗面更亮(像打了柔光的软胶玩具),边光淡淡一圈
+#define TOON_WRAP 0.5
+#define TOON_SHADOW 0.32
+#define TOON_RIM 0.22
+#define TOON_SHADOW_TINT vec3(0.9, 0.86, 1.0)   // 暗面一点暖紫,和场景(prop / wood)一致
+#include "res://src/world/shaders/toon_light.gdshaderinc"
 
-const int SLOTS = 32;
-// 质感类型(与 PatronSkin 的 KIND_* 一致)
-const int K_FUR = 0;
-const int K_SKIN = 1;
-const int K_GLOSS = 2;
-const int K_EYE = 3;
-const int K_IRIS = 4;
-const int K_CLOTH = 5;
-const int K_SATIN = 6;
-const int K_METAL = 7;
-// 布料图案(look.z)
-const int P_PINSTRIPE = 1;
-const int P_CHECK = 2;
-const int P_TWEED = 3;
-const int P_STRIPES = 4;
-const int P_VELVET = 5;
-const int P_DOTS = 6;
-const int P_STRAW = 7;
-const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+instance uniform float fade = 0.0;          // 0 正常 → 1 褪成灰
+instance uniform float soot = 0.0;          // 炸弹猫:被炸得一脸黑灰(0 干净 → 1 一片斑驳的黑),只设在头上的部件
+instance uniform vec4 tail = vec4(0.0);     // x 相位、y 摆幅(弧度)、z 下垂(0..1,出局)
+instance uniform vec3 tail_root = vec3(0.0);
+const vec3 GREY = vec3(0.42);               // = Patron.GREY(sRGB)
+const vec3 SOOT = vec3(0.12, 0.1, 0.09);    // 黑灰(sRGB,略带暖棕,不是死黑)
 
-uniform vec4 palette[SLOTS];       // 与 StandardMaterial3D 的 albedo_color 同样原样使用(实测本引擎下两者像素一致)
-uniform vec4 look[SLOTS];          // x 粗糙度  y 绒面光泽(边缘光)  z 布料图案  w 图案密度(每米几条)
-uniform int kinds[SLOTS];
-uniform int light_slot = 1;        // 毛皮往浅色、深色混合时取的调色板槽位
-uniform int dark_slot = 2;
-uniform vec4 ink : source_color = vec4(0.1, 0.08, 0.06, 1.0);   // 格纹、条纹的线色
-uniform int pupil_shape = 0;       // 0 圆瞳  1 竖缝(猫)  2 横条
-uniform float pupil_size = 0.42;   // 瞳孔半径占虹膜半径的比例
-uniform float death : hint_range(0.0, 1.0) = 0.0;   // 出局褪色:0 → 1 在 1.4 秒内补间
-// 头部的色带斑纹(浣熊的眼罩)逐像素算:烘进顶点色的话,头部网格的分辨率画不出干净的边。
-// 只作用于头部网格(face_slot 槽位,部件坐标 = 头部坐标,头心与 PatronHead.CENTER 一致)
-uniform int face_slot = 31;
-uniform vec4 face_band = vec4(0.0);        // x 中心俯仰  y 半高  z 鼻梁处的半高  w 两侧延伸到的偏航(弧度)
-uniform vec3 face_band_shape = vec3(0.0);  // x 往两侧下垂  y 边缘软硬  z 深浅(0 = 没有色带)
-const vec3 HEAD_CENTER = vec3(0.0, 0.1, 0.0);
-
-varying flat int v_slot;
-varying flat int v_kind;
-varying flat float v_seed;
-varying vec3 v_tag;
-varying vec3 v_local;
-varying vec2 v_uv;
+varying vec3 local_pos;
+varying float mat_class;
+varying float part_seed;
+varying float thin;
 
 void vertex() {
-	v_slot = clamp(int(COLOR.a * 255.0 + 0.5), 0, SLOTS - 1);
-	v_kind = kinds[v_slot];
-	v_tag = COLOR.rgb;
-	bool batched = CUSTOM1.x >= 2.0;
-	v_local = batched ? CUSTOM0.xyz : VERTEX;
-	v_seed = batched ? fract(CUSTOM1.x) : 0.0;
-	v_uv = UV;
-}
-
-// 抗锯齿的细线:coord 每过 1 一条线,宽 width(占周期比例);远处线条小于一个像素时淡成平均色
-float lines(float coord, float width) {
-	float d = abs(fract(coord) - 0.5);
-	float w = max(fwidth(coord), 1e-4);
-	float line = smoothstep(0.5 - width - w, 0.5 - width + w, d);
-	return mix(line, width * 2.0, clamp(w * 2.0 - 0.6, 0.0, 1.0));
-}
-
-float face_band_mask(vec3 p) {
-	vec3 d = normalize(p - HEAD_CENTER);
-	float yaw = abs(atan(d.x, -d.z));
-	float pitch = asin(clamp(d.y, -1.0, 1.0));
-	float soft = face_band_shape.y;
-	float center = face_band.x - face_band_shape.x * smoothstep(0.4, face_band.w, yaw);
-	// 鼻梁处窄、眼周最宽,往两侧越走越细,末端收成尖而不是一刀切
-	float taper = 1.0 - 0.75 * smoothstep(0.5 * face_band.w, face_band.w, yaw);
-	float half_height = mix(face_band.z, face_band.y, smoothstep(0.0, 0.35, yaw)) * taper;
-	return smoothstep(half_height + soft, half_height - soft, abs(pitch - center))
-		* smoothstep(face_band.w, 0.8 * face_band.w, yaw);
-}
-
-vec3 marked(vec3 base) {
-	// 毛色斑纹:顶点色 g 往浅色(口鼻色)、b 往深色混合;头部再叠上逐像素的色带
-	float dark = v_tag.b;
-	if (v_slot == face_slot && face_band_shape.z > 0.0) {
-		dark = max(dark, face_band_mask(v_local) * face_band_shape.z);
+	mat_class = CUSTOM0.x;
+	part_seed = CUSTOM0.z;
+	thin = CUSTOM0.w;
+	float w = CUSTOM0.y;
+	if (w > 0.0) {
+		// 尾巴:绕尾根的竖轴来回摆;出局时摆幅收掉、整条往下垂,但不压到地面以下(Legs 原点在地面)
+		float ang = sin(TIME * 1.3 + tail.x) * tail.y * w * w * (1.0 - tail.z);
+		float c = cos(ang);
+		float s = sin(ang);
+		vec3 p = VERTEX - tail_root;
+		VERTEX = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z) + tail_root;
+		NORMAL = vec3(c * NORMAL.x + s * NORMAL.z, NORMAL.y, -s * NORMAL.x + c * NORMAL.z);
+		float droop = tail.z * w * w * 0.08;
+		VERTEX.y = max(VERTEX.y - droop, min(VERTEX.y, 0.01));
 	}
-	return mix(mix(base, palette[light_slot].rgb, v_tag.g), palette[dark_slot].rgb, dark);
+	local_pos = VERTEX;
 }
 
-vec3 fur(vec3 base) {
-	// 毛皮:大团的柔和明暗 + 顺着部件纵向(Y)拉长的细毛丝;毛丝小于一个像素时按像素尺寸淡出,远处不闪烁
-	float clump = value_noise3(v_local * 26.0 + v_seed * 17.0);
-	vec3 strand_p = v_local * vec3(240.0, 60.0, 240.0) + v_seed * 31.0;
-	float fade = clamp(1.5 - length(fwidth(strand_p)) * 0.5, 0.0, 1.0);
-	float strand = (value_noise3(strand_p) - 0.5) * fade;
-	return base * (0.92 + clump * 0.12 + strand * 0.18);
-}
-
-vec3 cloth(vec3 base, vec4 lk) {
-	int pattern = int(lk.z + 0.5);
-	vec2 p = v_uv * lk.w;
-	float weave_fade = clamp(1.5 - length(fwidth(v_uv * 700.0)), 0.0, 1.0);
-	float weave = sin(v_uv.x * 700.0) * sin(v_uv.y * 700.0) * 0.035 * weave_fade;
-	base *= 1.0 + weave;
-	if (pattern == P_PINSTRIPE) {
-		base = mix(base, base * 1.9 + 0.02, (1.0 - lines(p.x, 0.47)) * 0.75);
-	} else if (pattern == P_CHECK) {
-		float l = max(1.0 - lines(p.x, 0.42), 1.0 - lines(p.y, 0.42));
-		float fine = max(1.0 - lines(p.x * 2.0 + 0.5, 0.47), 1.0 - lines(p.y * 2.0 + 0.5, 0.47));
-		base = mix(base, ink.rgb, l * 0.38 + fine * 0.12);
-	} else if (pattern == P_TWEED) {
-		float fleck = value_noise(v_uv * 900.0 + v_seed * 40.0);
-		float herring = abs(fract(p.y + abs(fract(p.x) - 0.5)) - 0.5);
-		base *= 0.85 + fleck * 0.3 + (herring - 0.25) * 0.25 * weave_fade;
-	} else if (pattern == P_STRIPES) {
-		base = mix(base, ink.rgb, (1.0 - lines(p.x, 0.36)) * 0.8);
-	} else if (pattern == P_VELVET) {
-		base *= 0.85 + value_noise(v_uv * 60.0) * 0.15;
-	} else if (pattern == P_DOTS) {
-		// 波点(领巾):错行排列的圆点,远处按像素尺寸淡成平均色
-		vec2 cell = vec2(p.x + 0.5 * floor(p.y), p.y);
-		float d = length(fract(cell) - 0.5);
-		float w = max(fwidth(p.x), 1e-4);
-		float dot_mask = mix(smoothstep(0.24 + w, 0.24 - w, d), 0.18, clamp(w * 2.0 - 0.6, 0.0, 1.0));
-		base = mix(base, vec3(0.93, 0.9, 0.82), dot_mask);
-	} else if (pattern == P_STRAW) {
-		// 草编:一圈圈压扁的草辫(沿 V)+ 斜向编纹
-		float braid = abs(fract(p.y) - 0.5) * 2.0;
-		float twill = lines(p.x * 2.0 + p.y * 2.0, 0.4);
-		base *= 0.78 + 0.22 * smoothstep(0.0, 0.6, braid) + (twill - 0.5) * 0.12 * weave_fade;
-	}
-	return base;
-}
-
-vec3 iris(vec3 base, out vec3 emit) {
-	// 虹膜按单位圆建模:瞳孔 + 由上到下变亮的虹膜 + 放射纹 + 深色外圈 + 两点高光
-	vec2 q = v_local.xy;
-	float r = length(q);
-	float d = r;
-	if (pupil_shape == 1) {
-		d = length(q * vec2(3.2, 1.0 - 0.18 * q.y * q.y));
-	} else if (pupil_shape == 2) {
-		d = length(q * vec2(0.55, 2.6));
-	}
-	float rays = 0.9 + 0.1 * sin(atan(q.y, q.x) * 22.0 + value_noise(q * 6.0) * 6.0);
-	vec3 col = base * (0.45 + 0.75 * smoothstep(0.6, -0.9, q.y)) * rays;
-	col *= mix(1.0, 0.35, smoothstep(0.72, 0.97, r));
-	col = mix(col, vec3(0.012, 0.01, 0.012), smoothstep(pupil_size + 0.04, pupil_size - 0.02, d));
-	float glint = smoothstep(0.24, 0.17, length(q - vec2(-0.3, 0.34)));
-	glint = max(glint, smoothstep(0.1, 0.06, length(q - vec2(0.3, -0.32))) * 0.7);
-	emit = vec3(glint) * 1.3;
-	return mix(col, vec3(1.0), glint);
+float stripes(float x, float width) {
+	// 抗锯齿的方波条纹:返回 0..1
+	float f = abs(fract(x) - 0.5) * 2.0;
+	float aa = max(fwidth(x) * 2.0, 1e-4);
+	return smoothstep(width - aa, width + aa, f);
 }
 
 void fragment() {
-	vec4 lk = look[v_slot];
-	vec3 base = palette[v_slot].rgb;
-	vec3 emit = vec3(0.0);
-	float metal = 0.0;
-	float spec = 0.4;
-	float rough = lk.x;
-	if (v_kind == K_FUR) {
-		base = fur(marked(base));
-		spec = 0.22;
-	} else if (v_kind == K_SKIN) {
-		base = marked(base) * (0.95 + value_noise3(v_local * 60.0) * 0.08);
-		spec = 0.35;
-	} else if (v_kind == K_GLOSS) {
-		spec = 0.6;
-	} else if (v_kind == K_EYE) {
-		// 眼白按单位球建模:往边缘(陷进眼窝处)和上眼睑下压暗,眼珠显得嵌在脸里
-		float front = smoothstep(0.15, 0.9, -v_local.z);
-		base *= mix(0.62, 1.0, front) * mix(1.0, 0.78, smoothstep(0.35, 0.95, v_local.y));
-		spec = 0.7;
-	} else if (v_kind == K_IRIS) {
-		base = iris(base, emit);
-		spec = 0.8;
-	} else if (v_kind == K_CLOTH) {
-		base = cloth(base, lk);
-		spec = 0.3;
-	} else if (v_kind == K_SATIN) {
-		base *= 0.92 + 0.12 * sin(v_uv.y * 260.0 + v_uv.x * 90.0) * clamp(1.2 - length(fwidth(v_uv * 260.0)), 0.0, 1.0);
-		spec = 0.6;
-	} else if (v_kind == K_METAL) {
-		metal = 1.0;
-		base *= 0.85 + value_noise3(v_local * 240.0) * 0.2;
-		spec = 0.5;
+	vec3 c = COLOR.rgb;
+	float rough = UV2.x;
+	float metal = UV2.y;
+	int kind = int(round(mat_class));
+	vec3 p = local_pos;
+	if (kind == 0) {
+		// 毛:几块很淡的大色斑(±3%),不画毛丝
+		float n = value_noise(vec2(p.x * 7.0 + p.z * 5.0, p.y * 6.0) + part_seed * 13.0);
+		c *= 0.97 + n * 0.06;
+	} else if (kind == 1) {
+		// 布:几乎纯色,只有极淡的大块明暗(±2%)
+		float n = value_noise(vec2(p.x * 5.0 + p.z * 4.0, p.y * 5.0) + part_seed * 7.0);
+		c *= 0.98 + n * 0.04;
+	} else if (kind == 2) {
+		// 皮革:大块斑驳(±5%),粗糙度低一点(缎面)
+		float n = fbm(p.xy * 6.0 + p.z * 3.0 + part_seed);
+		c *= 0.95 + n * 0.1;
+		rough = max(rough - 0.08, 0.45);
+	} else if (kind == 4 || kind == 5) {
+		// 鳞 / 甲:放大的格子,缝只压暗一点点、边缘柔和
+		vec2 cell = vec2(p.x * 13.0 + p.y * 3.0, p.z * 13.0 + p.y * 10.0);
+		vec2 g = abs(fract(cell) - 0.5);
+		float edge = smoothstep(0.3, 0.5, max(g.x, g.y));
+		c *= 1.0 - edge * (kind == 4 ? 0.12 : 0.08);
+	} else if (kind == 6) {
+		// 格纹:大格子印花(一格约 7 cm),横竖两组宽条叠暗
+		float a = stripes(p.x * 7.0 + p.z * 7.0, 0.55);
+		float b = stripes(p.y * 7.0, 0.55);
+		c *= 0.74 + 0.26 * max(a, b) * (0.75 + 0.25 * min(a, b));
+	} else if (kind == 7) {
+		// 草编:放大的斜向交织,幅度小
+		c *= 0.9 + 0.1 * stripes(p.x * 30.0 + p.y * 30.0, 0.4) * stripes(p.x * 30.0 - p.y * 30.0 + p.z * 20.0, 0.4);
+	} else if (kind == 8) {
+		// 针织:粗的竖直罗纹
+		c *= 0.93 + 0.07 * stripes(p.x * 40.0 + p.z * 40.0, 0.5);
 	}
-	base *= v_tag.r;
-	vec3 grey = vec3(dot(base, LUMA) * 0.672);
-	ALBEDO = mix(base, grey, 0.85 * death);
-	ROUGHNESS = rough;
-	METALLIC = metal * (1.0 - death);
-	SPECULAR = spec;
-	RIM = lk.y;
-	RIM_TINT = 0.65;
-	EMISSION = emit * (1.0 - death);
+	if (soot > 0.0) {
+		// 一块块的黑灰:大尺度噪声决定哪里黑,soot 越大黑的范围越大;边缘柔和
+		float n = value_noise3(p * 9.0 + vec3(3.1, 1.7, 5.3));
+		float m = 1.0 - smoothstep(0.3, 0.55, n - soot * 0.45);
+		c = mix(c, SOOT, m * clamp(soot, 0.0, 1.0) * 0.92);
+	}
+	float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));             // = Color.get_luminance()
+	c = mix(c, GREY * lum * 1.6, 0.85 * fade * step(metal, 0.5)); // 金属件(铜扣)不褪色,与旧版一致
+	ALBEDO = vp_srgb_to_linear(c);
+	AO = COLOR.a;
+	AO_LIGHT_AFFECT = 0.3;
+	// 软胶玩具:整体哑光(粗糙度不低于 0.55);金属件也是缎面,只按顶点数据略亮一点
+	ROUGHNESS = max(rough, mix(0.55, 0.4, metal));
+	METALLIC = metal * 0.7;
+	BACKLIGHT = ALBEDO * 0.3 * thin;   // 薄片(耳廓)被壁炉逆光照透
 }

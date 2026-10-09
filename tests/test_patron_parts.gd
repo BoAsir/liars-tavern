@@ -15,3 +15,31 @@ func test_first_free_species_wraps_only_when_every_species_is_taken():
 	var all := range(PatronParts.SPECIES.size())
 	assert_eq(PatronParts.first_free_species(all), 0)
 	assert_eq(PatronParts.first_free_species(all + [0]), 1)
+
+
+func test_palettes_are_capped_so_faces_do_not_wash_out():
+	# 近白的底色在烛光 + ACES 下会过曝发白:所有酒客颜色按最大通道等比压到 ALBEDO_CAP 以下(保持色相)
+	for i in PatronParts.SPECIES.size():
+		var pal := PatronParts.palette(PatronParts.species(i))
+		for key in ["fur", "muzzle", "dark", "coat", "accent", "hat", "lapel", "paw"]:
+			var c: Color = pal[key]
+			assert_lte(maxf(c.r, maxf(c.g, c.b)), PatronParts.ALBEDO_CAP + 0.0001, "%d %s" % [i, key])
+
+
+func test_capping_keeps_the_hue():
+	# 动森式粉彩:提亮(PatronParts.pastel)会动明度、略收饱和度,色相不变;封顶也不改色相
+	var pig := PatronParts.palette(PatronParts.species(2))
+	var raw: Color = PatronParts.SPECIES[2]["fur"]
+	var capped: Color = pig["fur"]
+	assert_almost_eq(capped.h, raw.h, 0.01)
+	for c in [Color(0.1, 0.08, 0.08), Color(0.9, 0.5, 0.2), Color(0.2, 0.3, 0.5)]:
+		assert_almost_eq(PatronParts.capped(PatronParts.pastel(c)).h, c.h, 0.01)
+		assert_gt(PatronParts.pastel(c).v, c.v - 0.0001, "提亮不会变暗")
+
+
+func test_eye_white_and_paw_shade_limits():
+	# 眼白比脸亮一点才像画上去的大眼,但不超过上限太多(动森式上限 0.72 → 眼白 ≤ 0.76;写实版是 ≤ 0.72、上限 0.65)
+	for channel in [PatronParts.EYE_WHITE.r, PatronParts.EYE_WHITE.g, PatronParts.EYE_WHITE.b]:
+		assert_lte(channel, PatronParts.ALBEDO_CAP + 0.04)
+	assert_gt(PatronParts.PAW_SHADE, 0.0)
+	assert_lte(PatronParts.PAW_SHADE, 0.8)

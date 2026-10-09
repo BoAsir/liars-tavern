@@ -146,6 +146,11 @@ func test_a_whole_session_from_deal_to_settlement():
 		_pub(null, {"hand": 2, "phase": "over", "button": 3, "sb": 9, "bb": 1, "ending": true, "results": results, "current_bet": 0}))
 	assert_not_null(screen._settlement, "结算面板")
 	assert_eq(screen._settlement._ranking[0]["name"], "丙")
+	# 结算庆祝(规格 2026-10-09):盈亏第一的 3 号跳舞,自己和迟到的人鼓掌
+	assert_true(app.world.is_celebrating(), "散局开演庆祝")
+	assert_true(app.world.patrons[3].is_dancing(), "第一名跳舞")
+	assert_eq(app.world.patrons[ME].dance_routine(), PatronDance.CLAP, "自己没赢就鼓掌")
+	assert_eq(app.world.patrons[9].dance_routine(), PatronDance.CLAP)
 	assert_false(screen.is_my_turn())
 	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NONE)
 	assert_eq(screen.chips.stack_amount(ME), 2030)
@@ -154,6 +159,8 @@ func test_a_whole_session_from_deal_to_settlement():
 	await wait_process_frames(2)
 	assert_eq(app.world.poker_root.get_child_count(), 0, "TableWorld 下没有德州节点")
 	assert_eq(app.world.patrons[ME].fan.get_child_count(), 0, "牌扇里没有德州的牌")
+	assert_false(app.world.is_celebrating(), "退场收起庆祝")
+	assert_false(app.world.patrons[3].is_dancing())
 	assert_null(_plate(3))
 	assert_eq(_live_patrons().size(), 3)
 

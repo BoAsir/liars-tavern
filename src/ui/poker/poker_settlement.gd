@@ -3,6 +3,7 @@ extends ColorRect
 # 散局结算面板(规格 §6.5):标题「散局结算」,行放进 ScrollContainer 最多显示 8 行(离开的人也在列表里,可能超过 8 行)。
 # 列宽:名次 70、名字(自适应、省略号;离开的人标灰「已离开」)、筹码 90、领取 60、盈亏 100(赢绿、输红,带正负号与千分位)。
 # 按钮:房主「回到等待厅」,其他人「离开房间」。只发信号,不直接调用 Net / Sfx。
+# 面板停在屏幕右侧、竖直居中,只压暗右边(UiTheme.settlement_dock):左边留给结算庆祝里跳舞的胜者。
 
 
 signal lobby_pressed
@@ -69,11 +70,10 @@ func _ready() -> void:
 	color = Color(0, 0, 0, 0.0)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	# 面板停在右侧、只压暗右边:左边留给跳舞的胜者(规格 2026-10-09-winner-celebration)
+	var dock := UiTheme.settlement_dock(self)
 	var panel := _build_panel()
-	center.add_child(panel)
+	dock.add_child(panel)
 	_play_intro(panel)
 	_focus_default.call_deferred()
 
@@ -195,7 +195,9 @@ func _play_intro(panel: PanelContainer) -> void:
 	panel.scale = Vector2(0.85, 0.85)
 	panel.resized.connect(func(): panel.pivot_offset = panel.size / 2.0)
 	var tween := create_tween().set_parallel()
-	tween.tween_property(self, "color:a", 0.55, 0.5)
+	var scrim: Control = get_node("Scrim")
+	scrim.modulate.a = 0.0
+	tween.tween_property(scrim, "modulate:a", 1.0, 0.5)
 	tween.tween_property(panel, "modulate:a", 1.0, 0.45)
 	tween.tween_property(panel, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 

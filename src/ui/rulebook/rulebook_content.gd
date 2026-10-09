@@ -1,24 +1,36 @@
 class_name RulebookContent
-# 说明书内容:分两本书(骗子酒馆 / 德州扑克),每本按章节组织成纯数据,由 Rulebook 渲染。
-# 本文件是骗子酒馆那本;德州那本在 RulebookPoker(长牌、短牌共用一本)。
+# 说明书内容:分三本书(骗子酒馆 / 炸弹猫 / 德州扑克),每本按章节组织成纯数据,由 Rulebook 渲染。
+# 本文件是骗子酒馆那本;德州那本在 RulebookPoker(长牌、短牌共用一本),炸弹猫那本在 RulebookBombCat。
 # 文案中的数字全部取自规则常量(牌堆、手牌、出牌张数、左轮、限时),规则改动时说明书自动跟随。
 # 块类型:lead 引言 / text 正文 / bullets 要点 / note 提示条 / cards 牌堆 / pair 二选一对照 /
-#        odds 左轮中弹概率 / keys 操作键位 / hands 德州牌型表。pair 的 tone 取 brass / truth / lie。
+#        odds 左轮中弹概率 / keys 操作键位 / hands 德州牌型表 / bomb_cards 炸弹猫的牌(小牌面 + 名字 + 张数 + 说明)。pair 的 tone 取 brass / truth / lie。
 
 
-const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys", "hands"]
+const BLOCK_TYPES := ["lead", "text", "bullets", "note", "cards", "pair", "odds", "keys", "hands", "bomb_cards"]
+# 两本书的「操作」章都有这条:自选形象(子项目② §3.7)
+const SPECIES_NOTE := "主菜单名号旁的头像处挑选你的动物形象;同桌不撞脸,先选先得,被占时房主给你一个空着的;等待厅里点自己的头像还能换。"
+# 三本书的「操作」章都有这几条:丢番茄与快捷语(等待厅和牌局里都能用,出局、观战也行)、九宫格快捷对话(牌局里)
+const BANTER_KEYS := [
+	{"action": "朝光标所指的人丢番茄", "mouse": "右键", "keys": ["G"]},
+	{"action": "快捷语(按数字说出)", "mouse": "「Q」圆牌", "keys": ["Q", "1–8"]},
+	{"action": "九宫格快捷对话(按数字选)", "mouse": "「对话」按钮", "keys": ["T", "1–9"]},
+]
+const BANTER_NOTE := "丢番茄(每人 3 秒一个)和快捷语纯属逗乐,不影响胜负和计时;你的动物会用自己的叫声把话念出来,头顶冒出气泡。快捷语面板和九宫格快捷对话一次只开一个,开着时数字键只用来说话。"
 # 翻开说明书的快捷键。放在纯数据模块里,HUD 等引用它时不会把 Rulebook 依赖的自动加载单例拖进来
 const HOTKEY := KEY_F1
 
 const BOOK_LIARS := "liars"
 const BOOK_POKER := "poker"
-const BOOKS := [BOOK_LIARS, BOOK_POKER]   # 页签顺序
-const BOOK_TITLES := {BOOK_LIARS: "骗子酒馆", BOOK_POKER: "德州扑克"}
+const BOOK_BOMB_CAT := "bomb_cat"
+const BOOKS := [BOOK_LIARS, BOOK_BOMB_CAT, BOOK_POKER]   # 页签顺序(同主菜单的玩法顺序)
+const BOOK_TITLES := {BOOK_LIARS: "骗子酒馆", BOOK_POKER: "德州扑克", BOOK_BOMB_CAT: "炸弹猫"}
 
 
 static func sections(book := BOOK_LIARS) -> Array[Dictionary]:
 	if book == BOOK_POKER:
 		return RulebookPoker.sections()
+	if book == BOOK_BOMB_CAT:
+		return RulebookBombCat.sections()
 	return [_goal(), _deck(), _turn(), _reveal(), _revolver(), _rounds(), _controls()]
 
 
@@ -34,7 +46,9 @@ static func book_title(book: String) -> String:
 
 
 static func book_for_mode(mode: String) -> String:
-	# 德州长牌与短牌共用一本(牌型表里并列两种名次);未知玩法回退骗子酒馆那本
+	# 德州长牌与短牌共用一本(牌型表里并列两种名次);炸弹猫一本;未知玩法回退骗子酒馆那本
+	if GameMode.is_bomb_cat(mode):
+		return BOOK_BOMB_CAT
 	return BOOK_POKER if GameMode.is_poker(mode) else BOOK_LIARS
 
 
@@ -179,11 +193,17 @@ static func _controls() -> Dictionary:
 				{"action": "质疑上家", "mouse": "「质疑!」按钮", "keys": ["C", "空格"]},
 				{"action": "转头张望", "mouse": "移动鼠标", "keys": []},
 				{"action": "探头 / 缩回(脖子自动伸缩)", "mouse": "", "keys": ["W", "A", "S", "D"]},
+				{"action": "切换视角(越肩 / 第一人称)", "mouse": "", "keys": ["V"]},
+				BANTER_KEYS[0],
+				BANTER_KEYS[1],
+				BANTER_KEYS[2],
 				{"action": "翻开说明书", "mouse": "「规则」按钮", "keys": [OS.get_keycode_string(HOTKEY)]},
 				{"action": "说明书翻页", "mouse": "左侧目录", "keys": ["←", "→"]},
 				{"action": "离开 / 合上", "mouse": "", "keys": ["Esc"]},
 			]},
 			{"type": "note", "text": "看说明书时对局不会暂停,回合计时照常进行;轮到你时屏幕上方会有提示。"},
+			{"type": "note", "text": BANTER_NOTE},
+			{"type": "note", "text": SPECIES_NOTE},
 		],
 	}
 

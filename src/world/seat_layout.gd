@@ -5,16 +5,25 @@ class_name SeatLayout
 
 const TABLE_RADIUS := 0.95
 const TABLE_TOP := 0.78
+const FELT_TOP := TABLE_TOP + 0.004   # 桌布顶面(桌布 4 mm 厚,铺在桌面上):平放在桌上的牌和枪都要高于它
+const FELT_RADIUS := 0.82
 const SEAT_RADIUS := 1.25
 const PILE_INNER := 0.13
 const PILE_OUTER := 0.31
 # 德州最多 8 人,桌子放大;座位到桌沿的距离不变,酒客按座位局部坐标摆的爪子与伸手位置照常可用
 const POKER_TABLE_RADIUS := 1.45
 const SEAT_GAP := SEAT_RADIUS - TABLE_RADIUS
+# 炸弹猫最多 6 人:到这个人数换德州那张大桌(4 人以内用骗子酒馆的桌子)
+const BOMB_CAT_BIG_TABLE_FROM := 5
 
 
-static func table_radius_for(mode: String) -> float:
-	return POKER_TABLE_RADIUS if GameMode.is_poker(mode) else TABLE_RADIUS
+static func table_radius_for(mode: String, players := 0) -> float:
+	# players:本局人数(炸弹猫按它选桌;不知道时传 0,用小桌,如等待厅与主菜单)
+	if GameMode.is_poker(mode):
+		return POKER_TABLE_RADIUS
+	if GameMode.is_bomb_cat(mode) and players >= BOMB_CAT_BIG_TABLE_FROM:
+		return POKER_TABLE_RADIUS
+	return TABLE_RADIUS
 
 
 static func seat_radius_for(table_radius: float) -> float:

@@ -84,3 +84,11 @@ func test_opposite_key_brings_the_head_back():
 	var input := SeatGaze.next_neck_input(Vector3.ZERO, Vector3(0, 0, -1), 0.5)
 	input = SeatGaze.next_neck_input(input, Vector3(0, 0, 1), 0.5)
 	assert_almost_eq(input.length(), 0.0, 0.0001, "按 S 同样时长,头回到原位")
+
+
+func test_neck_input_stops_at_the_species_reach():
+	# 长吻的鳄鱼伸得近一点:按住不放也停在它自己的上限,松手往回按马上就收
+	var input := Vector3.ZERO
+	for i in 40:
+		input = SeatGaze.next_neck_input(input, Vector3(0, 0, -1), 0.1, 0.75)
+	assert_almost_eq(input.length(), 0.75, 0.0001)

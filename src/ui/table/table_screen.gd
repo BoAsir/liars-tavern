@@ -94,6 +94,8 @@ func _exit_tree() -> void:
 		app.labels.untrack(PLATE_KEY % pid)
 		app.labels.untrack(TableDirector.BUBBLE_KEY % pid)
 		app.labels.untrack(QuipController.KEY_PREFIX % pid)
+	if world != null and is_instance_valid(world):
+		world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
 
 
 func _process(delta: float) -> void:
@@ -329,6 +331,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		_confirm_leave()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V:
+		# V 切换越肩 / 第一人称:出局后也能改设置(观战机位不变,下次回到座位生效);快捷语面板或九宫格开着时不切
+		get_viewport().set_input_as_handled()
+		var banter = app.get("banter_view")
+		if (banter == null or not banter.is_panel_open()) and not quips.menu.is_open():
+			director.toggle_camera_mode()
 		return
 	if _dead.has(my_pid):
 		return

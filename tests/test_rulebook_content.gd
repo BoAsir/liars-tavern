@@ -70,7 +70,7 @@ func test_liars_book_is_the_default_and_keeps_its_chapters():
 
 
 func test_each_book_has_a_tab_title():
-	assert_eq(RulebookContent.BOOKS, [RulebookContent.BOOK_LIARS, RulebookContent.BOOK_POKER])
+	assert_eq(RulebookContent.BOOKS, [RulebookContent.BOOK_LIARS, RulebookContent.BOOK_BOMB_CAT, RulebookContent.BOOK_POKER])
 	assert_eq(RulebookContent.book_title(RulebookContent.BOOK_LIARS), "骗子酒馆")
 	assert_eq(RulebookContent.book_title(RulebookContent.BOOK_POKER), "德州扑克")
 
@@ -93,6 +93,14 @@ func test_controls_list_the_rulebook_hotkey():
 	for item in _block("controls", "keys")["items"]:
 		keys.append_array(item["keys"])
 	assert_has(keys, OS.get_keycode_string(RulebookContent.HOTKEY))
+
+
+func test_both_books_explain_how_to_pick_a_species():
+	for book in [RulebookContent.BOOK_LIARS, RulebookContent.BOOK_POKER]:
+		var notes: Array = RulebookContent.find("controls", book)["blocks"].filter(func(b: Dictionary) -> bool:
+			return b["type"] == "note").map(func(b: Dictionary) -> String: return b["text"])
+		assert_has(notes, RulebookContent.SPECIES_NOTE, book)
+	assert_string_contains(RulebookContent.SPECIES_NOTE, "先选先得")
 
 
 func _block(section_id: String, type: String) -> Dictionary:
