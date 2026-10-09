@@ -42,7 +42,7 @@ var _queue: Array = []
 var _intro_done := false
 var _awaiting_intent := false        # 已提交下注动作,等房主回执
 var _seat_request_pending := false   # 已提交再领 / 观战 / 回座,等房主回执
-var _next_left := -1.0               # 一手结束后到下一手自动开始的本地倒计时(30 秒,到点自动点「开始」);< 0 表示没在数
+var _next_left := -1.0               # 一手结束后到下一手自动开始的本地倒计时(15 秒,到点自动点「开始」);< 0 表示没在数
 var _history: HandHistoryPanel = null
 var _settlement: PokerSettlement = null
 var quips: QuipController
@@ -216,7 +216,7 @@ func _first_frame() -> void:
 	if state.sync_from_view():
 		_arrange()
 	if state.between_hands:
-		_next_left = PokerPacing.NEXT_HAND_TIMEOUT   # 中途进来正赶上两手之间:不知道房主还剩几秒,按整 30 秒数
+		_next_left = PokerPacing.NEXT_HAND_TIMEOUT   # 中途进来正赶上两手之间:不知道房主还剩几秒,按整 15 秒数
 	_sync_table()
 	set_current(state.current_pid)
 
@@ -251,7 +251,12 @@ func _sync_table() -> void:
 func _arrange() -> void:
 	# 按座位表排座;迟到者按「座位表 + 自己」排、不建自己的酒客(规格 §5.5),入座时桌子不用转
 	var seated := state.seats.has(my_pid)
-	world.arrange(state.seat_entries(my_pid), my_pid, seated, false)
+	# 形象用房主分配的(Net.species_of 查本局座位表与等待厅名单):不带 species 时各端会按本地「第一个空着的」补,
+	# 别人看到的就不是自己选的那只
+	var entries := state.seat_entries(my_pid)
+	for entry in entries:
+		entry["species"] = Net.species_of(entry["pid"])
+	world.arrange(entries, my_pid, seated, false)
 	_update_visibility()
 	_sync_nameplates()
 
@@ -385,7 +390,7 @@ func hole_for_hand(number: int) -> Array:
 
 
 func end_hand(_ev: Dictionary) -> void:
-	# 房主等「开始下一手」的 30 秒从这一手演完(含 hand_over 本身)才开始算
+	# 房主等「开始下一手」的 15 秒从这一手演完(含 hand_over 本身)才开始算
 	_next_left = PokerPacing.NEXT_HAND_TIMEOUT + PokerPacing.HAND_OVER
 	set_current(null)
 

@@ -186,7 +186,7 @@ func test_next_hand_waits_for_everyone_to_press_start_or_thirty_seconds():
 	_fold_out()
 	assert_true(net._turn_timer.is_stopped())
 	var deadline: float = net._hand_timer.time_left
-	assert_almost_eq(deadline, net._anim_left + PokerPacing.NEXT_HAND_TIMEOUT, EPS, "演完后最多等 30 秒")
+	assert_almost_eq(deadline, net._anim_left + PokerPacing.NEXT_HAND_TIMEOUT, EPS, "演完后最多等 15 秒")
 	assert_eq(net.last_public["phase"], "idle")
 	_confirm([HOST, GUESTS[0]])
 	assert_almost_eq(net._hand_timer.time_left, deadline, EPS, "还有人没点:照旧等")
@@ -204,7 +204,7 @@ func test_nobody_pressing_start_still_deals_after_the_timeout():
 	_start()
 	_fold_out()
 	var started := _next_hand()
-	assert_eq(started["hand"], 2, "30 秒到了自动开(等于替大家点了开始)")
+	assert_eq(started["hand"], 2, "15 秒到了自动开(等于替大家点了开始)")
 	assert_eq(_sorted(started["dealt"]), _sorted([HOST] + GUESTS))
 
 

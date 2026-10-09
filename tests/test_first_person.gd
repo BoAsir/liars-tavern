@@ -1,7 +1,7 @@
 extends GutTest
 # 第一人称视角(V 切换,规格 2026-10-08-first-person-toggle):
 # - 选择存进设置,默认越肩;
-# - 第一人称机位在自己的眼睛上(头心 + FP_EYE_OFFSET),跟着脖子偏移(WASD 探头)走,朝向不跟转头;
+# - 第一人称机位在自己的眼睛上(头心 + FP_EYE_OFFSET),跟着脖子偏移(WASD 探头)走,朝向跟着转头(像 CS,2026-10-09 用户要求);
 # - 自己的头(含眼、眉、耳、帽、脖子)只投影不渲染,换回越肩、复位、离座拍特写时恢复;
 # - 手里的牌扇在画面里、在近裁剪面之前、不被自己的身体与手臂挡住(骗子酒馆与德州,探头时也一样);
 # - 导演拍完特写回到当前视角的座位机位;出局观战时按 V 只改设置,镜头不动。
@@ -66,8 +66,9 @@ func _liars_hand() -> void:
 
 # —— 设置 ——
 
-func test_default_is_over_the_shoulder():
-	assert_false(Settings.first_person(SETTINGS))
+func test_default_is_first_person():
+	# 2026-10-09 用户要求默认第一人称;存过「越肩」的人照旧
+	assert_true(Settings.first_person(SETTINGS))
 
 
 func test_toggle_persists_to_settings():
@@ -75,18 +76,18 @@ func test_toggle_persists_to_settings():
 	var rig := _rig()
 	var cam := SeatCamera.new(rig, world, 1, SETTINGS)
 	add_child_autofree(cam)
-	assert_false(cam.first_person)
-	assert_true(cam.toggle())
-	assert_true(Settings.first_person(SETTINGS), "存进设置")
-	assert_true(world.first_person, "牌桌跟着换")
-	assert_true(autofree(SeatCamera.new(rig, world, 1, SETTINGS)).first_person, "下次进牌桌沿用")
+	assert_true(cam.first_person, "默认第一人称")
 	assert_false(cam.toggle())
-	assert_false(Settings.first_person(SETTINGS))
+	assert_false(Settings.first_person(SETTINGS), "存进设置")
+	assert_false(world.first_person, "牌桌跟着换")
+	assert_false(autofree(SeatCamera.new(rig, world, 1, SETTINGS)).first_person, "下次进牌桌沿用")
+	assert_true(cam.toggle())
+	assert_true(Settings.first_person(SETTINGS))
 
 
-func test_unknown_setting_falls_back_to_over_the_shoulder():
+func test_unknown_setting_falls_back_to_first_person():
 	Settings.set_value(Settings.KEY_CAMERA_MODE, "sideways", SETTINGS)
-	assert_false(Settings.first_person(SETTINGS))
+	assert_true(Settings.first_person(SETTINGS))
 	assert_push_warning("不是已知视角")
 
 
@@ -107,13 +108,22 @@ func test_first_person_eye_sits_on_the_head_and_follows_the_neck():
 	assert_true(world.first_person_view(1).basis.is_equal_approx(world.first_person_rest_view(1).basis), "朝向不跟着变")
 
 
-func test_first_person_ignores_where_the_head_turns():
+func test_first_person_turns_with_the_head():
+	# 像 CS:头转向哪边,镜头就跟着转过去;不看任何东西时朝向回到静止机位
 	_setup([{"pid": 1}, {"pid": 2}])
 	await wait_seconds(SETTLE)
-	var before := world.first_person_view(1)
-	me.look_at_point(Vector3(-3, 1.2, 0))
-	await wait_seconds(0.6)
-	assert_true(world.first_person_view(1).basis.is_equal_approx(before.basis), "光标看哪儿镜头不跟着转")
+	var rest_forward := -world.first_person_rest_view(1).basis.z
+	var eye := me.eye_position()
+	var seat_basis := world.seat_transform(world.seat_angles[1]).basis
+	var right := eye + seat_basis * Vector3(2.0, 0.0, -1.0)
+	me.look_at_point(right)
+	await wait_seconds(1.0)
+	var forward := -world.first_person_view(1).basis.z
+	var to_right := (right - eye).normalized()
+	assert_gt(forward.dot(to_right), rest_forward.dot(to_right) + 0.1, "镜头朝右转过去了")
+	var up := world.first_person_view(1).basis.y
+	assert_gt(up.dot(Vector3.UP), 0.9, "不歪头(没有横滚)")
+	assert_true(world.first_person_view(1).origin.is_equal_approx(me.eye_position()), "位置仍在眼睛上")
 
 
 func test_first_person_looks_at_the_table():
@@ -402,6 +412,7 @@ func test_director_returns_to_the_first_person_seat_after_a_reveal():
 
 
 func test_director_returns_to_the_shoulder_in_third_person():
+	Settings.set_first_person(false, SETTINGS)   # 从越肩开始(默认已是第一人称)
 	var director := _director([{"pid": 1}, {"pid": 2}])
 	director._leave_seat()
 	director.rig.move_to(world.reveal_view(2), 0.05)
@@ -413,6 +424,7 @@ func test_director_returns_to_the_shoulder_in_third_person():
 
 
 func test_toggle_during_the_seat_move_does_not_stall_the_director():
+	Settings.set_first_person(false, SETTINGS)   # 从越肩开始(默认已是第一人称)
 	# 回座运镜还在走时按 V:导演等的补间不能被打断
 	var director := _director([{"pid": 1}, {"pid": 2}])
 	director._leave_seat()
@@ -429,6 +441,7 @@ func test_toggle_during_the_seat_move_does_not_stall_the_director():
 
 
 func test_v_while_dead_only_changes_the_setting():
+	Settings.set_first_person(false, SETTINGS)   # 从越肩开始(默认已是第一人称)
 	var director := _director([{"pid": 1}, {"pid": 2}])
 	var app: StubApp = director.app
 	director.spectator = true
@@ -524,3 +537,15 @@ func _blocked(eye: Vector3, point: Vector3) -> bool:
 
 func _rig_cull() -> int:
 	return (1 << 20) - 1 & ~MeshKit.LAYER_LOCAL_HIDDEN
+
+
+func test_cursor_maps_to_a_fixed_direction_in_the_rest_view():
+	# 第一人称时光标按「没转头时的画面」换算方向:镜头转过去之后光标不动,头也不会一直转下去
+	var view := Transform3D(Basis.IDENTITY, Vector3.ZERO)
+	var size := Vector2(1280, 720)
+	assert_true(SeatGaze.rest_ray(view, size / 2.0, size, 72.0).is_equal_approx(Vector3(0, 0, -1)), "正中 = 正前方")
+	var right := SeatGaze.rest_ray(view, Vector2(1280, 360), size, 72.0)
+	assert_almost_eq(atan2(right.x, -right.z), atan(tan(deg_to_rad(36.0)) * 1280.0 / 720.0), 0.001, "右边缘 = 半个水平视角")
+	var down := SeatGaze.rest_ray(view, Vector2(640, 720), size, 72.0)
+	assert_almost_eq(asin(down.y), -deg_to_rad(36.0), 0.001, "下边缘 = 往下半个垂直视角")
+

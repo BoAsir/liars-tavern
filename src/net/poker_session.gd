@@ -122,7 +122,7 @@ func next_hand_ready() -> bool:
 
 
 func hand_gap() -> float:
-	# 一手结束后等要发牌的人都点「开始下一手」,最多 30 秒;都点了(或没确认的人走了 / 选了观战)就只停一下
+	# 一手结束后等要发牌的人都点「开始下一手」,最多 15 秒;都点了(或没确认的人走了 / 选了观战)就只停一下
 	return PokerPacing.HAND_GAP if _table.all_confirmed() else PokerPacing.NEXT_HAND_TIMEOUT
 
 

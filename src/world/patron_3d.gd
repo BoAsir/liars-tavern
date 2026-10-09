@@ -60,6 +60,7 @@ const SELF_FAN_SCALE := 1.25
 # 落在大头里面靠前的位置——自己的头只投影不渲染,往下看时胸口与领口也在镜头后面。
 # 牌扇按镜头坐标摆在画面右下、像拿在手里(FP_FAN_CAM:右、下、前),跟着眼睛平移,探头、前倾时牌在画面里不动
 const FP_EYE_OFFSET := Vector3(0, 0.07, -0.12)
+const VIEW_FOLLOW := 10.0   # 第一人称镜头追转头目标的速度(每秒):比头本身(3)快,跟手又不跳
 const FP_FAN_CAM := Vector3(0.22, -0.12, -0.55)
 const FP_FAN_SCALE := 1.0
 const FP_SPEECH_AHEAD := Vector3(0, 0.12, -0.7)   # 第一人称时自己的快捷语气泡挂在眼前上方(座位坐标,相对眼睛):头顶在镜头背后
@@ -136,6 +137,7 @@ var _neck_target := Vector3.ZERO     # 座位坐标的头部偏移目标
 var _neck_offset := Vector3.ZERO     # 当前偏移(弹簧积分)
 var _neck_velocity := Vector3.ZERO
 var _wipe_tween: Tween = null      # 被番茄砸中后抹脸的补间(出局、复位时中止)
+var _view_angles := Vector2.ZERO   # 第一人称镜头跟着的转头角度 (yaw, pitch):只含看向目标,不含待机晃动与表演,追得比头快
 var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
 var _dance: PatronDance = null     # 结算庆祝:跳舞 / 鼓掌 / 出局抽手(只在庆祝期间存在),见 patron_dance.gd
 
@@ -275,6 +277,7 @@ func _animate_idle(delta: float) -> void:
 		pitch = clampf(atan2(local.y, Vector2(local.x, local.z).length()), _look_data.get("anim", {}).get("look_pitch_min", -0.45), 0.35)
 	# 枪抵着太阳穴时屏住不动(头一晃,只隔 8 mm 的枪口就戳进头里);搞笑表演的头部偏移同样屏住
 	var wobble := 0.0 if _steady else 1.0
+	_view_angles = _view_angles.lerp(Vector2(yaw, pitch), minf(delta * VIEW_FOLLOW, 1.0))
 	yaw += (_noise.get_noise_1d(_time * 0.4) * 0.08 + _antics.head_add.y) * wobble
 	pitch += (_noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x + _antics.nod) * wobble
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
@@ -372,6 +375,11 @@ func look_at_point(point: Vector3) -> void:
 
 func head_position() -> Vector3:
 	return head.global_transform * Vector3(0, 0.12, 0)
+
+
+func view_angles() -> Vector2:
+	# 第一人称镜头的转头角度 (yaw 左正, pitch 上正),相对身体朝向;没看任何东西时回到 0
+	return _view_angles
 
 
 func eye_position() -> Vector3:

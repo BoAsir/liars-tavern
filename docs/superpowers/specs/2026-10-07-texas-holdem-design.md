@@ -78,7 +78,7 @@
 ### 2.6 输光、再领与观战
 
 - 一手结束时筹码为 0 的人**输光**(status `busted`):他的屏幕底部出现「再领 2000」/「观战」(带倒计时)。不选不会卡住牌局,只是不发牌给他。
-- **选择时间**:输光的人和其他人一样有一手结束后的 30 秒(见 §2.10「开始下一手」);再领算点了开始,选观战或离开就不再等他。
+- **选择时间**:输光的人和其他人一样有一手结束后的 15 秒(见 §2.10「开始下一手」);再领算点了开始,选观战或离开就不再等他。
 - **再领**:status 为 `busted` 或 `spectating` 时可以(注意:手牌中全下的人筹码也是 0,但不能领)。每次 2000,不限次数,累计领取 +1,status 变 `waiting`,下一手发牌。当前没有进行中的手牌且凑够 2 人时自动排期开下一手。
 - **观战**:只有 `busted` 可以选。角色留在座位上不发牌;镜头切到俯视观战机位;HUD 常驻「领取 2000 上桌」。
 - 其他情况的再领/观战请求回 `cannot_rebuy` / `invalid_action`,不产生事件。
@@ -101,8 +101,8 @@
 ### 2.10 开始下一手与牌局记录(2026-10-09 按用户要求新增)
 
 - **开始下一手**:一手结束(演完分池)后不自动开下一手。要接着打的人(没离开、不在观战 / 离座;含输光还没选的、中途加入等发牌的)
-  底部出现「开始下一手」按钮和 30 秒倒计时;都点了(意图 `next`,事件 `next_ready`,视图 `players[].confirmed`,铭牌显示「已准备」)
-  就演完再停 `HAND_GAP`(0.5 秒)开下一手;30 秒(`PokerPacing.NEXT_HAND_TIMEOUT`)到了等于替没点的人点了,照常开。
+  底部出现「开始下一手」按钮和 15 秒倒计时;都点了(意图 `next`,事件 `next_ready`,视图 `players[].confirmed`,铭牌显示「已准备」)
+  就演完再停 `HAND_GAP`(0.5 秒)开下一手;15 秒(`PokerPacing.NEXT_HAND_TIMEOUT`,原 30 秒,用户要求改短)到了等于替没点的人点了,照常开。
   点过的人底部显示「已准备 · 等待其他人(2/5)」。再领算点了开始;选观战、离开的人不再等。点开始只在两手之间有效,其他时候回 `invalid_action`。
 - **牌局记录**:每手结束(`hand_over` 之后)房主发 `hand_record`:公共牌、每个被发到牌的人的两张手牌(**含弃牌的**,用户要求赛后能看每个人的牌)、
   牌型(公共牌 ≥ 3 张时)、是否弃牌 / 已离开、这一手的输赢(发牌前后筹码差,含盲注)。它只在一手结束后才发,手牌进行中不泄露。
@@ -189,7 +189,7 @@ func turn_timer_after(events: Array, pending: float, time_left: float) -> float
 func accepts_late_join() -> bool                # 骗子酒馆 false;德州 = 没散局且未结束
 func add_player(pid: int, name: String) -> Array
 func next_hand_ready() -> bool                  # 骗子酒馆 false
-func hand_gap() -> float                        # 德州:要接着打的人都点了「开始下一手」时 HAND_GAP,否则 NEXT_HAND_TIMEOUT(30 秒)
+func hand_gap() -> float                        # 德州:要接着打的人都点了「开始下一手」时 HAND_GAP,否则 NEXT_HAND_TIMEOUT(15 秒)
 func start_next_hand() -> Array
 func request_end() -> Array
 ```

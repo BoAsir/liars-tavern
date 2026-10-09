@@ -82,6 +82,14 @@ static func species_override(args: PackedStringArray = OS.get_cmdline_user_args(
 	return index
 
 
+static func patrons_line(patrons: Dictionary) -> String:
+	# 本机实际建出来的酒客形象(按 pid 排序):「[debug] patrons {1: crocodile, 2034: fox}」;冒烟测试比对各端画面是否一致
+	var pids := patrons.keys().filter(func(pid): return is_instance_valid(patrons[pid]))
+	pids.sort()
+	var parts := pids.map(func(pid) -> String: return "%d: %s" % [pid, Species.IDS[patrons[pid].species_index]])
+	return "[debug] patrons {%s}" % ", ".join(parts)
+
+
 static func species_line(entries: Array) -> String:
 	# entries:[{pid, species}](名单或座位表,按座位顺序)→「[debug] species {1: crocodile, 2034: fox}」;没有形象写「-」
 	var parts := entries.map(func(p: Dictionary) -> String:
@@ -398,6 +406,7 @@ func _on_events(events: Array) -> void:
 				print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
 				print("[debug] BANTER tomatoes=%d said=%d" % [_tomato_from.size(), _said_from.size()])
 				print("[debug] QUIPS heard=%d" % _quip_from.size())
+				print(patrons_line(app.world.patrons))
 				print("[debug] SESSION_OVER hands_dealt=%d net=%d" % [_hands_dealt, net_of(results, Net.my_pid())])
 				if Net.is_host:
 					print("[debug] net_sum=%d" % net_sum(results))

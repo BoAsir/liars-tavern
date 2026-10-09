@@ -80,10 +80,24 @@ func _follow_cursor_with_head(delta: float) -> void:
 
 
 func _cursor_ray() -> Dictionary:
-	# 光标在当前镜头里的射线 {"origin", "direction"}
+	# 光标在当前镜头里的射线 {"origin", "direction"}。第一人称时镜头跟着头转,所以改按「没转头时的画面」换算:
+	# 光标指着哪个方向,头就转过去、镜头跟过去;光标不动镜头就停(否则会一直追着转下去)
 	var camera: Camera3D = app.tavern.camera_rig.camera
 	var mouse := get_viewport().get_mouse_position()
+	if world.first_person and world.patrons.has(my_pid):
+		var view := world.first_person_rest_view(my_pid)
+		view.origin = world.patrons[my_pid].eye_position()
+		var size := get_viewport().get_visible_rect().size
+		return {"origin": view.origin, "direction": rest_ray(view, mouse, size, camera.fov)}
 	return {"origin": camera.project_ray_origin(mouse), "direction": camera.project_ray_normal(mouse)}
+
+
+static func rest_ray(view: Transform3D, mouse: Vector2, size: Vector2, fov_degrees: float) -> Vector3:
+	# 镜头在 view 上(竖直视角 fov,画面 size)时,光标 mouse 所指的方向(全局)
+	var half := tan(deg_to_rad(fov_degrees) / 2.0)
+	var ndc := (mouse / size) * 2.0 - Vector2.ONE
+	var local := Vector3(ndc.x * half * size.x / size.y, -ndc.y * half, -1.0)
+	return (view.basis * local).normalized()
 
 
 func _held_neck_direction() -> Vector3:

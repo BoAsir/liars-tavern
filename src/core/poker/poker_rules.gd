@@ -23,7 +23,7 @@ const ALLIN := "allin"
 const REBUY := "rebuy"
 const SPECTATE := "spectate"
 const SIT_IN := "sit_in"         # 挂机离座的人回到牌桌
-const NEXT := "next"             # 一手结束后点「开始下一手」:要发牌的人都点了(或 30 秒到了)才开下一手
+const NEXT := "next"             # 一手结束后点「开始下一手」:要发牌的人都点了(或 15 秒到了)才开下一手
 const BET_ACTIONS := [FOLD, CHECK, CALL, RAISE, ALLIN]
 const SEAT_ACTIONS := [REBUY, SPECTATE, SIT_IN, NEXT]
 

@@ -142,7 +142,7 @@ func test_start_button_after_a_hand_then_waiting_for_others_and_auto_press():
 			{"pid": 1, "cards": H.cards("Ah Kd"), "hand_name": "", "folded": false, "left": false, "delta": 30}]}],
 		_pub(null, {"phase": "idle"}))
 	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NEXT, "一手结束:开始下一手")
-	assert_gt(screen._next_left, PokerPacing.NEXT_HAND_TIMEOUT - 1.0, "30 秒倒计时")
+	assert_gt(screen._next_left, PokerPacing.NEXT_HAND_TIMEOUT - 1.0, "15 秒倒计时")
 	assert_eq(screen.state.history.size(), 1, "牌局记录收下了")
 	screen.toggle_history()
 	assert_true(is_instance_valid(screen._history))
@@ -167,4 +167,25 @@ func test_start_is_pressed_automatically_when_the_countdown_runs_out():
 	screen._next_left = 0.01
 	await wait_process_frames(3)
 	assert_true(screen._seat_request_pending, "时间到自动点了开始")
+
+
+func test_patrons_use_the_species_the_host_assigned():
+	# Bug:德州牌桌排座时没带形象,各端按本地「第一个空着的」补,别人看到的不是自己选的那只
+	var saved_lobby: Array = Net.lobby_players
+	_reset_table([1, 2, 3])
+	Net.seats = [{"pid": 1, "name": "我", "species": 3}, {"pid": 2, "name": "乙", "species": 5}, {"pid": 3, "name": "丙", "species": 7}]
+	Net.lobby_players = [{"pid": 9, "name": "迟到", "species": 6}]
+	screen = PokerScreenScript.new(app)
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child_autofree(screen)
+	await _hand1()
+	for pid in [1, 2, 3]:
+		assert_eq(app.world.patrons[pid].species_index, {1: 3, 2: 5, 3: 7}[pid], "开局:%d 号用房主分配的形象" % pid)
+	_join_as_waiting(9)
+	seats = [1, 2, 3, 9]
+	await _feed([{"type": "hand_over", "hand": 1, "stacks": {}, "busted": []},
+		{"type": "hand_started", "hand": 2, "button": 2, "sb": 3, "bb": 9, "seats": [1, 2, 3, 9], "dealt": [3, 9, 1, 2]}],
+		_pub(null, {"hand": 2}))
+	assert_eq(app.world.patrons[9].species_index, 6, "中途入座的人也用房主分配的形象")
+	Net.lobby_players = saved_lobby
 

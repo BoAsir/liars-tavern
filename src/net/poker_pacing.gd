@@ -24,7 +24,7 @@ const SESSION_OVER := 3.0            # 结算面板之前的谢幕
 # 一手结束后:等要发牌的人都点「开始下一手」(输光的人再领也算),最多 NEXT_HAND_TIMEOUT(到点等于替大家点了);
 # 都点了就演完再停 HAND_GAP 开下一手。房主排期用,不对应事件。
 # away / sit_in / spectate / next_ready / hand_record 事件不占演出时间
-const NEXT_HAND_TIMEOUT := 30.0
+const NEXT_HAND_TIMEOUT := 15.0   # 2026-10-09 用户要求从 30 秒改为 15 秒
 const HAND_GAP := 0.5
 
 # 这些事件会让客户端在演出结束时把回合交给某人(重新起算回合时间)

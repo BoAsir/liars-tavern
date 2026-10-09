@@ -10,7 +10,7 @@ const KEY_LAST_IP := "last_ip"
 const KEY_MUTED := "muted"
 const KEY_LAST_MODE := "last_mode"
 const KEY_SPECIES := "species"   # 存物种 id 字符串(不存下标):以后调整内部顺序也不会选错
-const KEY_CAMERA_MODE := "camera_mode"   # 牌桌视角:CAMERA_THIRD(越肩,默认)或 CAMERA_FIRST(第一人称)
+const KEY_CAMERA_MODE := "camera_mode"   # 牌桌视角:CAMERA_FIRST(第一人称,默认;2026-10-09 用户要求)或 CAMERA_THIRD(越肩)
 const CAMERA_THIRD := "third"
 const CAMERA_FIRST := "first"
 
@@ -66,11 +66,11 @@ static func ensure_species(path := PATH, rng: RandomNumberGenerator = null) -> i
 
 
 static func first_person(path := PATH) -> bool:
-	# 牌桌是不是第一人称视角;没设置过是越肩。不认识的值告警后按越肩(类型不对已由 get_string 告警)
-	var mode := get_string(KEY_CAMERA_MODE, CAMERA_THIRD, path)
+	# 牌桌是不是第一人称视角;没设置过是第一人称(用户要求)。不认识的值告警后按第一人称(类型不对已由 get_string 告警)
+	var mode := get_string(KEY_CAMERA_MODE, CAMERA_FIRST, path)
 	if mode != CAMERA_THIRD and mode != CAMERA_FIRST:
-		push_warning("设置 %s 的值「%s」不是已知视角(来自 %s),改用越肩" % [KEY_CAMERA_MODE, mode, path])
-	return mode == CAMERA_FIRST
+		push_warning("设置 %s 的值「%s」不是已知视角(来自 %s),改用第一人称" % [KEY_CAMERA_MODE, mode, path])
+	return mode != CAMERA_THIRD
 
 
 static func set_first_person(on: bool, path := PATH) -> Error:

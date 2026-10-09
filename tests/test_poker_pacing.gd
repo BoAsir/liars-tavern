@@ -58,8 +58,8 @@ func test_bystander_batches_keep_the_running_turn_time():
 
 
 func test_next_hand_waits_at_most_thirty_seconds_for_start():
-	# 一手结束后等大家点「开始下一手」,最多 30 秒;都点了就演完稍停开下一手
-	assert_almost_eq(PokerPacing.NEXT_HAND_TIMEOUT, 30.0, 0.001)
+	# 一手结束后等大家点「开始下一手」,最多 15 秒;都点了就演完稍停开下一手
+	assert_almost_eq(PokerPacing.NEXT_HAND_TIMEOUT, 15.0, 0.001, "用户要求从 30 秒改为 15 秒")
 	assert_lt(PokerPacing.HAND_GAP, 1.0)
 
 
