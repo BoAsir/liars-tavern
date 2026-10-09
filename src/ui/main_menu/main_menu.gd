@@ -331,9 +331,11 @@ func _set_busy(busy: bool) -> void:
 
 
 func _validated_name() -> String:
-	var pname := Protocol.sanitize_name(_name_edit.text)
-	if pname == "":
-		_show_status("先给自己起个名号吧", UiTheme.LIE)
+	var raw_text := _name_edit.text
+	var pname := Protocol.sanitize_name(raw_text)
+	var validation := Protocol.validate_name(pname)
+	if not validation["ok"]:
+		_show_status(validation["error"], UiTheme.LIE)
 		_name_edit.grab_focus()
 		return ""
 	Settings.set_value(Settings.KEY_NAME, pname)
