@@ -56,12 +56,13 @@ func add_player(pid: int) -> Array:
 
 func remove_player(pid: int) -> Array:
 	# 离开或断线(规格 §2.7):在本手中且没全下 → 立即弃牌;已全下 → 照常摊牌;
-	# 不在本手中 → 空闲时立即移出,否则这一手结束时移出。他的筹码在这一手结束(退回与分池之后)才定格
+	# 不在本手中 → 空闲时立即移出,否则这一手结束时移出。他的筹码在这一手结束(退回与分池之后)才定格。
+	# 还没登场的新人(本手座位表里没有他)任何时候都立即移出:他不在这一手里,也没有酒客
 	if _phase == Phase.OVER or not _is_seated(pid):
 		return []
 	var p: Dictionary = _players[pid]
 	p["left"] = true
-	if _phase == Phase.IDLE:
+	if _phase == Phase.IDLE or not _hand_seats().has(pid):
 		_depart(pid)
 		return [_left_event(pid, false)]
 	var folds: bool = p["status"] == PokerRules.STATUS_ACTIVE

@@ -9,6 +9,7 @@ const MAX_AMOUNT := 1_000_000   # 意图里的金额上限(规格 §3.3):超过�
 var _mode: String
 var _table: PokerTable = null
 var _names := {}                # 含已离开者:结算行要用
+var _fresh_busted: Array = []   # 最近一手 hand_over 里输光的人:只有他们没做选择时下一手才多等(规格 §2.6)
 
 
 func _init(mode: String) -> void:
@@ -55,7 +56,12 @@ func handle_intent(pid: int, intent: Dictionary) -> Dictionary:
 
 
 func on_disconnect(pid: int) -> Array:
-	return _named(_table.remove_player(pid))
+	# 桌上没有他的酒客(还没登场的新人):离开事件标 offstage,不占演出时间
+	var offstage := not _table.seats_with_patrons().has(pid)
+	return _named(_table.remove_player(pid)).map(func(ev: Dictionary) -> Dictionary:
+		if offstage and ev.get("type") == "player_left":
+			return ev.merged({"offstage": true}, true)
+		return ev)
 
 
 func on_turn_timeout() -> Dictionary:
@@ -116,9 +122,9 @@ func next_hand_ready() -> bool:
 
 func hand_gap() -> float:
 	# 有输光者还没选再领/观战(且没离开)时留出选择时间(规格 §2.6)
-	for pid in _table.seat_order():
+	for pid in _fresh_busted:
 		var p := _table.player(pid)
-		if p["status"] == PokerRules.STATUS_BUSTED and not p["left"]:
+		if p.get("status") == PokerRules.STATUS_BUSTED and not p.get("left", true):
 			return PokerPacing.BUST_DECISION
 	return PokerPacing.HAND_GAP
 
@@ -140,7 +146,14 @@ func name_of(pid: int) -> String:
 
 
 func _named(events: Array) -> Array:
-	# player_joined 与 session_over 里的名字由会话补(引擎不知道名字);引擎的字典不就地改,补了名字的是新字典
+	# player_joined 与 session_over 里的名字由会话补(引擎不知道名字);引擎的字典不就地改,补了名字的是新字典。
+	# 顺带记下最近一手输光的人(所有事件都经过这里)
+	for ev in events:
+		match ev.get("type", ""):
+			"hand_started":
+				_fresh_busted = []
+			"hand_over":
+				_fresh_busted = ev.get("busted", []).duplicate()
 	return events.map(func(ev: Dictionary) -> Dictionary:
 		match ev.get("type", ""):
 			"player_joined":
