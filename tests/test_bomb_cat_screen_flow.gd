@@ -237,6 +237,17 @@ func test_a_whole_three_player_match_to_settlement():
 	assert_not_null(settlement)
 	var ranking: Array = screen.state.ranking_rows().map(func(r: Dictionary) -> int: return r["pid"])
 	assert_eq(ranking, [session.state().winner_pid] + _reversed(session.state().out_order), "名次 = 胜者 + 出局顺序倒排")
+	# 结算庆祝(规格 2026-10-09):胜者跳舞,炸飞的人倒着(只抽手、不鼓掌)
+	assert_true(app.world.is_celebrating(), "match_over 开演庆祝")
+	assert_true(app.world.patrons[session.state().winner_pid].is_dancing(), "胜者跳舞")
+	for pid in session.state().out_order:
+		if app.world.patrons.has(pid):
+			assert_false(app.world.patrons[pid].alive)
+			assert_ne(app.world.patrons[pid].dance_routine(), PatronDance.CLAP, "炸飞的 %d 不鼓掌" % pid)
+	screen.get_parent().remove_child(screen)
+	await get_tree().process_frame
+	assert_false(app.world.is_celebrating(), "退场收起庆祝")
+	add_child(screen)   # 放回去,交给 autofree 释放
 	assert_eq(rejected, [], "自己的意图都按规则出,不该被拒")
 	assert_gte(accepted.count("draw") + accepted.count("play"), 3, "自己(机器人走界面入口)真的出过手:%s" % [accepted])
 

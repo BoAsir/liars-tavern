@@ -12,6 +12,8 @@
 - 炸弹猫:全部原创的牌面(炸弹猫、剪线钳、甩锅、偷看、讨要、不行!、五种零食);摸到炸弹镜头推近、导火索冒火花、心跳,
   拆弹时手忙脚乱剪线「咔嚓」,炸飞时闪光、烟团、震屏、一脸黑灰 × 眼冒星星、帽子飞走;反应窗口里谁都能拍桌「不行!」
 - 丢番茄与快捷语:等待厅和牌局里随时朝别人丢番茄(糊在脸上几秒),或说一句快捷语——你的动物用自己的叫声一个字一个字念出来,头顶冒气泡
+- 结算庆祝:胜者坐在椅子上跳舞(扭腰挥手、迪斯科、转圈、小鸡舞、抛帽接帽,每局随机一支),其他人鼓掌、出局的人倒着抽手;
+  胜者面前的桌沿弹出两门玩具礼炮,「砰!」地喷出粉彩彩纸和卷曲彩带,飘落在桌上和地上,伴着开场小号与掌声(德州平局时并列第一的都跳);结算面板停在屏幕右侧,跳舞的胜者一直在左边看得见
 - 全部美术与音效程序化生成,无外部资源
 - 局域网联机:房主开房,其他人在房间列表里自动看到;也可以输入 IP 直连
 
@@ -160,9 +162,14 @@ $GODOT --headless --path . -s tools/shot_diff.gd -- --a=/tmp/before --b=/tmp/aft
 $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --bomb-cat-showcase --views=bomb_seat,bomb_close,bomb_overview --hud=window,bomb,exploded
 $GODOT --path . -s tools/bomb_cat_faces_sheet.gd -- --out=/tmp/bomb_faces
 
+# 结算庆祝截图:在任一展台上开演庆祝,等几秒再拍(机位 celebrate = 胜者特写环绕、celebrate_table = 整桌环绕;
+# --celebrate=5 拍第二炮,--celebrate-hud 叠上该玩法的结算面板)
+$GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --showcase --celebrate --views=celebrate,celebrate_table
+
 # 性能(需要窗口):离屏按游戏渲染配置测帧时间、CPU 渲染耗时与可见/阴影 draw call;超出 tools/perf_budget.gd 的预算时退出码为 1
 $GODOT --path . -s tools/perf_probe.gd -- --size=1920x1080 --view=seat,menu,opponent --cases=budget --frames=300 --assert-budget
 $GODOT --path . -s tools/perf_probe.gd -- --showcase=bomb_cat --view=bomb_seat,bomb_fp,bomb_overview --cases=budget --assert-budget
+$GODOT --path . -s tools/perf_probe.gd -- --showcase=poker --celebrate --view=celebrate,celebrate_table --cases=budget --assert-budget
 ```
 
 调试命令行开关(写在 `--` 之后):`--name=甲`、`--species=物种id`(fox / bear / pig / cat / turtle / alpaca / monkey /

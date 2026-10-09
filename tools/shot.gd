@@ -17,11 +17,16 @@ extends SceneTree
 #       --hud=turn,window,bomb,exploded,defuse,peek,turn,give,settlement --bomb-cat-showcase
 # --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
+# --celebrate[=秒] 在已摆好的展台(--showcase / --poker-showcase / --bomb-cat-showcase)上开演结算庆祝(tools/celebrate_stage.gd:
+# 胜者跳舞、旁人鼓掌、出局的倒着、桌沿礼炮放彩纸),等这么多秒(默认 2.6)再拍;机位 celebrate(胜者特写环绕的起点)、
+# celebrate_table(整桌环绕的起点)。例:--showcase --celebrate --views=celebrate,celebrate_table;--celebrate=5 拍第二炮;
+# 再加 --celebrate-hud 叠上该玩法的结算面板(文件名带 _settlement);--celebrate-winners=1,2,… 换胜者(德州全员平局:1,2,3,4,5,6,7,8)。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
 
 
 const CameraViews := preload("res://tools/camera_views.gd")
+const CelebrateStage := preload("res://tools/celebrate_stage.gd")
 const ImageStats := preload("res://tools/image_stats.gd")
 const WARMUP_FRAMES := 45
 const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
@@ -44,6 +49,8 @@ var _poker: Node = null
 var _bomb: Node = null
 var _showcase: Node = null
 var _ui: Control = null
+var _celebrate_world: TableWorld = null   # --celebrate:开演庆祝的那张牌桌
+var _celebrate_kind := ""
 
 
 func _initialize() -> void:
@@ -102,6 +109,8 @@ func _run() -> void:
 		root.add_child(bomb)
 		await bomb.build(tavern)
 		_bomb = bomb
+	if opts.has("celebrate"):
+		await _stage_celebration()
 	if opts.has("freeze"):
 		paused = true   # 暂停场景树:_process、补间、计时器停下,渲染照常
 		# 火焰着色器按渲染时间 TIME 跳动、粒子在 GPU 上推进,暂停树管不到:一并停下
@@ -113,9 +122,19 @@ func _run() -> void:
 	for index in views.size():
 		var view: String = views[index]
 		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
-		if hud_state == "" and _poker != null:
+		if CelebrateStage.VIEWS.has(view):
+			hud_state = "settlement" if opts.has("celebrate-hud") else ""
+		elif hud_state == "" and _poker != null:
 			hud_state = PokerShowcase.SPECTATE_STATE if view == "poker_overview" else PokerShowcase.BET_STATE
-		if view.begins_with("bomb_") and _bomb != null:
+		if CelebrateStage.VIEWS.has(view) and _celebrate_world != null:
+			var xform := CelebrateStage.view(_celebrate_world, _celebrate_kind, view, tavern.camera_rig.aspect())
+			tavern.camera_rig.stop_follow()
+			tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
+			tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(_celebrate_world, _celebrate_kind, view)
+			tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
+			if hud_state != "":
+				_stage_settlement(tavern)
+		elif view.begins_with("bomb_") and _bomb != null:
 			if hud_state == "" or not BombCatShowcase.HUD_STATES.has(hud_state):
 				hud_state = {"bomb_overview": BombCatShowcase.STATE_EXPLODED, "bomb_close": BombCatShowcase.STATE_BOMB}.get(view,
 					BombCatShowcase.STATE_TURN)
@@ -152,6 +171,52 @@ func _run() -> void:
 		if opts.has("stats"):
 			_print_stats(view, image)
 	quit()
+
+
+func _stage_celebration() -> void:
+	# 在最后摆的那个展台上开演结算庆祝,等 --celebrate 给的秒数(默认 CelebrateStage.SETTLE)
+	if _bomb != null:
+		_celebrate_world = _bomb.world
+		_celebrate_kind = "bomb_cat"
+	elif _poker_world != null:
+		_celebrate_world = _poker_world
+		_celebrate_kind = "poker"
+	elif _showcase != null:
+		_celebrate_world = _showcase.world
+		_celebrate_kind = "liars"
+	else:
+		push_warning("--celebrate 需要 --showcase / --poker-showcase / --bomb-cat-showcase")
+		return
+	if opts.has("celebrate-winners"):
+		CelebrateStage.winners_override = Array(opts["celebrate-winners"].split(",")).map(func(pid: String) -> int: return int(pid))
+	CelebrateStage.stage(_celebrate_world, _celebrate_kind)
+	var wait: String = opts["celebrate"]
+	await create_timer(float(wait) if wait.is_valid_float() else CelebrateStage.SETTLE).timeout
+
+
+func _stage_settlement(tavern: Tavern) -> void:
+	# --celebrate-hud:庆祝机位上叠该玩法的结算面板(德州 / 炸弹猫用展台自己的结算状态,骗子酒馆现摆一个)
+	if _ui == null:
+		var layer := CanvasLayer.new()
+		root.add_child(layer)
+		_ui = Control.new()
+		_ui.theme = UiTheme.theme()
+		_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_ui)
+	match _celebrate_kind:
+		"poker":
+			_poker.stage_hud(_ui, tavern.camera_rig.camera, PokerShowcase.SETTLEMENT_STATE)
+		"bomb_cat":
+			_bomb.stage_hud(_ui, BombCatShowcase.STATE_SETTLEMENT)
+		_:
+			for child in _ui.get_children():
+				child.free()
+			var stats := {1: {"name": "我", "shots": 2, "rounds": 3}, 2: {"name": "阿狸", "shots": 3, "rounds": 4},
+				3: {"name": "小熊", "shots": 1, "rounds": 4}, 4: {"name": "老狐狸", "shots": 4, "rounds": 2}}
+			# 骗子酒馆的结算面板读 Net(autoload):运行时再加载,免得本脚本编译时就要认得 Net
+			var panel_script: GDScript = load("res://src/ui/table/settlement.gd")
+			_ui.add_child(panel_script.new("阿狸", panel_script.build_ranking(2, [4, 1, 3], stats), false))
 
 
 func _save(out_dir: String, file: String) -> Image:

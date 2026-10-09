@@ -42,3 +42,9 @@ func test_bomb_cat_views_have_budgets():
 	assert_eq(PerfBudget.LIMITS["bomb_overview"]["draw_calls"], 900)
 	assert_eq(PerfBudget.LIMITS["bomb_close"]["draw_calls"], 900)
 	assert_eq(PerfBudget.violations("bomb_seat", {"draw_calls": 701}).size(), 1)
+
+
+func test_celebration_views_have_budgets():
+	# 结算庆祝(perf_probe --celebrate):礼炮、彩纸、音符都在场时,两个环绕机位同其余机位 ≤ 900 draw call
+	for view in ["celebrate", "celebrate_table"]:
+		assert_eq(PerfBudget.LIMITS[view]["draw_calls"], 900, view)

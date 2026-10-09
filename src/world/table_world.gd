@@ -6,6 +6,7 @@ extends Node3D
 
 
 signal first_person_changed(on: bool)   # 本机视角换了:德州牌层据此重摆自己的底牌
+signal sfx(sound: String)               # 结算庆祝的音效(礼炮、开场小号、掌声),main 接到 Sfx
 
 
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
@@ -37,6 +38,11 @@ const LOBBY_POKER := [Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1)]
 # 结算环绕(CameraRig.orbit 的参数):德州的椅背在 2.11 米,环绕要更远更高,镜头高约 2 米
 const ORBIT_LIARS := {"center": Vector3(0, 0.95, 0), "radius": 2.4, "height": 0.9, "speed": 0.18}
 const ORBIT_POKER := {"center": Vector3(0, 0.95, 0), "radius": 3.1, "height": 1.05, "speed": 0.15}
+# 结算庆祝:环绕中心(胜者)在画面里的横向位置(-1 左边缘 … 1 右边缘),结算面板停在右边(UiTheme.SETTLEMENT_DOCK)
+const SETTLEMENT_FRAME := -0.42
+# 胜者特写环绕的半径:让到左边后要把整个人、两门礼炮都框进来(原来居中时 1.3)
+const WINNER_ORBIT_RADIUS := 1.75
+const GROUP_ORBIT_SPREAD := 1.0  # 几个胜者离中点都不超过这么远(米)时绕他们转,否则整桌环绕
 const SEAT_MOVE := 0.6           # 换座位、桌子放大时酒客沿圆弧滑到新座位的时长(秒)
 # 德州铭牌挂点(规格 §6.3):高过最高的头顶(动森式大头:羊驼耳尖 ≈1.70 m、礼帽 ≈1.69 m;Q 版统一挂 1.62,礼帽尖
 # 会被铭牌下沿盖住几厘米)。挂高之后相邻座位的铭牌在越肩、观战机位下容易叠在一起(离镜头近的那个投得低),
@@ -65,6 +71,7 @@ var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
 var _spawned_frame := {} # pid -> 建出这个酒客的帧号:同一帧里物种又变了,直接收走刚建的、不再冒一次烟
 var _menu_preview: Patron = null   # 主菜单上自己选的形象,坐在 0 号椅
 var first_person := false          # 本机牌桌视角(只影响本机):seat_view / rest_view 据此给机位
+var celebration: Celebration = null   # 结算庆祝(胜者跳舞、旁人鼓掌、礼炮彩纸),见 celebration.gd
 
 
 func _init(p_tavern: Tavern) -> void:
@@ -292,7 +299,8 @@ func _place_revolver(pid: int, angle: float) -> void:
 
 
 func revive_all() -> void:
-	# 新一局开始前:倒下的酒客换成新的(带登场动画),活着的复位姿势(如胜者的庆祝),帽子等散落物一并清理
+	# 新一局开始前:收起结算庆祝,倒下的酒客换成新的(带登场动画),活着的复位姿势(如胜者的庆祝),帽子等散落物一并清理
+	stop_celebration()
 	for pid in patrons.keys():
 		var old: Patron = patrons[pid]
 		if old.alive:
@@ -308,6 +316,7 @@ func revive_all() -> void:
 
 
 func clear() -> void:
+	stop_celebration()
 	clear_menu_preview()
 	for pid in patrons:
 		patrons[pid].queue_free()
@@ -323,6 +332,77 @@ func clear() -> void:
 		banter.clear()
 	_clear_debris()
 	_show_empty_chairs(true)
+
+
+# —— 结算庆祝(规格 2026-10-09-winner-celebration)——
+
+func celebrate(winners: Array, seed_value := 0) -> Celebration:
+	# 结算开始:胜者(可以几个人并列)跳舞、活着的其他人鼓掌、出局的人抽手,胜者两侧的桌沿放礼炮。
+	# 纯本地表现;再调用一次就从头再来。seed_value 决定挑哪支舞(各端用同样的对局信息算,就跳同一支)
+	stop_celebration()
+	celebration = Celebration.new()
+	celebration.setup(self, winners, seed_value)
+	celebration.sfx.connect(sfx.emit)
+	add_child(celebration)
+	return celebration
+
+
+func stop_celebration() -> void:
+	# 收起庆祝(回等待厅、离开、新一局、拆台):舞步停下、活着的人坐回去,礼炮与彩纸立刻收走。可以重复调用
+	if celebration != null and is_instance_valid(celebration):
+		celebration.stop()
+		remove_child(celebration)
+	celebration = null
+
+
+func is_celebrating() -> bool:
+	return celebration != null and is_instance_valid(celebration)
+
+
+func winner_orbit(pid: int) -> Dictionary:
+	# 胜者特写环绕(CameraRig.orbit 的参数):从胜者面朝牌桌的一侧开始,绕着胜者的头转;胜者在画面左边(frame)
+	var toward_table := -SeatLayout.direction(seat_angles.get(pid, 0.0))
+	return {"center": head_position(pid) + Vector3(0, -0.25, 0), "radius": WINNER_ORBIT_RADIUS, "height": 0.45, "speed": 0.22,
+		"start": atan2(toward_table.x, toward_table.z), "frame": SETTLEMENT_FRAME, "fill": SEAT_FILL_LIGHT * 0.6}
+
+
+func celebration_orbit(winners: Array) -> Dictionary:
+	# 结算庆祝的环绕(规格 2026-10-09-winner-celebration):结算面板停在右边,跳舞的人一直待在画面左边。
+	# 一个胜者:绕他的头转(winner_orbit);几个胜者挨得近:绕他们的中点转、按散开的距离拉远;
+	# 散得开(德州全员平局等)或胜者都不在桌上:整桌环绕,桌心也让到画面左边
+	var heads: Array[Vector3] = []
+	var first := -1
+	for pid in winners:
+		if patrons.has(pid):
+			heads.append(head_position(pid))
+			if first < 0:
+				first = pid
+	if heads.size() == 1:
+		return winner_orbit(first)
+	if heads.size() > 1:
+		var mid := Vector3.ZERO
+		for h in heads:
+			mid += h / heads.size()
+		var spread := 0.0
+		for h in heads:
+			spread = maxf(spread, Vector2(h.x - mid.x, h.z - mid.z).length())
+		if spread <= GROUP_ORBIT_SPREAD:
+			var toward := Vector3(-mid.x, 0.0, -mid.z) + to_global(Vector3.ZERO) * Vector3(1, 0, 1)
+			if toward.length_squared() < 0.0001:
+				toward = Vector3.BACK
+			return {"center": mid + Vector3(0, -0.2, 0), "radius": WINNER_ORBIT_RADIUS + spread * 1.2, "height": 0.45 + spread * 0.3,
+				"speed": 0.2, "start": atan2(toward.x, toward.z), "frame": SETTLEMENT_FRAME, "fill": SEAT_FILL_LIGHT * 0.6}
+	var orbit := table_orbit()
+	orbit["frame"] = SETTLEMENT_FRAME
+	orbit["fill"] = 0.0
+	return orbit
+
+
+static func orbit_start(orbit: Dictionary, view_aspect := 16.0 / 9.0) -> Transform3D:
+	# 环绕的起始机位(截图与性能探针用;同 CameraRig.orbit 的起点,含横向取景)
+	var a: float = orbit.get("start", 0.0)
+	var pos: Vector3 = orbit["center"] + Vector3(sin(a) * orbit["radius"], orbit["height"], cos(a) * orbit["radius"])
+	return CameraRig.framed(_look(pos, orbit["center"]), orbit.get("frame", 0.0), CameraRig.DEFAULT_FOV, view_aspect)
 
 
 func _show_empty_chairs(shown: bool) -> void:

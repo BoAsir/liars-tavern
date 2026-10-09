@@ -44,6 +44,7 @@ func _ready() -> void:
 	tavern.table_root.add_child(world)
 	world.cards.sfx.connect(Sfx.play)
 	world.banter.sfx.connect(Sfx.play.bind(0.08))
+	world.sfx.connect(Sfx.play.bind(0.02))   # 结算庆祝:礼炮、开场小号、掌声
 	post_fx = PostFx.new()
 	add_child(post_fx)
 	_ui = _ui_layer(5)
@@ -108,6 +109,8 @@ func _exit_tree() -> void:
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()
 	PatronAntics.clear_cache()
+	PatronDance.clear_cache()
+	ConfettiFx.clear_cache()
 	AnimalVoice.clear_cache()
 	RoomTextures.clear()
 

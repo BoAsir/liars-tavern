@@ -10,8 +10,11 @@ extends SceneTree
 # --showcase=poker 用德州展台的最坏情况(8 位酒客、每摞筹码与下注摆满、7 个底池,约 900 枚筹码),
 # 机位 seat / overview 取自 TableWorld;--showcase=bomb_cat 用炸弹猫 6 人大桌展台(手牌、牌堆、弃牌堆、自己举着 8 张),
 # 机位 bomb_seat / bomb_overview / bomb_fp / bomb_close(预算见 tools/perf_budget.gd:bomb_seat、bomb_fp ≤ 700 draw call);第一人称 fp 两种展台都有(取自 TableWorld.first_person_view);德州的帧耗时要求不超过骗子酒馆 4 人展台的 1.25 倍(德州规格 §8)。
+# --celebrate:展台上开演结算庆祝(tools/celebrate_stage.gd,第一炮的彩纸正飘着时开测),机位 celebrate(胜者特写环绕)/
+# celebrate_table(整桌环绕),三种展台都能用;预算同其余机位(≤ 900 draw call)。
 
 const CameraViews := preload("res://tools/camera_views.gd")
+const CelebrateStage := preload("res://tools/celebrate_stage.gd")
 const PerfBudget := preload("res://tools/perf_budget.gd")
 const SceneCensus := preload("res://tools/scene_census.gd")
 const WARMUP_FRAMES := 60
@@ -29,6 +32,8 @@ var _post_fx: PostFx
 var _world: TableWorld = null   # 德州展台的牌桌:机位从它取
 var _liars_world: TableWorld = null   # 骗子酒馆展台的牌桌:第一人称机位 fp 从它取
 var _bomb: Node = null                 # 炸弹猫展台:bomb_* 机位从它取
+var _celebrate_world: TableWorld = null   # --celebrate:开演庆祝的牌桌
+var _kind := "liars"
 
 
 func _initialize() -> void:
@@ -65,6 +70,11 @@ func _run() -> void:
 	_world = showcase.get("world") if kind == "poker" else null
 	_bomb = showcase if kind == "bomb_cat" else null
 	_liars_world = showcase.get("world") if kind == "liars" else null
+	_kind = kind
+	if opts.has("celebrate"):
+		_celebrate_world = showcase.get("world")
+		CelebrateStage.stage(_celebrate_world, kind)
+		await create_timer(1.6).timeout   # 第一炮(0.55 秒)的彩纸飞到半空
 	var rid := _viewport.get_viewport_rid()
 	RenderingServer.viewport_set_measure_render_time(rid, true)
 	print("%s / %s  size=%s msaa=%d" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_driver_name(),
@@ -333,6 +343,13 @@ func _measure() -> Dictionary:
 
 
 func _place_camera(view: String) -> bool:
+	if CelebrateStage.VIEWS.has(view) and _celebrate_world != null:
+		var xform := CelebrateStage.view(_celebrate_world, _kind, view, float(_viewport.size.x) / _viewport.size.y)
+		_tavern.camera_rig.stop_follow()
+		_tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
+		_tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
+		_tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(_celebrate_world, _kind, view)
+		return true
 	if _bomb != null and view.begins_with("bomb_"):
 		var bomb_world: TableWorld = _bomb.world
 		if view == "bomb_fp":

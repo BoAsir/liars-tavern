@@ -88,6 +88,8 @@ func _exit_tree() -> void:
 	for pid in names:
 		app.labels.untrack(PLATE_KEY % pid)
 		app.labels.untrack(TableDirector.BUBBLE_KEY % pid)
+	if world != null and is_instance_valid(world):
+		world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
 
 
 func _process(delta: float) -> void:
