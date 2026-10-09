@@ -46,7 +46,7 @@ const NAME_BLACKLIST_CHARS := [
 ]
 # 拉丁字母黑名单:大小写不敏感,并拦截常见的 1/l→i、0→o 混写
 const NAME_BLACKLIST_LATIN := [
-	"xiao", "x1ao", "xia0", "x1a0", "xlao", "xla0", "chu"
+	"xiao", "x1ao", "xia0", "x1a0", "xlao", "xla0", "chu", "cx", "c","x"
 ]
 # 清洗文本时最多看原文开头 max_length 的这么多倍:耗时与原文长度无关
 const SANITIZE_SCAN_FACTOR := 4

@@ -65,6 +65,11 @@ func test_head_does_not_go_behind_its_rest_position():
 	assert_almost_eq(patron.neck_offset().x, 0.3, EPS, "横向照常")
 
 
+func test_reach_is_three_times_the_old_limit():
+	# 2026-10-09 用户要求:原来最远 0.85 米不够长,扩大三倍
+	assert_almost_eq(Patron.NECK_REACH, 0.85 * 3.0, EPS)
+
+
 func test_reach_is_limited():
 	# 动森式大头的吻也长了,不少物种的上限由 FRONT_REACH_MAX − 吻长定(比 NECK_REACH 短):按酒客自己的上限比
 	patron.set_neck_target(Vector3(0, 0, -5.0))
