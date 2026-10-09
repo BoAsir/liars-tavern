@@ -50,10 +50,10 @@
 ## 接手须知(当前)
 
 1. 当前状态(2026-10-09):任务 0–10 全部完成。900 个测试全过;`tools/lan_smoke.sh`、`MODE=holdem|short_deck tools/poker_smoke.sh` 都通过;
-   浸泡 `-gtest=res://tests/soak_poker_simulation.gd` 通过。`origin/main` 停在 a9f4476(别人推的昵称黑名单),本分支已合入它;
-   **`feature/texas-holdem` 还没推到 main**(本会话推 main 被权限拦下,需要用户确认后 `git push origin feature/texas-holdem:main`,是快进)。
-2. 剩下的是发布:按 release-update 流程发 0.7.0(规格 §11;`build.json` 的 build = 那时 main 的 build + 1,base_build 不变)。
-   发布前要不要先合 `feature/model-detail`(3D 模型重做,规格 §9 的接口约定)由用户定。
+   浸泡 `-gtest=res://tests/soak_poker_simulation.gd` 通过。2026-10-09 已快进合入 main(`origin/main` = 5bfe433)。
+2. 剩下的是发布:用户决定**先等另一个会话把 3D 模型重做(`feature/model-detail`)做完、合进 main,再打包**。
+   合并时按规格 §9 的接口约定(`tavern.gd` 的 `set_table_radius` / `set_table_decor_visible` 以对方实现为准);
+   之后按 release-update 流程发 0.7.0(规格 §11;`build.json` 的 build = 那时 main 的 build + 1,base_build 不变)。
 3. 真机截图命令见 README「开发」;有窗口的房主加 `--disable-vsync`,bot 晚 10 秒再起,否则窗口在后台时房主帧率太低、bot 8 秒握手超时。
 4. 已知债务:`network_manager.gd` 761 行(上限 800);德州牌面生成每帧最坏约 21 ms(一次性 0.27 秒,主要是读回图像与生成 mipmap 的 CPU 时间);
    被恶意对端刷「加入→断开」时结算里仍会多出若干「已离开」行(盈亏 0)。
