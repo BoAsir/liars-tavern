@@ -11,7 +11,7 @@ const HEARTBEAT := 0.4       # 视线不动时的补发间隔(秒),须明显短�
 const MIN_MOVE := 0.03       # 落点移动小于此距离(米)不算变化
 const STALE := 1.2           # 接收端多久收不到就释放(秒)
 const MAX_RANGE := 8.0       # 合法落点离发送者座位的最远距离(米;牌桌加酒馆的尺度)
-const MAX_NECK := 1.0        # 合法脖子偏移的最大长度(米;角色自己还会再截断到伸出上限)
+const MAX_NECK := Patron.NECK_REACH + 0.15   # 合法脖子偏移的最大长度(米):比伸出上限略宽,伸到最远的偏移也能同步;角色自己还会再截断
 
 var _sent_point := Vector3.ZERO
 var _sent_neck := Vector3.ZERO

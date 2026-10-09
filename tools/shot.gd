@@ -5,6 +5,7 @@ extends SceneTree
 # --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
 # --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
+# --neck=x,z 让展台上所有酒客把脖子伸到这个座位偏移(-z 朝桌心,会按 Patron.NECK_REACH 截断),检查探头的样子。
 # 文件名带状态,同一机位可以拍几种底部区域。没写 --hud 时展台的德州机位也带 HUD:座位机位 bet,观战机位 spectate。
 # 全套:--views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview
 #       --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase(4:3 再加 --resolution 1280x960)
@@ -13,6 +14,7 @@ extends SceneTree
 const WARMUP_FRAMES := 45
 const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
 const POKER_ME := 1
+const NECK_SETTLE := 1.5   # 秒:--neck 之后等弹簧脖子停稳
 
 var opts := {}
 var _poker_world: TableWorld = null
@@ -52,6 +54,8 @@ func _run() -> void:
 		await poker.build(tavern)
 		_poker_world = poker.world
 		_poker = poker
+	if opts.has("neck"):
+		await _stretch_necks(opts["neck"])
 	var views: PackedStringArray = opts.get("views", "seat").split(",")
 	var hud_states: PackedStringArray = opts.get("hud", "").split(",")
 	for index in views.size():
@@ -72,6 +76,14 @@ func _run() -> void:
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)
 	quit()
+
+
+func _stretch_necks(spec: String) -> void:
+	var xz := spec.split_floats(",")
+	var offset := Vector3(xz[0], 0.0, xz[1] if xz.size() > 1 else 0.0)
+	for patron in root.find_children("*", "Patron", true, false):
+		(patron as Patron).set_neck_target(offset)
+	await create_timer(NECK_SETTLE).timeout
 
 
 func _place_camera(rig: CameraRig, view: String) -> void:
