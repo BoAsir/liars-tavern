@@ -8,7 +8,8 @@
 #       ship.sh publish                          把 build 好的更新包推到 updates 分支,并等线上读到新 build
 #       ship.sh github [发布说明.md]             用 tools/publish_release.sh 建 GitHub Release(tag v<version>)
 #       ship.sh all "更新说明" [发布说明.md]     build + publish + github
-# 环境变量:REF(默认当前目录的 HEAD)、GODOT、SHIP_OUT(试跑 build 的输出目录)
+# 环境变量:REF(默认当前目录的 HEAD)、GODOT、SHIP_OUT(试跑 build 的输出目录)、
+#       SHIP_SKIP_TESTS=1(build 时不跑单测:CI 用,测试由推送前的 ship.sh test 负责)
 set -euo pipefail
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -114,7 +115,12 @@ build() {
 	chars="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$notes")"
 	[ "$chars" -le "$MAX_NOTES_CHARS" ] || die "更新说明 $chars 字,太长:提示条一行放得下的一句话(≤$MAX_NOTES_CHARS 字)"
 	check
-	run_tests
+	if [ "${SHIP_SKIP_TESTS:-0}" = 1 ]; then
+		echo "! SHIP_SKIP_TESTS=1:跳过单测(推送前要在本机跑过 ship.sh test)"
+		worktree
+	else
+		run_tests
+	fi
 	[ -z "$(git -C "$WT" status --porcelain --untracked-files=no)" ] \
 		|| die "导入或测试改动了受版本管理的文件,导出会和提交对不上:$(git -C "$WT" status --porcelain --untracked-files=no | head -5)"
 	echo "导出并签名…"

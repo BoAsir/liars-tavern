@@ -235,7 +235,7 @@ crocodile,只覆盖本次运行、不写设置)、`--autohost[=人数]`、`--mod
 (`~/.config/liarstavern/update_signing_key.pem`,不在仓库里;第一次用 `tools/make_update_key.gd` 生成，务必备份)。
 
 **自动发布**:`main` 上 `build.json` 的 `version` 一变 (远端还没有 tag `v<version>`),GitHub Actions
-(`.github/workflows/release.yml`) 就依次跑测试、导出签名、推 `updates` 分支、建 GitHub Release。
+(`.github/workflows/release.yml`) 就依次导出签名、推 `updates` 分支、建 GitHub Release(CI 不跑单测：推送前先在本机跑全量测试)。
 要先在仓库 secret `LIARS_UPDATE_SIGNING_KEY` 里放签名私钥全文;给玩家看的一句更新说明写在 `build.json` 的 `notes` 里,
 Release 正文可选写在 `docs/releases/v<version>.md`。下面是本机手动发布的步骤 (CI 用不了时兜底):
 
