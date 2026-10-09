@@ -1,6 +1,6 @@
 extends GutTest
 # 德州牌面 PokerFaces:自己的缓存与占位、无头模式退化纹理(带 mipmap)、CardFaces 只分流德州牌、
-# 分批生成每批不超过 13 张、并发生成只做一次、clear 打断生成并回到占位、生成完刷新 3D 材质并发 built 信号。
+# 分批生成每批不超过 BATCH_SIZE 张、并发生成只做一次、clear 打断生成并回到占位、生成完刷新 3D 材质并发 built 信号。
 # 真实的 SubViewport 渲染在无头模式下不出图,用 batch_renderer 测试钩子替换「渲染一批」来测排期逻辑。
 
 
@@ -47,7 +47,7 @@ func _all_textures() -> Array:
 
 func test_size_and_batch_budget_follow_the_spec():
 	assert_eq(PokerFaces.SIZE, Vector2i(256, 372))
-	assert_eq(PokerFaces.BATCH_SIZE, 13)
+	assert_eq(PokerFaces.BATCH_SIZE, 7)
 
 
 func test_cards_lists_all_52_poker_cards_once():
@@ -62,7 +62,7 @@ func test_cards_lists_all_52_poker_cards_once():
 
 func test_batches_split_into_groups_of_at_most_the_budget():
 	var groups := PokerFaces.batches(PokerFaces.cards(), PokerFaces.BATCH_SIZE)
-	assert_eq(groups.size(), 4)
+	assert_eq(groups.size(), ceili(52.0 / PokerFaces.BATCH_SIZE))
 	var joined := []
 	for group in groups:
 		assert_between(group.size(), 1, PokerFaces.BATCH_SIZE)
@@ -146,7 +146,7 @@ func test_build_renders_in_batches_within_the_budget():
 	PokerFaces.batch_renderer = _fake_renderer()
 	await PokerFaces.build(host)
 	assert_true(PokerFaces.is_built())
-	assert_eq(renders.size(), 4)
+	assert_eq(renders.size(), ceili(52.0 / PokerFaces.BATCH_SIZE))
 	var covered := []
 	for batch in renders:
 		assert_lte(batch.size(), PokerFaces.BATCH_SIZE)
@@ -165,7 +165,7 @@ func test_concurrent_builds_wait_for_the_first_one():
 	assert_false(PokerFaces.is_built())
 	await PokerFaces.build(host)
 	assert_true(PokerFaces.is_built(), "第二次调用要等到第一次生成完才返回")
-	assert_eq(renders.size(), 4, "不重复生成")
+	assert_eq(renders.size(), ceili(52.0 / PokerFaces.BATCH_SIZE), "不重复生成")
 	assert_eq(count[0], 1)
 
 

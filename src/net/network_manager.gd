@@ -1,6 +1,7 @@
 extends Node
 # 网络管理(autoload "Net"):房主权威 listen-server。
-# 房主持有唯一 GameState 与等待厅名单;客户端只发意图、收视图与事件。
+# 房主持有等待厅名单与唯一的会话对象(LiarsSession / PokerSession,规格 §4.2);客户端只发意图、收视图与事件。
+# 这里只管连接、等待厅、RPC 收发与计时器,玩法逻辑都在会话里。
 # UI 层只使用本类的公开方法、只读属性与信号,不直接触碰 multiplayer API。
 # 点对点的 RPC 一律经 _send_to 发出:对方没连着就不发(离线测试里对未知 peer 调 rpc_id 会报引擎错误)。
 
@@ -19,6 +20,7 @@ signal gaze_updated(pid: int, point: Vector3, neck: Vector3, active: bool)   # �
 
 const HOST_ID := LobbyModel.HOST_ID
 const DISCONNECT_GRACE := 1.0
+const LATE_SEAT_REASON := "牌桌暂时坐不下,请稍后再来"   # 名单放行但会话拒收中途加入者
 
 # —— 只读状态(UI 读取) ——
 var player_name := ""
@@ -35,12 +37,12 @@ var _session_active := false
 var _joining := false
 var _awaiting_game := false        # 仅客户端:对局中入座已获准,等房主发来牌局信息(rpc_game_started)
 var _lobby: LobbyModel = null      # 仅房主
-var _gs: GameState = null          # 仅房主
-var _match_names := {}
+var _session: GameSession = null   # 仅房主:本局的玩法逻辑
 var _room_id := ""
 var _room_name := ""
 var _port := Protocol.GAME_PORT
 var _turn_timer: Timer = null
+var _hand_timer: Timer = null      # 仅房主(德州):一手之间的间隔,到点开下一手
 var _join_timer: Timer = null
 var _anim_left := 0.0              # 仅房主:客户端还要演多久(按 Pacing 预算估),随时间递减
 
@@ -52,6 +54,7 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_host_disconnected)
 	_turn_timer = _make_timer(_on_turn_timeout)
+	_hand_timer = _make_timer(_on_hand_timer)
 	_join_timer = _make_timer(_on_join_timeout)
 
 
@@ -137,6 +140,7 @@ func leave() -> void:
 	Discovery.stop_broadcast()
 	Updater.stop_serving()
 	_turn_timer.stop()
+	_hand_timer.stop()
 	_join_timer.stop()
 	_anim_left = 0.0
 	var peer := multiplayer.multiplayer_peer
@@ -144,7 +148,7 @@ func leave() -> void:
 		peer.close()
 	multiplayer.multiplayer_peer = null
 	_lobby = null
-	_gs = null
+	_session = null
 	lobby_players = []
 	lobby_meta = {}
 	seats = []
@@ -201,9 +205,8 @@ func _room_announcement() -> Dictionary:
 
 
 func _accepting_late_join() -> bool:
-	# 对局中还收不收新玩家(规格 §3.3):德州现金局在会话没散局、没结算时收,骗子酒馆永远不收。
-	# 德州会话由网络会话部分接入(规格 §4.2),在那之前没有能接人的会话
-	return false
+	# 对局中还收不收新玩家(规格 §3.3):德州现金局在会话没散局、没结算时收,骗子酒馆永远不收
+	return GameMode.allows_late_join(game_mode) and in_game and _session != null and _session.accepts_late_join()
 
 
 # —— 连接生命周期 ——
@@ -256,8 +259,8 @@ func _on_host_disconnected() -> void:
 func _on_peer_disconnected(id: int) -> void:
 	if not is_host or not _session_active:
 		return
-	if in_game and _gs != null:
-		var events := _gs.eliminate_player(id)
+	if in_game and _session != null:
+		var events := _session.on_disconnect(id)
 		if not events.is_empty():
 			_after_action(events)
 	if _lobby.remove(id):
@@ -286,10 +289,28 @@ func _handle_join_request(id: int, pname: String, version: int) -> void:
 		_disconnect_peer_later(id)
 		return
 	_lobby.add_member(id, pname)
+	# 对局中入座(德州)先让会话收人:名单放行而会话拒收(同一 peer id 本手里刚离开、桌上没座)时按拒绝处理,
+	# 否则他会被告知开局却不在会话里(收不到私有视图、意图全被拒)
+	var late := _session != null and _accepting_late_join()
+	var events: Array = _session.add_player(id, _lobby.names()[id]) if late else []
+	if late and events.is_empty():
+		_lobby.remove(id)
+		_send_to(id, "rpc_join_denied", [LATE_SEAT_REASON])
+		_disconnect_peer_later(id)
+		return
 	# 获准里带上玩法:客户端一进等待厅就要按玩法摆桌,带 meta 的名单比它晚到。
-	# 对局中入座(德州)的人先不进等待厅:客户端保持「加入中」,等随后发来的牌局信息
+	# 对局中入座的人先不进等待厅:客户端保持「加入中」,等随后发来的牌局信息
 	_send_to(id, "rpc_join_accepted", [{"in_game": in_game, "mode": game_mode}])
+	if late:
+		_seat_late_joiner(id, events)
 	_broadcast_lobby()
+
+
+func _seat_late_joiner(id: int, events: Array) -> void:
+	# 中途加入的顺序(规格 §4.2):只对他发牌局信息(当前桌上有酒客的人,不含他:新人要下一手才登场)→ 入座事件与视图全员同步。
+	# 他已在名单里,所以加入事件、公共视图与之后的每一批他都收得到
+	_send_to(id, "rpc_game_started", [_seat_entries(_session.seats_with_patrons()), {"mode": game_mode, "late": true}])
+	_after_action(events)
 
 
 func _join_denial(id: int, pname: String, version: int) -> String:
@@ -436,19 +457,24 @@ func start_game() -> void:
 	last_public = {}
 	last_private = {}
 	var order := _lobby.seat_order()
-	_match_names = _lobby.names()
-	seats = []
-	for pid in order:
-		seats.append({"pid": pid, "name": _match_names[pid]})
-	_gs = GameState.new()
+	seats = _seat_entries(order, _lobby.names())
+	_session = PokerSession.new(game_mode) if GameMode.is_poker(game_mode) else LiarsSession.new()
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	_gs.start_match(order, rng)
+	var events := _session.start(order, _lobby.names(), rng)
 	_send_to_members("rpc_game_started", [seats, {"mode": game_mode, "late": false}])
 	game_started.emit(seats)
 	# 各端进入牌桌先播开场运镜,第一局的发牌演出排在它后面
 	_anim_left = Pacing.INTRO
-	_after_action([_gs.round_started_event()])
+	_after_action(events)
+
+
+func _seat_entries(order: Array, names := {}) -> Array:
+	# 座位表 [{pid, name}]:开局时名字来自等待厅,之后(中途加入的引导)来自会话
+	var entries := []
+	for pid in order:
+		entries.append({"pid": pid, "name": names[pid] if names.has(pid) else _session.name_of(pid)})
+	return entries
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -468,11 +494,11 @@ func rpc_game_started(p_seats: Array, info: Dictionary) -> void:
 
 
 func _sync_all() -> void:
-	var pub := Views.public_state(_gs, _match_names, _turn_time_left())
+	var pub: Dictionary = _session.public_view(_turn_time_left())
 	_apply_public(pub)
 	_send_to_members("rpc_state_public", [pub])
-	for pid in _gs.seat_order:
-		var priv := Views.private_state(_gs, pid)
+	for pid in _session.viewers():
+		var priv: Dictionary = _session.private_view(pid)
 		if pid == HOST_ID:
 			_apply_private(priv)
 		else:
@@ -499,13 +525,13 @@ func _apply_private(state: Dictionary) -> void:
 	state_private_updated.emit(state)
 
 
-# —— 意图 ——
+# —— 意图(骗子酒馆) ——
 
 func submit_play(indices: Array) -> void:
 	if not in_game:
 		return
 	if is_host:
-		_handle_intent(HOST_ID, "play", indices)
+		_handle_intent(HOST_ID, {"kind": "play", "indices": indices})
 	else:
 		_send_to(HOST_ID, "rpc_intent_play", [indices])
 
@@ -514,7 +540,7 @@ func submit_challenge() -> void:
 	if not in_game:
 		return
 	if is_host:
-		_handle_intent(HOST_ID, "challenge", [])
+		_handle_intent(HOST_ID, {"kind": "challenge"})
 	else:
 		_send_to(HOST_ID, "rpc_intent_challenge")
 
@@ -524,11 +550,27 @@ func max_players() -> int:
 	return GameMode.max_players(game_mode)
 
 
-# —— 德州意图:接口先行(德州规格 §4.3),由网络会话实现 ——
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_intent_play(indices: Array) -> void:
+	if is_host:
+		_handle_intent(multiplayer.get_remote_sender_id(), {"kind": "play", "indices": indices})
 
-func submit_poker_action(_action: String, _amount := 0) -> void:
-	# fold / check / call / raise(amount 为「加注到」)/ allin
-	pass
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_intent_challenge() -> void:
+	if is_host:
+		_handle_intent(multiplayer.get_remote_sender_id(), {"kind": "challenge"})
+
+
+# —— 意图(德州,规格 §4.3):fold / check / call / raise(amount 为「加注到」)/ allin 与 rebuy / spectate / sit_in ——
+
+func submit_poker_action(action: String, amount := 0) -> void:
+	if not in_game:
+		return
+	if is_host:
+		_handle_poker_rpc(HOST_ID, action, amount)
+	else:
+		_send_to(HOST_ID, "rpc_poker_intent", [action, amount])
 
 
 func request_rebuy() -> void:
@@ -539,64 +581,97 @@ func request_spectate() -> void:
 	submit_poker_action(PokerRules.SPECTATE)
 
 
+func request_sit_in() -> void:
+	# 挂机离座的人回到牌桌(规格 §2.8)
+	submit_poker_action(PokerRules.SIT_IN)
+
+
 func end_poker_session() -> void:
-	# 仅房主:有进行中的手牌就打完这一手再结算
-	pass
-
-
-@rpc("any_peer", "call_remote", "reliable")
-func rpc_intent_play(indices: Array) -> void:
-	if is_host:
-		_handle_intent(multiplayer.get_remote_sender_id(), "play", indices)
-
-
-@rpc("any_peer", "call_remote", "reliable")
-func rpc_intent_challenge() -> void:
-	if is_host:
-		_handle_intent(multiplayer.get_remote_sender_id(), "challenge", [])
-
-
-func _handle_intent(pid: int, kind: String, indices: Array) -> void:
-	if _gs == null or not in_game:
+	# 仅房主:有进行中的手牌就打完这一手再结算(规格 §2.9);骗子酒馆与已在散局的德州没有事件
+	if not is_host or not in_game or _session == null:
 		return
-	var result: Dictionary
-	if kind == "play":
-		result = _gs.play_cards(pid, indices)
-	else:
-		result = _gs.challenge(pid)
+	var events := _session.request_end()
+	if not events.is_empty():
+		_after_action(events)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_poker_intent(action, amount) -> void:
+	# 参数不加类型(规格 §3.3):来自不可信对端,在 _handle_poker_rpc 里校验类型与范围。
+	# 方法名排在 rpc_join_request 之后:握手消息的 RPC 编号不变
+	if is_host:
+		_handle_poker_rpc(multiplayer.get_remote_sender_id(), action, amount)
+
+
+func _handle_poker_rpc(pid: int, action: Variant, amount: Variant) -> void:
+	if not in_game or _session == null:
+		return
+	var error := "" if _lobby.has(pid) else "not_seated"
+	if error == "":
+		error = PokerSession.check_intent(action, amount)
+	if error != "":
+		_reject(pid, error)
+		return
+	_handle_intent(pid, {"kind": action, "amount": amount})
+
+
+func _handle_intent(pid: int, intent: Dictionary) -> void:
+	if _session == null or not in_game:
+		return
+	var result: Dictionary = _session.handle_intent(pid, intent)
 	if not result["ok"]:
-		if pid == HOST_ID:
-			intent_rejected.emit(result["error"])
-		else:
-			_send_to(pid, "rpc_intent_rejected", [result["error"]])
+		_reject(pid, result["error"])
 		return
-	# 行动者那一端要先播完排队的演出才能出手(超时代打时预算也早已耗尽):
-	# 之前的预算余量不再顺延,否则玩家出手越快,多给的时间越积越多
-	_anim_left = 0.0
-	_after_action(result["events"])
+	_after_action(result["events"], result["turn_action"])
 
 
-func _after_action(events: Array) -> void:
+func _reject(pid: int, code: String) -> void:
+	if pid == HOST_ID:
+		intent_rejected.emit(code)
+	else:
+		_send_to(pid, "rpc_intent_rejected", [code])
+
+
+# —— 每批事件之后:计时、下发、同步(规格 §4.2 的计时规则) ——
+
+func _after_action(events: Array, turn_action := false) -> void:
+	# 行动者那一端要先播完排队的演出才能出手(超时代打时预算也早已耗尽):之前的预算余量不再顺延,
+	# 否则玩家出手越快,多给的时间越积越多。再领/观战/加入/离开/散局都不清零。
 	# 先定计时再同步:公共视图里的 turn_time_left 要反映这一批之后的截止时间
-	_schedule_turn_timer(events)
+	if turn_action:
+		_anim_left = 0.0
+	_anim_left = maxf(_anim_left, 0.0) + _session.estimate(events)
+	if _session.is_over() or not _session.has_turn():
+		_turn_timer.stop()
+	else:
+		# 交出回合的批次演完后给满回合时间;否则(旁人离开、再领)保留剩余时间,只补上本批演出
+		_turn_timer.start(_session.turn_timer_after(events, _anim_left, _turn_time_left()))
+	_schedule_hand_timer()
 	game_events.emit(events)
 	_send_to_members("rpc_game_events", [events])
 	_sync_all()
 
 
-func _schedule_turn_timer(events: Array) -> void:
-	# 演出期间玩家无法行动:新回合从客户端演完所有排队事件(含断线时还没播完的上一批)后才计满时间;
-	# 只有断线出局(回合没换人)时保留剩余时间,只补上这段演出,不能把计时重置
-	_anim_left = Pacing.pending_after(_anim_left, events)
-	if _gs.phase == GameState.Phase.MATCH_OVER:
-		_turn_timer.stop()
+func _schedule_hand_timer() -> void:
+	# 德州两手之间:演完这一批再停顿 hand_gap()(有输光者没做选择时更长)。
+	# 已排期时只会提前(输光者选完了间隔变短),不会推迟到比原计划更晚
+	if _session.is_over() or not _session.next_hand_ready():
+		_hand_timer.stop()
 		return
-	_turn_timer.start(Pacing.turn_timer_after(events, _anim_left, _turn_time_left()))
+	var delay := _anim_left + _session.hand_gap()
+	if not _hand_timer.is_stopped():
+		delay = minf(delay, _hand_timer.time_left)
+	_hand_timer.start(delay)
+
+
+func _on_hand_timer() -> void:
+	if in_game and _session != null and _session.next_hand_ready():
+		_after_action(_session.start_next_hand())
 
 
 func _turn_time_left() -> float:
-	# 房主计时器剩余秒数;没在计时(未开局/已结束)为 0
-	if _turn_timer.is_stopped() or _gs == null or _gs.phase != GameState.Phase.PLAYING:
+	# 房主计时器剩余秒数;没在计时(未开局/两手之间/已结束)为 0
+	if _turn_timer.is_stopped() or _session == null or not _session.has_turn():
 		return 0.0
 	return _turn_timer.time_left
 
@@ -613,7 +688,7 @@ func rpc_game_events(events: Array) -> void:
 
 # —— 视线同步:不可靠有序、走独立通道,丢包由 GazeSync 的心跳与超时兜底 ——
 # 方法名刻意排在 rpc_join_* 之后:RPC 按方法名排序编号,握手消息的编号不变,
-# 旧版本仍能收到"版本不匹配"的明确拒绝
+# 旧版本仍能收到"版本不匹配"的明确拒绝。对局中「本场成员」= 已完成握手的等待厅成员(含中途加入者)
 
 func send_gaze(point: Vector3, neck: Vector3, active: bool) -> void:
 	if not in_game or multiplayer.multiplayer_peer == null:
@@ -627,15 +702,15 @@ func send_gaze(point: Vector3, neck: Vector3, active: bool) -> void:
 @rpc("any_peer", "call_remote", "unreliable_ordered", Protocol.GAZE_CHANNEL)
 func rpc_look(point: Vector3, neck: Vector3, active: bool) -> void:
 	var sender := multiplayer.get_remote_sender_id()
-	if not is_host or not in_game or not _match_names.has(sender) or not GazeSync.is_valid(point, neck):
+	if not is_host or not in_game or _lobby == null or not _lobby.has(sender) or not GazeSync.is_valid(point, neck):
 		return
 	gaze_updated.emit(sender, point, neck, active)
 	_relay_gaze(sender, point, neck, active)
 
 
 func _relay_gaze(from_pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
-	for seat in seats:
-		var id: int = seat["pid"]
+	# 转给除房主与发送者之外的成员;没连着的由 _send_to 跳过
+	for id in _lobby.seat_order():
 		if id != HOST_ID and id != from_pid:
 			_send_to(id, "rpc_look_relay", [from_pid, point, neck, active])
 
@@ -646,21 +721,25 @@ func rpc_look_relay(pid: int, point: Vector3, neck: Vector3, active: bool) -> vo
 		gaze_updated.emit(pid, point, neck, active)
 
 
-# —— 回合限时(仅房主):超时代打手牌第一张 ——
+# —— 回合限时(仅房主):超时代打由会话决定(骗子酒馆出手牌第一张;德州能过牌就过牌,否则弃牌) ——
 
 func _on_turn_timeout() -> void:
-	if _gs != null and _gs.phase == GameState.Phase.PLAYING and _gs.current_pid != null:
-		_handle_intent(_gs.current_pid, "play", [0])
+	if _session == null or not _session.has_turn():
+		return
+	var result: Dictionary = _session.on_turn_timeout()
+	if result["ok"]:
+		_after_action(result["events"], true)
 
 
 # —— 结算后回到等待厅 ——
 
 func request_rematch_lobby() -> void:
-	if not is_host or not in_game or _gs == null or _gs.phase != GameState.Phase.MATCH_OVER:
+	if not is_host or not in_game or _session == null or not _session.is_over():
 		return
-	_gs = null
+	_session = null
 	in_game = false
 	_turn_timer.stop()
+	_hand_timer.stop()
 	_anim_left = 0.0
 	_lobby.reset_ready()
 	_send_to_members("rpc_returned_to_lobby", [])

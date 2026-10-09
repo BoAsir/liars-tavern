@@ -92,6 +92,8 @@ func test_rejects_non_finite_or_far_points():
 	assert_false(GazeSync.is_valid(Vector3(0, GazeSync.MAX_RANGE + 1.0, 0)))
 	assert_true(GazeSync.is_valid(Vector3.ZERO, Vector3(0, 0, -0.5)))
 	assert_false(GazeSync.is_valid(Vector3.ZERO, Vector3(0, 0, -GazeSync.MAX_NECK - 0.1)), "脖子伸得离谱")
+	assert_true(GazeSync.is_valid(Vector3.ZERO, Vector3(0, 0, -Patron.NECK_REACH)), "伸到最远的脖子要能同步给别人")
+	assert_true(GazeSync.is_valid(Vector3.ZERO, Vector3(Patron.NECK_REACH, 0, 0)))
 	assert_false(GazeSync.is_valid(Vector3.ZERO, Vector3(NAN, 0, 0)))
 
 

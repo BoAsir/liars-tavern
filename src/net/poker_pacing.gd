@@ -19,9 +19,12 @@ const POT_WON := 2.0                 # 每个底池的分配
 const HAND_OVER := 0.6
 const REBUY := 0.6
 const PLAYER_LEFT := 0.8
-const PLAYER_JOINED := 0.2
+const PLAYER_JOINED := 0.0           # 新人下一手才登场,这时只记一行日志,不演
 const SESSION_OVER := 3.0            # 结算面板之前的谢幕
 const HAND_GAP := 1.5                # 一手之间的停顿:房主排期用,不对应事件
+# 有人输光的那一手之后的停顿(规格 §2.6):留时间给他选再领/观战;输光者都选完就恢复 HAND_GAP。
+# away / sit_in / spectate 事件不占演出时间
+const BUST_DECISION := 6.0
 
 # 这些事件会让客户端在演出结束时把回合交给某人(重新起算回合时间)
 const TURN_EVENTS := ["turn"]
@@ -52,7 +55,7 @@ static func estimate(events: Array) -> float:
 			"rebuy":
 				total += REBUY
 			"player_left":
-				total += PLAYER_LEFT
+				total += 0.0 if ev.get("offstage", false) else PLAYER_LEFT
 			"player_joined":
 				total += PLAYER_JOINED
 			"session_over":
