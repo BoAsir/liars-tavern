@@ -1,29 +1,15 @@
 class_name PatronParts
-# 酒客的静态部件构建:物种外观表、耳朵、帽子、口鼻(椅子见 ChairModel)。动画逻辑在 Patron 中。
+# 酒客的网格库:物种外观表(PatronSpecies)→ 按物种缓存的合批网格,每个动画枢轴一份(MeshBatch.cached)。
+# 网格只用一个字符串槽位(PatronSkin.SLOT),实例化时绑定到该酒客自己的材质:同物种的酒客共用网格,
+# 各自褪色。开场(Tavern._ready)调用 prewarm() 把所有物种的网格建好,中途加入、复活时直接取用。
+# 动画逻辑在 Patron 中;部件几何在 PatronHead / PatronFace / PatronEars / PatronTorso / PatronOutfit /
+# PatronLimbs / PatronTails / PatronHats 中。
 
 
-const SPECIES := [
-	{
-		"id": "fox", "label": "狐狸",
-		"fur": Color(0.86, 0.4, 0.13), "muzzle": Color(0.96, 0.9, 0.8), "dark": Color(0.18, 0.08, 0.04),
-		"coat": Color(0.13, 0.17, 0.3), "accent": Color(0.82, 0.62, 0.25), "hat": "top", "ears": "pointy",
-	},
-	{
-		"id": "bear", "label": "熊",
-		"fur": Color(0.36, 0.21, 0.11), "muzzle": Color(0.66, 0.5, 0.34), "dark": Color(0.12, 0.07, 0.04),
-		"coat": Color(0.42, 0.11, 0.09), "accent": Color(0.86, 0.76, 0.52), "hat": "bowler", "ears": "round",
-	},
-	{
-		"id": "pig", "label": "猪",
-		"fur": Color(0.93, 0.6, 0.58), "muzzle": Color(0.98, 0.68, 0.66), "dark": Color(0.45, 0.2, 0.2),
-		"coat": Color(0.2, 0.3, 0.17), "accent": Color(0.85, 0.3, 0.22), "hat": "cap", "ears": "floppy",
-	},
-	{
-		"id": "cat", "label": "猫",
-		"fur": Color(0.46, 0.47, 0.52), "muzzle": Color(0.88, 0.87, 0.85), "dark": Color(0.1, 0.1, 0.12),
-		"coat": Color(0.3, 0.22, 0.38), "accent": Color(0.42, 0.66, 0.72), "hat": "cowboy", "ears": "cat",
-	},
-]
+const SPECIES := PatronSpecies.ALL
+const EXPRESSIONS := PatronFace.EXPRESSIONS
+
+static var _chair: Array = []    # 椅子各部件 [网格, 变换, material_override, 表面材质数组, 投影设置]
 
 
 static func species(index: int) -> Dictionary:
@@ -31,8 +17,10 @@ static func species(index: int) -> Dictionary:
 
 
 static func prewarm() -> void:
-	# 开场(Tavern._ready)时调用:提前建好各物种要用的网格与着色器,中途加入、复活时不再现场拼装
-	pass
+	# 开场时调用:提前建好各物种要用的网格(与椅子),中途加入、复活时不再现场拼装
+	for i in SPECIES.size():
+		meshes(i)
+	chair_parts()
 
 
 static func first_free_species(used: Array) -> int:
@@ -43,74 +31,109 @@ static func first_free_species(used: Array) -> int:
 	return posmod(used.size(), SPECIES.size())
 
 
-static func build_ears(head: Node3D, kind: String, fur: Material, inner: Material) -> Array:
-	# 返回耳朵枢轴数组(用于抖耳朵动画)
-	var pivots := []
+static func meshes(index: int) -> Dictionary:
+	# 某物种的全部网格:部件名 → ArrayMesh(同一物种只拼装一次)
+	var spec := species(index)
+	var key := "patron:%s:" % spec["id"]
+	var shape := PatronHead.sculpt(spec)
+	var out := {
+		"torso": MeshBatch.cached(key + "torso", func(b: MeshBatch) -> void: _torso(b, spec)),
+		"torso_detail": MeshBatch.cached(key + "torso_detail", func(b: MeshBatch) -> void:
+			_add_all(b, PatronOutfit.build(spec, PatronTorso.new(spec)))),
+		"neck": MeshBatch.cached(key + "neck", func(b: MeshBatch) -> void: _add(b, PatronLimbs.neck(spec))),
+		"skull": MeshBatch.cached(key + "skull", func(b: MeshBatch) -> void: _add(b, PatronHead.skull(spec))),
+		"head_detail": MeshBatch.cached(key + "head_detail", func(b: MeshBatch) -> void: _head_detail(b, spec, shape)),
+		"eye": MeshBatch.cached(key + "eye", func(b: MeshBatch) -> void: PatronFace.build_eye(b, spec)),
+		"x_eyes": MeshBatch.cached(key + "x_eyes", func(b: MeshBatch) -> void: _add(b, PatronFace.x_eyes(spec, shape))),
+		"ear": MeshBatch.cached(key + "ear", func(b: MeshBatch) -> void: _add(b, PatronEars.ear(spec))),
+		"hat": MeshBatch.cached(key + "hat", func(b: MeshBatch) -> void: _add(b, PatronHats.build(spec))),
+		"legs": MeshBatch.cached(key + "legs", func(b: MeshBatch) -> void: _add(b, PatronLimbs.legs(spec))),
+		"tail": MeshBatch.cached(key + "tail", func(b: MeshBatch) -> void: _add(b, PatronLimbs.tail(spec))),
+	}
+	var marks: Vector2 = PatronHead.markings(spec).call(PatronHead.dir(spec["eyes"]["yaw"], spec["eyes"]["pitch"]))
 	for side in [-1.0, 1.0]:
-		var pivot := MeshKit.pivot(head, Vector3(0.1 * side, 0.25, 0.0))
-		match kind:
-			"pointy":
-				pivot.rotation_degrees = Vector3(0, 0, -22 * side)
-				MeshKit.add(pivot, MeshKit.cylinder(0.0, 0.055, 0.15, 12), fur, Vector3(0, 0.05, 0))
-				MeshKit.add(pivot, MeshKit.cylinder(0.0, 0.032, 0.09, 10), inner, Vector3(0, 0.035, -0.022))
-			"round":
-				pivot.position = Vector3(0.12 * side, 0.24, 0.01)
-				MeshKit.add(pivot, MeshKit.sphere(0.058, 14), fur, Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.55))
-				MeshKit.add(pivot, MeshKit.sphere(0.034, 12), inner, Vector3(0, -0.004, -0.02), Vector3.ZERO,
-					Vector3(1, 1, 0.4))
-			"floppy":
-				pivot.position = Vector3(0.11 * side, 0.24, -0.02)
-				pivot.rotation_degrees = Vector3(-55, 0, -30 * side)
-				MeshKit.add(pivot, MeshKit.prism(Vector3(0.1, 0.11, 0.02)), fur, Vector3(0, 0.05, 0))
-			"cat":
-				pivot.rotation_degrees = Vector3(0, 0, -14 * side)
-				MeshKit.add(pivot, MeshKit.cylinder(0.0, 0.058, 0.1, 4), fur, Vector3(0, 0.035, 0), Vector3(0, 45, 0))
-				MeshKit.add(pivot, MeshKit.cylinder(0.0, 0.034, 0.06, 4), inner, Vector3(0, 0.022, -0.018), Vector3(0, 45, 0))
-		pivots.append(pivot)
-	return pivots
+		var suffix := "_r" if side > 0.0 else "_l"
+		out["lid" + suffix] = MeshBatch.cached(key + "lid" + suffix, func(b: MeshBatch) -> void:
+			_add(b, PatronFace.lid(spec, side, marks)))
+		out["brow" + suffix] = MeshBatch.cached(key + "brow" + suffix, func(b: MeshBatch) -> void:
+			_add(b, PatronFace.brow(spec, shape, side)))
+		out["arm" + suffix] = MeshBatch.cached(key + "arm" + suffix, func(b: MeshBatch) -> void:
+			_add(b, PatronLimbs.arm(spec, side)))
+	for expression in EXPRESSIONS:
+		out["mouth:" + expression] = MeshBatch.cached(key + "mouth:" + expression, func(b: MeshBatch) -> void:
+			_add(b, PatronFace.mouth(spec, shape, expression)))
+	return out
 
 
-static func build_snout(head: Node3D, spec: Dictionary, mats: Dictionary) -> void:
-	if spec["id"] == "pig":
-		MeshKit.add(head, MeshKit.cylinder(0.056, 0.06, 0.06, 20), mats["muzzle"], Vector3(0, 0.075, -0.17),
-			Vector3(90, 0, 0))
-		for side in [-1.0, 1.0]:
-			MeshKit.add(head, MeshKit.sphere(0.013, 8), mats["dark"], Vector3(0.02 * side, 0.075, -0.2),
-				Vector3.ZERO, Vector3(1, 1.4, 0.5))
-		return
-	var length := 1.25 if spec["id"] == "fox" else 0.9
-	MeshKit.add(head, MeshKit.sphere(0.085, 18), mats["muzzle"], Vector3(0, 0.07, -0.13),
-		Vector3.ZERO, Vector3(1.1, 0.78, length))
-	MeshKit.add(head, MeshKit.sphere(0.026, 12), mats["nose"], Vector3(0, 0.1, -0.13 - 0.085 * length))
-	MeshKit.add(head, MeshKit.box(Vector3(0.05, 0.006, 0.01)), mats["dark"], Vector3(0, 0.035, -0.19))
-	if spec["id"] == "cat":
-		for side in [-1.0, 1.0]:
-			for k in 2:
-				MeshKit.add(head, MeshKit.cylinder(0.0015, 0.0015, 0.12, 4), mats["muzzle"],
-					Vector3(0.09 * side, 0.07 - k * 0.02, -0.16), Vector3(0, 0, 90 + (8 - k * 16) * side))
+static func chair_parts() -> Array:
+	# 椅子(ChairModel)只搭一次:记下每个网格节点相对椅子原点的变换与材质,各酒客按记录摆出共用同一批网格
+	if _chair.is_empty():
+		var template := Node3D.new()
+		ChairModel.build(template)
+		for node in template.find_children("*", "MeshInstance3D", true, false):
+			var inst := node as MeshInstance3D
+			var surfaces := []
+			for i in inst.get_surface_override_material_count():
+				surfaces.append(inst.get_surface_override_material(i))
+			_chair.append([inst.mesh, _relative_xform(inst, template), inst.material_override, surfaces, inst.cast_shadow])
+		template.free()
+	return _chair
 
 
-static func build_hat(head: Node3D, kind: String, hat_mat: Material, band_mat: Material) -> Node3D:
-	var hat := MeshKit.pivot(head, Vector3(0, 0.255, 0.01), "Hat")
-	hat.rotation_degrees = Vector3(-6, 0, 9)
-	match kind:
-		"top":
-			MeshKit.add(hat, MeshKit.cylinder(0.17, 0.17, 0.012, 32), hat_mat)
-			MeshKit.add(hat, MeshKit.cylinder(0.105, 0.098, 0.2, 32), hat_mat, Vector3(0, 0.1, 0))
-			MeshKit.add(hat, MeshKit.cylinder(0.101, 0.101, 0.03, 32), band_mat, Vector3(0, 0.025, 0))
-		"bowler":
-			MeshKit.add(hat, MeshKit.cylinder(0.16, 0.16, 0.012, 32), hat_mat)
-			MeshKit.add(hat, MeshKit.hemisphere(0.115, 24), hat_mat, Vector3(0, 0.006, 0), Vector3.ZERO, Vector3(1, 1.15, 1))
-			MeshKit.add(hat, MeshKit.cylinder(0.117, 0.117, 0.025, 32), band_mat, Vector3(0, 0.02, 0))
-		"cowboy":
-			MeshKit.add(hat, MeshKit.cylinder(0.25, 0.25, 0.012, 32), hat_mat, Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.82))
-			MeshKit.add(hat, MeshKit.torus(0.22, 0.255, 32), hat_mat, Vector3(0, 0.012, 0), Vector3.ZERO, Vector3(1, 0.8, 0.82))
-			MeshKit.add(hat, MeshKit.cylinder(0.075, 0.11, 0.14, 24), hat_mat, Vector3(0, 0.07, 0))
-			MeshKit.add(hat, MeshKit.cylinder(0.106, 0.112, 0.028, 24), band_mat, Vector3(0, 0.02, 0))
-		"cap":
-			hat.rotation_degrees = Vector3(-10, 0, -6)
-			MeshKit.add(hat, MeshKit.hemisphere(0.16, 24), hat_mat, Vector3(0, -0.02, 0), Vector3.ZERO, Vector3(1.05, 0.45, 1.1))
-			MeshKit.add(hat, MeshKit.cylinder(0.11, 0.11, 0.012, 24), hat_mat, Vector3(0, -0.012, -0.12),
-				Vector3.ZERO, Vector3(1, 1, 0.55))
-			MeshKit.add(hat, MeshKit.sphere(0.018, 10), band_mat, Vector3(0, 0.055, 0))
-	return hat
+static func add_chair(parent: Node3D) -> void:
+	for part in chair_parts():
+		var inst := MeshInstance3D.new()
+		inst.mesh = part[0]
+		inst.transform = part[1]
+		inst.material_override = part[2]
+		for i in (part[3] as Array).size():
+			inst.set_surface_override_material(i, part[3][i])
+		inst.cast_shadow = part[4]
+		parent.add_child(inst)
+
+
+# —— 合批 ——
+
+static func _torso(batch: MeshBatch, spec: Dictionary) -> void:
+	# 外套 + 开口里的衬衫/马甲/裤腰 + 翻领、领圈、门襟滚边(都投影;小件在 torso_detail)
+	var torso := PatronTorso.new(spec)
+	var outfit: Dictionary = spec.get("outfit", {})
+	var notch: bool = outfit.get("lapel", "shawl") == "notch"
+	var vest: bool = outfit.get("vest", true)
+	_add(batch, torso.jacket())
+	_add(batch, torso.shirt(0.3 if vest else 0.05))
+	_add(batch, torso.lap())
+	if vest:
+		_add(batch, torso.vest_half(-1.0))
+		_add(batch, torso.vest_half(1.0))
+	for side in [-1.0, 1.0]:
+		_add(batch, torso.lapel(side, notch))
+		_add_all(batch, torso.front_edges(side))
+	_add(batch, torso.collar(notch))
+
+
+static func _head_detail(batch: MeshBatch, spec: Dictionary, shape: Callable) -> void:
+	# 头上的小件(不投影):鼻子、胡须、腮毛
+	PatronHead.nose(spec, batch, shape)
+	PatronHead.whiskers(spec, batch, shape)
+	PatronHead.tufts(spec, batch, shape)
+
+
+static func _add(batch: MeshBatch, arrays: Array) -> void:
+	# 数组已在枢轴坐标里、顶点色已带槽位:原样并进唯一的槽位
+	if not arrays.is_empty():
+		batch.add_arrays(arrays, PatronSkin.SLOT)
+
+
+static func _add_all(batch: MeshBatch, list: Array) -> void:
+	for arrays in list:
+		_add(batch, arrays)
+
+
+static func _relative_xform(node: Node3D, root: Node3D) -> Transform3D:
+	var xform := Transform3D.IDENTITY
+	var current := node
+	while current != root and current != null:
+		xform = current.transform * xform
+		current = current.get_parent() as Node3D
+	return xform

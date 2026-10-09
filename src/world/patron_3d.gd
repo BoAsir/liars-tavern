@@ -2,7 +2,9 @@ class_name Patron
 extends Node3D
 # 酒客角色:坐在椅子上的卡通动物。原点在座位地面,面朝 -Z(牌桌中心)。
 # 坐姿:身体前倾趴在牌桌上,双手搭在桌面——拿着牌也一样,牌扇自己立在胸前(爪子去扶牌会挡住牌面)。
-# 待机:呼吸、眨眼、眼神与头部跟随;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直)。
+# 待机:呼吸、眨眼、眼神与头部跟随、尾巴轻摆;动作:出牌伸手、拍桌、举枪(坐直)、中弹倒下、庆祝(坐直)。
+# 模型:每个动画枢轴一个合批网格(按物种缓存,PatronParts),全身共用本酒客的一份着色器材质(PatronSkin),
+# 出局时补间这份材质褪成灰色;脸部动画(眼珠、眼睑、眉毛、耳朵、嘴)在 PatronFaceRig。
 
 
 const ARM_LENGTH := 0.4
@@ -46,8 +48,8 @@ const CHEER_BOUNCE_TIME := 0.22
 const CHEER_JUMP := 0.08
 # 出局时打飞的帽子等散落物:挂到父节点(TableWorld)下并打上此标记,由 TableWorld 回收
 const DEBRIS_GROUP := &"patron_debris"
-const GREY := Color(0.42, 0.42, 0.42)
-const LAPEL_DARKEN := 0.35
+const TAIL_SWAY := 0.05      # 尾巴待机摆动的幅度(弧度,绕竖直轴;垂在椅子外侧,摆动时碰不到椅子)
+const TAIL_SWAY_SPEED := 0.35
 
 var species_index := 0
 var alive := true
@@ -58,16 +60,14 @@ var right_hand: Node3D
 
 var _arm_l: Node3D
 var _arm_r: Node3D
-var _eyes: Array = []      # [{"pivot", "pupil", "marks"}]
-var _brows: Array = []
-var _ears: Array = []
+var _face: PatronFaceRig
 var _hat: Node3D
-var _materials: Array = []
+var _tail: Node3D
+var _material: ShaderMaterial
 var _look_target := Vector3.ZERO
 var _has_look := false
 var _time := 0.0
 var _phase := 0.0
-var _blink_in := 2.0
 var _breath_rate := 1.0
 var _lean := SEATED_LEAN
 var _sitting_up := false   # 举枪、庆祝时坐直
@@ -93,6 +93,7 @@ func _process(delta: float) -> void:
 	_time += delta
 	if alive:
 		_animate_idle(delta)
+	_face.update(delta, alive, _look_target if _has_look else null)
 	_update_neck(delta)
 
 
@@ -100,40 +101,27 @@ func _process(delta: float) -> void:
 
 func _build() -> void:
 	var spec := PatronParts.species(species_index)
-	var mats := {
-		"fur": _mat(spec["fur"], 0.75), "muzzle": _mat(spec["muzzle"], 0.8), "dark": _mat(spec["dark"], 0.6),
-		"coat": _mat(spec["coat"], 0.85), "accent": _mat(spec["accent"], 0.5),
-		"nose": _mat(Color(0.05, 0.04, 0.04), 0.15), "white": _mat(Color(0.97, 0.96, 0.93), 0.25),
-		"pupil": _mat(Color(0.03, 0.03, 0.04), 0.1), "hat": _mat(spec["dark"].darkened(0.4), 0.7),
-	}
-	ChairModel.build(self)
+	var meshes := PatronParts.meshes(species_index)
+	_material = PatronSkin.material(spec)
+	PatronParts.add_chair(self)
+	_part(self, meshes["legs"], "Legs", false)
+	_build_tail(spec, meshes)
 	body = MeshKit.pivot(self, HIP, "Body")
 	body.rotation.x = -SEATED_LEAN
-	MeshKit.add(body, MeshKit.capsule(0.2, 0.62), mats["coat"], Vector3(0, 0.27, 0), Vector3.ZERO, Vector3(1, 1, 0.85))
-	MeshKit.add(body, MeshKit.sphere(0.19, 20), mats["coat"], Vector3(0, 0.12, -0.05), Vector3.ZERO, Vector3(1.05, 0.85, 0.95))
-	# 衬衫前襟 + 领结
-	MeshKit.add(body, MeshKit.sphere(0.09, 16), mats["white"], Vector3(0, 0.43, -0.15), Vector3(-10, 0, 0),
-		Vector3(0.75, 1.15, 0.35))
-	for side in [-1.0, 1.0]:
-		MeshKit.add(body, MeshKit.prism(Vector3(0.05, 0.05, 0.02)), mats["accent"], Vector3(0.026 * side, 0.535, -0.175),
-			Vector3(-10, 0, -90 * side))
-	MeshKit.add(body, MeshKit.sphere(0.013, 8), mats["accent"], Vector3(0, 0.535, -0.18))
-	# 翻领用压暗的外套色:浅色强调色做翻领会在胸前拼出一个突兀的「A」字
-	var lapel := _mat(spec["coat"].darkened(LAPEL_DARKEN), 0.8)
-	for side in [-1.0, 1.0]:
-		MeshKit.add(body, MeshKit.box(Vector3(0.05, 0.24, 0.02)), lapel, Vector3(0.06 * side, 0.43, -0.17),
-			Vector3(-8, 0, 18 * side))
-	for y in [0.3, 0.2, 0.1]:
-		MeshKit.add(body, MeshKit.sphere(0.014, 8), WorldMaterials.brass(), Vector3(0, y, -0.205 + (0.3 - y) * 0.15))
-	# 宽肩 + 脖子(单位高的圆柱,按领口到头的距离拉长)+ 领口
-	MeshKit.add(body, MeshKit.sphere(0.2, 20), mats["coat"], Vector3(0, 0.47, -0.01), Vector3.ZERO, Vector3(1.22, 0.55, 0.85))
-	_neck = MeshKit.pivot(body, NECK_BASE, "Neck")
-	MeshKit.add(_neck, MeshKit.cylinder(0.075, 0.085, 1.0, 16), mats["fur"], Vector3(0, 0.5, 0))
-	MeshKit.add(body, MeshKit.torus(0.075, 0.1, 24), mats["coat"], Vector3(0, 0.565, -0.02))
-	_build_head(spec, mats)
+	_part(body, meshes["torso"], "Torso")
+	_part(body, meshes["torso_detail"], "TorsoDetail", false)
+	_neck = _part(body, meshes["neck"], "Neck")
+	_neck.position = NECK_BASE
+	head = MeshKit.pivot(body, HEAD_PIVOT, "Head")
+	_part(head, meshes["skull"], "Skull")
+	_part(head, meshes["head_detail"], "HeadDetail", false)
+	_face = PatronFaceRig.new(self, head, spec, meshes, _material)
+	_hat = _part(head, meshes["hat"], "Hat")
+	_hat.position = spec["hat"]["pos"]
+	_hat.rotation_degrees = spec["hat"]["rot"]
 	_fit_neck()
-	_arm_l = _build_arm(-1.0, mats)
-	_arm_r = _build_arm(1.0, mats)
+	_arm_l = _build_arm(-1.0, meshes["arm_l"])
+	_arm_r = _build_arm(1.0, meshes["arm_r"])
 	right_hand = _arm_r.get_node("Hand")
 	fan = MeshKit.pivot(body, Vector3.ZERO, "Fan")
 	fan.transform = _in_seat(Transform3D(CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG)),
@@ -142,49 +130,25 @@ func _build() -> void:
 	_plant_paws()
 
 
-func _build_head(spec: Dictionary, mats: Dictionary) -> void:
-	head = MeshKit.pivot(body, HEAD_PIVOT, "Head")
-	MeshKit.add(head, MeshKit.sphere(0.17, 28), mats["fur"], Vector3(0, 0.12, 0), Vector3.ZERO, Vector3(1, 0.95, 1))
-	MeshKit.add(head, MeshKit.sphere(0.12, 20), mats["muzzle"], Vector3(0, 0.08, -0.07), Vector3.ZERO, Vector3(1.05, 0.8, 0.9))
-	PatronParts.build_snout(head, spec, mats)
-	for side in [-1.0, 1.0]:
-		var pivot := MeshKit.pivot(head, Vector3(0.062 * side, 0.165, -0.13))
-		MeshKit.add(pivot, MeshKit.sphere(0.042, 18), mats["white"], Vector3.ZERO, Vector3.ZERO, Vector3(1, 1.1, 0.8))
-		var pupil := MeshKit.add(pivot, MeshKit.sphere(0.021, 12), mats["pupil"], Vector3(0, 0, -0.03))
-		MeshKit.add(pupil, MeshKit.sphere(0.006, 6), WorldMaterials.emissive(Color.WHITE, 2.0), Vector3(0.007, 0.008, -0.016))
-		var marks := MeshKit.pivot(pivot, Vector3(0, 0, -0.036))
-		for angle in [45.0, -45.0]:
-			MeshKit.add(marks, MeshKit.box(Vector3(0.055, 0.009, 0.01)), mats["pupil"], Vector3.ZERO, Vector3(0, 0, angle))
-		marks.visible = false
-		_eyes.append({"pivot": pivot, "pupil": pupil, "marks": marks})
-		var brow := MeshKit.pivot(head, Vector3(0.064 * side, 0.222, -0.142))
-		MeshKit.add(brow, MeshKit.box(Vector3(0.062, 0.013, 0.018)), mats["dark"])
-		_brows.append(brow)
-	_ears = PatronParts.build_ears(head, spec["ears"], mats["fur"], mats["dark"])
-	_hat = PatronParts.build_hat(head, spec["hat"], mats["hat"], mats["accent"])
+func _build_arm(side: float, mesh: ArrayMesh) -> Node3D:
+	var arm := _part(body, mesh, "ArmR" if side > 0 else "ArmL")
+	arm.position = _mirror(SHOULDER, side)
+	MeshKit.pivot(arm, Vector3(0, 0, -ARM_LENGTH), "Hand")
+	return arm
 
 
-func _build_arm(side: float, mats: Dictionary) -> Node3D:
-	var pivot := MeshKit.pivot(body, _mirror(SHOULDER, side), "ArmR" if side > 0 else "ArmL")
-	MeshKit.add(pivot, MeshKit.sphere(0.07, 14), mats["coat"])
-	MeshKit.add(pivot, MeshKit.capsule(0.055, ARM_LENGTH), mats["coat"], Vector3(0, 0, -ARM_LENGTH / 2.0), Vector3(90, 0, 0))
-	MeshKit.add(pivot, MeshKit.cylinder(0.06, 0.06, 0.05, 16), mats["muzzle"], Vector3(0, 0, -ARM_LENGTH + 0.04),
-		Vector3(90, 0, 0))
-	var hand := MeshKit.pivot(pivot, Vector3(0, 0, -ARM_LENGTH), "Hand")
-	MeshKit.add(hand, MeshKit.sphere(PAW_RADIUS, 16), mats["fur"], Vector3.ZERO, Vector3.ZERO, PAW_SCALE)
-	return pivot
+func _build_tail(spec: Dictionary, meshes: Dictionary) -> void:
+	# 尾巴挂在座位坐标的尾根上(不随上身前倾):没有尾巴的物种(熊)网格为空,不建节点
+	var mesh: ArrayMesh = meshes["tail"]
+	if mesh.get_surface_count() == 0:
+		return
+	_tail = _part(self, mesh, "Tail")
+	_tail.position = PatronTails.root(spec)
 
 
-func _mat(color: Color, roughness: float) -> StandardMaterial3D:
-	# 每个角色独立材质:出局时需要单独褪色
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = roughness
-	mat.rim_enabled = true
-	mat.rim = 0.3
-	mat.rim_tint = 0.5
-	_materials.append(mat)
-	return mat
+func _part(parent: Node3D, mesh: ArrayMesh, node_name: String, cast_shadow := true) -> MeshInstance3D:
+	# 共用缓存网格,材质用本酒客自己的一份;cast_shadow = false 的小件不进阴影绘制
+	return MeshBatch.instance(parent, mesh, {PatronSkin.SLOT: _material}, node_name, cast_shadow)
 
 
 # —— 待机 ——
@@ -206,31 +170,8 @@ func _animate_idle(delta: float) -> void:
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
 	head.rotation.z = _noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06
-	for eye in _eyes:
-		var target_offset := Vector3.ZERO
-		if _has_look:
-			var dir: Vector3 = eye["pivot"].to_local(_look_target).normalized()
-			target_offset = Vector3(dir.x, dir.y, 0.0) * 0.012
-		eye["pupil"].position = eye["pupil"].position.lerp(Vector3(0, 0, -0.03) + target_offset, minf(delta * 8.0, 1.0))
-	_blink_in -= delta
-	if _blink_in <= 0.0:
-		_blink_in = randf_range(1.8, 5.5)
-		_blink()
-
-
-func _blink() -> void:
-	var tween := create_tween().set_parallel()
-	for eye in _eyes:
-		tween.tween_property(eye["pivot"], "scale:y", 0.1, 0.06)
-	tween.chain()
-	for eye in _eyes:
-		tween.parallel().tween_property(eye["pivot"], "scale:y", 1.0, 0.08)
-	if randf() < 0.4 and not _ears.is_empty():
-		var ear: Node3D = _ears[randi() % _ears.size()]
-		var base := ear.rotation.x
-		var twitch := create_tween()
-		twitch.tween_property(ear, "rotation:x", base - 0.3, 0.07)
-		twitch.tween_property(ear, "rotation:x", base, 0.15)
+	if _tail != null:
+		_tail.rotation.y = _noise.get_noise_1d(_time * TAIL_SWAY_SPEED + 140.0) * TAIL_SWAY * 2.0
 
 
 # —— 弹簧脖子 ——
@@ -285,13 +226,17 @@ func set_active(active: bool) -> void:
 
 
 func set_expression(kind: String) -> void:
-	var angles := {"neutral": 0.0, "angry": -0.38, "worried": 0.4, "happy": 0.15, "smug": -0.15}
-	var lift := 0.02 if kind in ["worried", "happy"] else 0.0
-	var tween := create_tween().set_parallel()
-	for i in _brows.size():
-		var side := -1.0 if i == 0 else 1.0
-		tween.tween_property(_brows[i], "rotation:z", angles.get(kind, 0.0) * -side, 0.18)
-		tween.tween_property(_brows[i], "position:y", 0.222 + lift, 0.18)
+	# neutral / angry / worried / happy / smug:眉毛、眼睑、耳朵补间过去,嘴换成对应的形状
+	_face.set_expression(kind)
+
+
+func expression() -> String:
+	return _face.expression()
+
+
+func skin_material() -> ShaderMaterial:
+	# 本酒客全身共用的材质(出局褪色补间它的 death 参数)
+	return _material
 
 
 # —— 手臂 ——
@@ -426,9 +371,7 @@ func relief() -> void:
 func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	alive = false
 	_arms_locked = true
-	for eye in _eyes:
-		eye["pupil"].visible = false
-		eye["marks"].visible = true
+	_face.knock_out()
 	if gun != null and table_parent != null:
 		gun.reparent(table_parent, true)
 		var drop := create_tween()
@@ -441,9 +384,7 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	_tween_arm(fall, _arm_l, _mirror(HAND_DEAD, -1.0), 0.5, Tween.TRANS_BOUNCE)
 	_tween_arm(fall, _arm_r, HAND_DEAD, 0.5, Tween.TRANS_BOUNCE)
 	_knock_hat_off()
-	for mat in _materials:
-		var target: Color = mat.albedo_color.lerp(GREY * mat.albedo_color.get_luminance() * 1.6, 0.85)
-		fall.tween_property(mat, "albedo_color", target, 1.4)
+	PatronSkin.fade_out(fall, _material)
 
 
 func _knock_hat_off() -> void:
