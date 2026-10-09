@@ -78,7 +78,7 @@
 ### 2.6 输光、再领与观战
 
 - 一手结束时筹码为 0 的人**输光**(status `busted`):他的屏幕底部出现「再领 2000」/「观战」(带倒计时)。不选不会卡住牌局,只是不发牌给他。
-- **留出选择时间**:有人输光的那一手之后,下一手最早在演出结束后 `PokerPacing.BUST_DECISION`(6 秒)开始;输光者都做了选择(再领/观战/离开)就恢复为 `HAND_GAP`(1.5 秒)。
+- **留出选择时间**:有人输光的那一手之后,下一手最早在演出结束后 `PokerPacing.BUST_DECISION`(6 秒)开始;这一手的输光者都做了选择(再领/观战/离开)就恢复为 `HAND_GAP`(1.5 秒)。只等这一次:一直不选的人不拖慢之后的每一手。
 - **再领**:status 为 `busted` 或 `spectating` 时可以(注意:手牌中全下的人筹码也是 0,但不能领)。每次 2000,不限次数,累计领取 +1,status 变 `waiting`,下一手发牌。当前没有进行中的手牌且凑够 2 人时自动排期开下一手。
 - **观战**:只有 `busted` 可以选。角色留在座位上不发牌;镜头切到俯视观战机位;HUD 常驻「领取 2000 上桌」。
 - 其他情况的再领/观战请求回 `cannot_rebuy` / `invalid_action`,不产生事件。
@@ -89,7 +89,7 @@
 - **离开**(主动离开或断线):
   - 在本手中且没全下 → 立即弃牌,已下的注留在桌上;
   - 已全下 → 留在本手中照常摊牌,可以赢;
-  - 不在本手中 → 牌桌空闲时立即移出,否则这一手结束时移出。
+  - 不在本手中 → 牌桌空闲时立即移出,否则这一手结束时移出;还没登场的新人(本手座位表里没有他)任何时候都立即移出,这样反复「加入→断开」既不会续长当前行动者的回合,也不会撑大视图。
   他的酒客立即离场;座位在下一手开始时重排。他的结算筹码在他离开的那一手结束(退回与分池之后)才定格,结算里标「已离开」。
 - 房主离开 = 房间解散(同骗子酒馆)。
 
@@ -179,7 +179,7 @@ func turn_timer_after(events: Array, pending: float, time_left: float) -> float
 func accepts_late_join() -> bool                # 骗子酒馆 false;德州 = 没散局且未结束
 func add_player(pid: int, name: String) -> Array
 func next_hand_ready() -> bool                  # 骗子酒馆 false
-func hand_gap() -> float                        # 德州:有输光者没做选择时 BUST_DECISION,否则 HAND_GAP
+func hand_gap() -> float                        # 德州:最近一手的输光者有人没做选择时 BUST_DECISION,否则 HAND_GAP
 func start_next_hand() -> Array
 func request_end() -> Array
 ```
@@ -224,6 +224,7 @@ func _on_hand_timer() -> void:
   会话先于获准收人:名单放行但 `add_player` 返回 `[]`(同一 peer id 本手里刚离开、引擎要等这一手结束才移出他;或桌上没座)时撤掉名单项、发 `rpc_join_denied("牌桌暂时坐不下,请稍后再来")` 并稍后断开,不发获准与牌局信息——否则他会被告知开局却不在会话里。入座后再发的座位表仍不含他(`seats_with_patrons()` 取本手的座位表)。
 - **视线**:对局中「本场成员」= 已完成握手的等待厅成员 `_lobby`。`rpc_look` 校验 `in_game and _lobby.has(sender)`;`_relay_gaze` 遍历 `_lobby.seat_order()`(跳过房主、发送者与未连接的人)。客户端只对当前桌上有酒客的 pid 应用视线。
 - `Net.seats` 在德州里只由 NetworkManager 写(开局与中途加入的引导);`PokerScreen` 自己保存座位表(演到 `hand_started` 时取它的 seats),对账时 `last_public.seats` 不同就重排。
+  例外:同一手里(视图的 hand 与本地相同)座位表只增不减,离场者的座位留到下一手 `hand_started`(§2.7、§5.1:他留在桌上的注、全下后的亮牌与退款还按他的座位摆);迟到者的第一帧整个照视图(§7)。
 
 ### 4.3 Net 公开接口
 
@@ -277,7 +278,7 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 | `away` | 挂机离座(连续 2 次超时):有筹码但不发牌,按钮与盲注跳过他 |
 
   意图 `sit_in` 只对 `away` 有效(回到 `waiting`);`PokerRules.SEAT_ACTIONS` 包含 `rebuy`、`spectate`、`sit_in`。
-  `left`(bool):已离开;全下离开的人 status 仍是 `allin`,照常摊牌。离开的人在下一手开始时移出座位。
+  `left`(bool):已离开;全下离开的人 status 仍是 `allin`,照常摊牌。离开的人在他离开的那一手结束时移出座位(§2.7),酒客的座位到下一手开始才重排。
 - **两手之间**(phase IDLE,上一手结束到下一手 `hand_started`):保留上一手的 board、shown、button/sb/bb 与各人的最终 status;street 为这一手结束时所在的街(摊牌结束为 `showdown`);pots 为 []。
   `start_hand()` 时被发牌的人改为 `active`(盲注全下的为 `allin`)。客户端「等待下一手」的界面只认 `waiting`。
 - 测试钩子:`button_pid`(下一手按钮为他之后的下一位上桌者;为 null 时第一手随机)、`rigged`(`{"holes": {pid: [两张]}, "board": [5 张]}`,下一手按它发)。
@@ -334,9 +335,9 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 
 ### 4.7 演出预算(`PokerPacing`,已实现)
 
-HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8、PLAYER_JOINED 0.2、SESSION_OVER 3.0、HAND_GAP 1.5、BUST_DECISION 6.0(有人输光后的一手间隔);`away` / `sit_in` / `spectate` 不占演出时间;交出回合的事件只有 `turn`。
+HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8(还没登场的新人离开标 `offstage`,不占时间)、PLAYER_JOINED 0(下一手才登场,只记日志)、SESSION_OVER 3.0、HAND_GAP 1.5、BUST_DECISION 6.0(有人输光后的一手间隔);`away` / `sit_in` / `spectate` 不占演出时间;交出回合的事件只有 `turn`。
 新入座者(中途加入或离座回来)的镜头从观战机位回到自己座位,这段运镜算在 HAND_STARTED 的 1.4 秒里。
-导演每段演出的实际时长必须不超过预算,由测试读取导演与资产类的节奏常量来保证(同骗子酒馆的 `test_pacing.gd`)。
+导演每段演出的实际时长加余量(每个 await 一帧,至少 4 帧)必须不超过预算,由测试读取导演与资产类的节奏常量来保证(同骗子酒馆的 `test_pacing.gd`)。
 
 ## 5. 3D 表现
 
@@ -354,7 +355,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 ### 5.2 牌面(`PokerFaces`)
 
 - 自己的缓存、`build()`、`is_built()`、`clear()`、`built` 信号;`CardFaces.texture(kind)` 只在 `PokerCard.is_card(kind)` 时转给它;`CardFaces.is_built()` 的含义不变(只管骗子酒馆的 5 张)。
-- 尺寸 256×372(52 张含 mipmap 约 25 MiB)。生成时每帧最多 13 个 SubViewport,分批完成,不卡顿;生成完调用 `Card3D.refresh_materials()`,并让 2D 小牌重新取纹理。
+- 尺寸 256×372(52 张含 mipmap 约 25 MiB)。生成时每帧最多 7 个 SubViewport(13 个时实测一帧 23 ms),分批完成,不卡顿;生成完调用 `Card3D.refresh_materials()`,并让 2D 小牌重新取纹理。
 - 触发:进入德州等待厅、迟到者进入牌桌、说明书翻到德州那本,哪个先到就在后台开始;导演在第一次发牌前等它完成。`main._exit_tree` 里与 `CardFaces.clear()` 一起 `PokerFaces.clear()`。
 - 牌面:超大角标——点数约占牌高 38%,左上与右下(倒置)各一个,花色在点数下方;中央一个大花色,J/Q/K 加冠饰。纸底与金边沿用 `CardFaces` 风格,牌背沿用现有牌背。
   四色花色在暖光与牌面着色器(会压暗)下要分得清:♠ 墨黑、♥ 红、♦ 亮蓝(约 0.2, 0.45, 0.95)、♣ 亮绿(约 0.15, 0.6, 0.25)。花色用多边形与圆绘制,不依赖字体。
@@ -401,6 +402,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 - **右上**:「规则 · F1」;房主另有「散局」(请求后变灰,显示「本手结束后散局」)。离开牌桌用 Esc(确认后离开;房主离开会解散)。
 - **底部中间** ≤ 600×170(x 340–940,顶边 ≥ y 528):轮到自己时是下注控件;从 `reveal` 到 `hand_over` 换成摊牌条(每人:名字省略显示、2 张 ≥ 30×42 的小牌、牌型名;最多 2 行 × 4 人,≤ 600×170);
   输光时是「再领 2000 / 观战」;观战时是「领取 2000 上桌」;等待下一手时是「已入座,下一手开始发牌」。
+  优先级:输光提示 > 摊牌条 > 观战 / 离座 / 等待下一手的提示 > 下注控件(摊牌是公共信息,观战的人也要看到 2D 大图)。结算面板出现后底部清空。
 - **左下** ≤ 300 宽(x 24–324):自己的名字、筹码、盈亏、领取次数;两张手牌的 2D 大图 + 当前最大牌型(`best.detail`)。
 - **右下**(x 956–1256):事件日志。画面中部是大字宣告(「翻牌」「全下!」「X 赢得 1,240 · 葫芦」)。
 - 界面文字里**不出现花色符号**(界面字体里没有 ♠♥♦♣ 字形,系统回退可能变成彩色 emoji):要展示具体的牌一律用 2D 小牌;日志与宣告只写牌型名与点数(如「葫芦 · Q 带 7」)。
@@ -436,7 +438,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 - 默认打开哪本:在房间里用 `Net.game_mode`;主菜单用 `Settings.KEY_LAST_MODE`。
 - 骗子酒馆那本内容不变;其中人数改为取 `GameMode.max_players(GameMode.LIARS)`(`Protocol.MAX_PLAYERS` 已改为 8)。
 - 德州那本(数字全部取自 `PokerRules`、`Protocol.TURN_TIMEOUT`):怎么玩(现金局、2–8 人、2000、10/20、再领与观战、中途入座、散局结算)、牌型、下注(动作、最小加注、不完整加注、边池、未跟注退回、超时)、操作(快捷键)。
-- 新块类型 `hands`:单列 9 行,从大到小,每行:牌型名、5 张 ≤ 40×58 的示例小牌、长牌名次与短牌名次两列,短牌与长牌不同的那一处(同花/葫芦)高亮;注明 A-2-3-4-5 与 A-6-7-8-9。块等 `PokerFaces` 生成完再画牌。
+- 新块类型 `hands`:单列 9 行,从大到小,每行:牌型名、5 张 ≤ 40×58 的示例小牌、长牌名次与短牌名次两列,短牌与长牌不同的那一处(同花/葫芦)高亮;注明 A-2-3-4-5 与 A-6-7-8-9。块先画素纸占位,`PokerFaces` 生成完(`built` 信号)再刷新成牌面。
 
 ### 6.7 音效(程序化)
 

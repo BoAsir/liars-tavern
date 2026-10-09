@@ -10,15 +10,15 @@ extends Node
 
 signal event_started(ev: Dictionary)   # 每段演出开始时发出(调试截图与 bot 的日志标记按它取景)
 
-const INTRO_MOVE := PokerPacing.INTRO - 0.1   # 开场运镜(须在房主给的开场预算之内)
+const INTRO_MOVE := PokerPacing.INTRO - 0.15  # 开场运镜(须在房主给的开场预算之内)
 const CAMERA_MOVE := 0.9                      # 常驻机位之间的运镜:入座(算在 HAND_STARTED 里)、观战
 const HAND_START_SETTLE := 1.0                # 新一手:收牌、换座、移按钮、运镜同时进行,等这么久(≥ 各自的时长)
 const CHECK_PAUSE := 0.35                     # 过牌:敲一下桌子的停顿
 const ALLIN_SHAKE := 0.35                     # 全下的轻微震屏
 const ALLIN_HOLD := 0.4                       # 全下:筹码推出去之后再停一下(宣告有时间被看到)
 const POT_HOLD := 0.8                         # 分池:筹码滑到赢家后再停一下
-const HAND_OVER_PAUSE := 0.5
-const LEFT_PAUSE := 0.3                       # 离桌:酒客消失后的停顿
+const HAND_OVER_PAUSE := 0.45
+const LEFT_PAUSE := 0.25                      # 离桌:酒客消失后的停顿
 const SESSION_OVER_HOLD := 2.4                # 散局:环绕镜头与宣告,之后弹结算面板
 const FACES_WAIT_MAX := 10.0                  # 第一次发牌前最多等德州牌面生成这么久
 const TABLE_FOCUS := Vector3(0, SeatLayout.TABLE_TOP + 0.1, 0)   # 酒客平时看向的桌心(公共牌架一带)

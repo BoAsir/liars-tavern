@@ -105,6 +105,7 @@ func _exit_tree() -> void:
 	WorldMaterials.clear_cache()
 	MeshKit.clear_cache()
 	MeshForge.clear_cache()
+	ChipStack3D.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 	SpeciesPortraits.clear()

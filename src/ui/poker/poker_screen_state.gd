@@ -49,10 +49,13 @@ func apply_private(state: Dictionary) -> void:
 	priv = state
 
 
-func refresh_from_view() -> bool:
-	# 用最新视图整体覆盖影子状态;返回座位表是否变了(调用方据此重排酒客)
+func refresh_from_view(adopt_seats := false) -> bool:
+	# 用最新视图整体覆盖影子状态;返回座位表是否变了(调用方据此重排酒客)。
+	# 同一手里座位只会少不会多(有人离开):离场者的座位留到下一手 hand_started 再收(规格 §2.7、§5.1),
+	# 他留在桌上的注、全下后的亮牌与退款都还要按他的座位摆;adopt_seats 为真(迟到者第一帧)时整个照视图
 	if pub.is_empty():
 		return false
+	var same_hand: bool = pub.get("hand") == hand
 	rows = {}
 	order = []
 	for p in _array(pub.get("players")):
@@ -62,6 +65,8 @@ func refresh_from_view() -> bool:
 			if p.get("name") is String:
 				names[p["pid"]] = p["name"]
 	var new_seats: Array = _array(pub.get("seats")).filter(func(pid): return pid is int)
+	if same_hand and not adopt_seats:
+		new_seats = keep_departed_seats(seats, new_seats)
 	var reseat := new_seats != seats
 	seats = new_seats
 	board = _cards(pub.get("board"))
@@ -74,9 +79,18 @@ func refresh_from_view() -> bool:
 	return reseat
 
 
-func sync_from_view() -> void:
-	# 迟到者的第一帧(规格 §7):不靠事件,整张桌按视图摆好,行动者与已亮的牌也从视图取
-	refresh_from_view()
+static func keep_departed_seats(local: Array, view: Array) -> Array:
+	# 本地座位表里视图已去掉的人(本手离场)留在原位;视图多出来的(不该发生)排在末尾
+	var out := local.duplicate()
+	for pid in view:
+		if not out.has(pid):
+			out.append(pid)
+	return out
+
+
+func sync_from_view() -> bool:
+	# 迟到者的第一帧(规格 §7):不靠事件,整张桌按视图摆好,行动者与已亮的牌也从视图取;返回座位表是否变了
+	var reseat := refresh_from_view(true)
 	current_pid = pub["current_pid"] if pub.get("current_pid") is int else null
 	revealed = {}
 	for pid in order:
@@ -84,6 +98,7 @@ func sync_from_view() -> void:
 		if shown.size() == PokerRules.HOLE_CARDS and not has_left(pid):
 			revealed[pid] = shown
 	in_showdown = not revealed.is_empty() and pub.get("phase") == "betting"
+	return reseat
 
 
 # —— 事件(只改影子行)——
@@ -233,10 +248,15 @@ func hole_for_hand(number: int) -> Variant:
 
 
 func best_detail() -> String:
+	# 私有视图领先于演出(全下时一批事件里三条街都发完了):最大牌型只用到已演出的公共牌时才显示,不剧透
 	var best: Variant = priv.get("best")
-	if best is Dictionary and best.get("detail") is String:
-		return best["detail"]
-	return ""
+	if priv.get("hand") != hand or not best is Dictionary or not best.get("detail") is String:
+		return ""
+	var known := hole() + board
+	for card in _array(best.get("cards")):
+		if not known.has(card):
+			return ""
+	return best["detail"]
 
 
 func legal(my_pid: int) -> Dictionary:

@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 15:40,已暂停;任务 6/7a 审查修复与 7b 开发都已合并到 feature/texas-holdem 与 main)
+## 状态(2026-10-09:任务 0–10 全部完成,已发布 0.7.0)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -26,10 +26,10 @@
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
 | 6 网络会话 | ✅ 已写完、已独立审查修复(th/net-fix,已合并) | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;`request_sit_in()`。审查修复见下节「任务 6 审查修复」 |
 | 7a HUD 控件 | ✅ 已写完、已审查修复(th/hud-fix),展台截图收尾完成 | BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护;新回合按 hand/street/current_pid 或合法动作变化判定,牌桌要对每个公共视图都调 `update`)、PokerHud、CardStrip、PokerNameplate(两行各自按文字宽度给足)、PokerPrompts、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测;主题给 HSlider 铜色轨道。`tools/poker_showcase.gd` + `tools/shot.gd` 已能摆出全部 8 种底部状态(bet/wait/showdown/bust/spectate/waiting/away/settlement)与观战机位,1280×720 与 1280×960 都核对过规格 §6.1 预算、铭牌不相撞 |
-| 7b 控制器与演出 | ✅ 已写完并合并(th/screen),**独立审查没做完** | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。暂停时审查阶段刚开始,审查员只来得及加流程测试;接手时按计划任务 7 的审查要点(规格 §4.3–4.6、§5.5、§6.2–6.5、§7)再过一遍 |
-| 8 bot 与冒烟 | ⬜ 未开始 | |
-| 9 联调与截图验收 | ⬜ 未开始 | |
-| 10 审查 | ⬜ 未开始 | |
+| 7b 控制器与演出 | ✅ 已写完、已独立审查修复(a9618e1) | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。2026-10-09 两路独立审查(规格符合性、运行时健壮性)修掉:迟到者第一帧不重排、同一手里离场者座位被提前收走、旁人事件重置加注额、结算面板下露出输光提示与机位被拉回、最大牌型剧透、观战者看不到摊牌条、再领回执、散局按钮、过期的弃牌确认、节奏余量 4 帧;新增 `tests/poker_screen_harness.gd`(流程测试公共装置)与 `test_poker_screen_edges.gd`;规格 §4.2、§4.7、§6.1 补写了对应规则 |
+| 8 bot 与冒烟 | ✅ fd37f43 | DebugFlags `--mode` / `--hands` / 日志标记 / 德州截图标记;`PokerBot`(概率表纯函数 + 经 `PokerScreen.submit`);`tools/poker_smoke.sh`(holdem、short_deck 都通过);README 两种玩法、德州规则与操作键、新开关、冒烟与截图命令 |
+| 9 联调与截图验收 | ✅ 2026-10-09 | 全量 898 测试;`lan_smoke.sh`、`MODE=holdem/short_deck poker_smoke.sh` 都通过。真机:8 人长牌(有窗口房主 + 7 个无头直连 bot,`--hands=6`)全部 9 个德州截图标记都拍到、退出码 0、net_sum=0;2 人短牌单挑;3 人骗子酒馆(桌子、烛台、立牌正常)。修了结算面板下露出输光提示/错误吐司、单挑摊牌条牌型名被省略。性能:德州 8 人展台与骗子酒馆 4 人展台同机帧耗时相当(1080p 10.95 vs 11.10 ms,4K 37.4 vs 38.5 ms;要求 ≤ 1.25 倍),绘制调用 726 vs 544。有窗口的房主要加 `--disable-vsync`、bot 晚 10 秒启动,否则窗口在后台时房主帧率太低、bot 8 秒握手超时 |
+| 10 审查 | ✅ 2026-10-09 | 三路只读审查(7b 已单独审过两路):**规则引擎**无 MEDIUM 以上问题(探针 300 种子 14,355 手 0 违规);**网络与活性**修了 MEDIUM「恶意对端反复加入→断开能无限续当前回合、撑大视图」(没登场的新人立即移出,PLAYER_JOINED 0、offstage 离开 0),模糊测试 300 种子 0 失败,骗子酒馆差分测试 400 种子 8413 步与 main 完全一致;**界面/3D/回归**无 MEDIUM 以上,骗子酒馆桌子/机位/上限逐项复原,project.godot 未改,6 轮反复开德州无泄漏。LOW 都修了:输光选择时间只等刚输光那一手、牌面每帧 7 个视口、ChipStack3D 缓存退出释放、冒烟脚本数 ERROR 行、规格措辞。900 测试、浸泡 40×2000 手、三个冒烟都通过 |
 
 ## 合并清单(第一批 → feature/texas-holdem)—— 已完成,留作记录
 
@@ -49,13 +49,15 @@
 
 ## 接手须知(当前)
 
-1. 当前合并后的状态:869 个测试全过,`tools/lan_smoke.sh` 通过;`origin/main` = `origin/feature/texas-holdem`。
-2. 先补任务 7b 的独立审查(对照规格 §4.3–4.6、§5.5、§6.2–6.5、§7 与计划任务 7 的测试清单),修掉问题;顺手跑一次 `tools/shot.gd --poker-showcase` 看合并后镜头与 HUD 是否还对。
-3. 然后任务 8:DebugFlags 加德州 bot(`--mode=holdem|short_deck`、`--hands=N`、日志标记 HAND_STARTED / DEALT / SESSION_OVER / net_sum),`tools/poker_smoke.sh`(1 房主 + 若干 bot 跑完 N 手、盈亏总和为 0、无脚本错误),README 写德州玩法;任务 9 联调与 8 人截图验收;任务 10 多视角审查。
-4. 每一步:全量测试 + `tools/lan_smoke.sh` 回归,提交,`git push origin feature/texas-holdem feature/texas-holdem:main`,更新本文。
-5. 已知债务:`network_manager.gd` 749 行(上限 800),任务 8 若再长就把视线转发或德州意图入口抽成 RefCounted;7a 展台截图(窗口模式;不写 `--hud` 时座位机位默认 bet、观战机位默认 spectate):
-   `$GODOT --path . -s tools/shot.gd -- --out=<目录> --views=poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_seat,poker_overview --hud=bet,wait,showdown,bust,spectate,waiting,away,settlement,spectate --poker-showcase`;4:3 在 `-s` 前加引擎参数 `--resolution 1280x960`。
-6. 旧的子任务分支 `th/*`(含 th/net-fix、th/hud-fix、th/screen)都已合并,只留作记录;worktree 可以 `git worktree remove` 清掉。
+1. 当前状态(2026-10-09):任务 0–10 全部完成。900 个测试全过;`tools/lan_smoke.sh`、`MODE=holdem|short_deck tools/poker_smoke.sh` 都通过;
+   浸泡 `-gtest=res://tests/soak_poker_simulation.gd` 通过。2026-10-09 已快进合入 main(`origin/main` = 5bfe433)。
+2. **已发布 0.7.0**(2026-10-09,build 5,提交 ca27c5a,base_build 1,不用重装):更新源 `updates` 分支已是 build 5,
+   GitHub Release https://github.com/Murphycx94/liars-tavern/releases/tag/v0.7.0。3D 模型重做(`feature/model-detail`)在另一会话继续,
+   合并时按规格 §9 的接口约定(`tavern.gd` 的 `set_table_radius` / `set_table_decor_visible` 以对方实现为准),下一版 build 6。
+3. 真机截图命令见 README「开发」;有窗口的房主加 `--disable-vsync`,bot 晚 10 秒再起,否则窗口在后台时房主帧率太低、bot 8 秒握手超时。
+4. 已知债务:`network_manager.gd` 761 行(上限 800);德州牌面生成每帧最坏约 21 ms(一次性 0.27 秒,主要是读回图像与生成 mipmap 的 CPU 时间);
+   被恶意对端刷「加入→断开」时结算里仍会多出若干「已离开」行(盈亏 0)。
+5. 旧的子任务分支 `th/*` 都已合并,只留作记录;worktree 可以 `git worktree remove` 清掉。
 
 ## 第二批怎么开(原记录)
 

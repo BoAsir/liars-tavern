@@ -227,6 +227,36 @@ func test_busted_player_who_left_does_not_hold_the_next_hand():
 	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001)
 
 
+func test_bust_wait_only_follows_the_hand_where_someone_busted():
+	# 规格 §2.6:「有人输光的那一手之后」才留 6 秒;一直不选的输光者不拖慢之后每一手
+	_start()
+	_fold_out()
+	_bust_one()
+	assert_almost_eq(session.hand_gap(), PokerPacing.BUST_DECISION, 0.001)
+	session.start_next_hand()
+	_fold_out()
+	assert_eq(session.public_view(0.0)["players"][0]["status"], R.STATUS_BUSTED, "他还是没选")
+	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001, "之后的手恢复 1.5 秒")
+
+
+func test_a_newcomer_who_leaves_mid_hand_is_gone_at_once_and_costs_no_show_time():
+	# 还没登场(本手座位表里没有他)的人在手牌中离开:立即移出,加入与离开都不占演出时间,
+	# 否则反复「加入→断开」能无限续当前行动者的回合、把视图撑大
+	_start()
+	var actor := _current()
+	for i in 20:
+		var pid := 100 + i
+		var joined := session.add_player(pid, "过客")
+		var left := session.on_disconnect(pid)
+		assert_almost_eq(session.estimate(joined + left), 0.0, 0.001, "没有酒客,什么也不用演")
+		assert_true(left[0].get("offstage", false))
+	assert_eq(session.public_view(0.0)["players"].size(), 3, "视图不留过客")
+	assert_eq(_current(), actor)
+	var seated_leave := session.on_disconnect(actor)
+	assert_false(seated_leave[0].get("offstage", false))
+	assert_gt(session.estimate(seated_leave), 0.0, "桌上的人离开照常演")
+
+
 func test_request_end_during_a_hand_marks_ending_and_settles_after_it():
 	_start()
 	assert_eq(session.request_end(), [{"type": "ending"}])

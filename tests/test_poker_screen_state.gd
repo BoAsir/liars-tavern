@@ -77,7 +77,7 @@ func test_bad_view_rows_are_dropped():
 
 
 func test_private_view_gives_my_hole_and_best_only_for_the_hand_it_belongs_to():
-	_apply(_pub([1, 2]))
+	_apply(_pub([1, 2], {"board": H.cards("Ad 9c 2c")}))
 	state.apply_private({"hand": 3, "hole": H.cards("Ah Kd"), "best": {"detail": "一对 · A", "cards": H.cards("Ah Ad Kd 9c 2c")}})
 	assert_eq(state.hole(), H.cards("Ah Kd"))
 	assert_eq(state.best_detail(), "一对 · A")
@@ -85,6 +85,48 @@ func test_private_view_gives_my_hole_and_best_only_for_the_hand_it_belongs_to():
 	assert_null(state.hole_for_hand(4), "下一手的牌还没到")
 	state.apply_private({"hand": 3, "hole": ["x", 7]})
 	assert_eq(state.hole(), [], "坏牌值丢掉")
+
+
+func test_best_hand_waits_for_the_board_cards_it_uses():
+	# 全下时一批事件发完三条街,私有视图的牌型按 5 张公共牌算:演到翻牌时不能先报河牌后的牌型
+	_apply(_pub([1, 2], {"board": H.cards("Ad 9c 2c 7h 7d")}))
+	state.apply_private({"hand": 3, "hole": H.cards("Ah Kd"), "best": {"detail": "两对 · A 和 7",
+		"cards": H.cards("Ah Ad 7h 7d Kd")}})
+	state.apply_event({"type": "hand_started", "hand": 3, "seats": [1, 2], "dealt": [1, 2]})
+	assert_eq(state.best_detail(), "", "还没发公共牌")
+	state.apply_event({"type": "street", "street": PokerRules.FLOP, "cards": H.cards("Ad 9c 2c"), "board": H.cards("Ad 9c 2c")})
+	assert_eq(state.best_detail(), "", "牌型用到还没演出的转牌、河牌")
+	state.apply_event({"type": "street", "street": PokerRules.RIVER, "cards": H.cards("7h 7d"), "board": H.cards("Ad 9c 2c 7h 7d")})
+	assert_eq(state.best_detail(), "两对 · A 和 7")
+	state.apply_event({"type": "hand_started", "hand": 4, "seats": [1, 2], "dealt": [1, 2]})
+	assert_eq(state.best_detail(), "", "上一手的私有视图")
+
+
+func test_departed_players_keep_their_seat_until_the_next_hand():
+	# 规格 §2.7 / §5.1:离场者的酒客立即离场,座位到下一手 hand_started 才重排(他的注、亮牌、退款还按他的座位摆)
+	_apply(_pub([1, 2, 3]))
+	var pub := _pub([1, 3])
+	pub["players"][1] = _player(3)
+	pub["players"].append(_player(2, PokerRules.STATUS_ALLIN, {"left": true}))
+	state.apply_public(pub)
+	assert_false(state.refresh_from_view(), "同一手里不重排")
+	assert_eq(state.seats, [1, 2, 3])
+	state.apply_public(_pub([1, 3], {"phase": "idle"}))
+	assert_false(state.refresh_from_view(), "这一手结束后的空闲期也不重排")
+	state.apply_event({"type": "hand_started", "hand": 4, "seats": [1, 3], "dealt": [1, 3]})
+	assert_eq(state.seats, [1, 3], "下一手按事件的座位表")
+	state.apply_public(_pub([1, 3], {"hand": 4}))
+	assert_false(state.refresh_from_view())
+
+
+func test_late_first_frame_adopts_the_view_seats():
+	_apply(_pub([2, 3]))
+	state.apply_public(_pub([2, 3, 1]))
+	assert_true(state.sync_from_view(), "开场运镜期间开了新的一手、把他排进来:要重排")
+	assert_eq(state.seats, [2, 3, 1])
+	state.apply_public(_pub([2]))
+	assert_true(state.sync_from_view(), "第一帧照视图收走离场者")
+	assert_eq(state.seats, [2])
 
 
 # —— 事件改影子行 ——
@@ -219,7 +261,7 @@ func test_seat_entries_add_me_at_the_end_when_i_am_a_late_joiner():
 	_apply(_pub([2, 3]))
 	state.names[ME] = "我"
 	assert_eq(state.seat_entries(ME), [{"pid": 2, "name": "P2"}, {"pid": 3, "name": "P3"}, {"pid": ME, "name": "我"}])
-	_apply(_pub([1, 2, 3]))
+	_apply(_pub([1, 2, 3], {"hand": 4}))   # 下一手按视图换座
 	assert_eq(state.seat_entries(ME).map(func(e): return e["pid"]), [1, 2, 3])
 
 

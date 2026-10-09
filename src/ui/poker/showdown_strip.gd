@@ -7,7 +7,10 @@ extends PanelContainer
 const COLUMNS := 4
 const MAX_ENTRIES := 8
 const CARD_SIZE := Vector2(30, 42)
-const NAME_WIDTH := 72.0
+const NAME_WIDTH := 72.0           # 名字与牌型名一列的最小宽度(4 列满员时)
+const WIDE_NAME_WIDTH := 150.0     # 人少时这一列放宽到最多这么宽:牌型名(「两对 · 10 和 9」)不被省略
+const MAX_WIDTH := 600.0           # 整条的宽度预算(规格 §6.1)
+const CARDS_WIDTH := 68.0          # 每格里文字列之外的宽度:两张小牌、牌条内的间隙与格内间距(实测)
 const NAME_FONT := 13
 const HAND_FONT := 12
 const CELL_GAP := 3
@@ -50,15 +53,24 @@ func _ready() -> void:
 	add_child(_grid)
 
 
+static func text_width(count: int) -> float:
+	# 每格的文字列宽:把 600 的预算按实际列数分,减去两张小牌与间距,夹在 [NAME_WIDTH, WIDE_NAME_WIDTH]
+	var columns := clampi(count, 1, COLUMNS)
+	var cell := (MAX_WIDTH - 2.0 * PADDING.x - (columns - 1) * GRID_GAP.x) / columns
+	return clampf(floorf(cell - CARDS_WIDTH), NAME_WIDTH, WIDE_NAME_WIDTH)
+
+
 func set_entries(entries: Variant) -> void:
 	for old in _grid.get_children():
 		_grid.remove_child(old)
 		old.free()   # 已出树,直接释放(queue_free 在无头测试里会留到帧末成为孤儿)
-	for entry in sanitize(entries):
-		_grid.add_child(_cell(entry))
+	var clean := sanitize(entries)
+	var width := text_width(clean.size())
+	for entry in clean:
+		_grid.add_child(_cell(entry, width))
 
 
-func _cell(entry: Dictionary) -> HBoxContainer:
+func _cell(entry: Dictionary, width: float) -> HBoxContainer:
 	var cell := HBoxContainer.new()
 	cell.add_theme_constant_override("separation", CELL_GAP)
 	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -72,10 +84,10 @@ func _cell(entry: Dictionary) -> HBoxContainer:
 	cell.add_child(text)
 	var name_label := UiTheme.label(entry["name"], NAME_FONT, UiTheme.PARCHMENT, UiTheme.display_font())
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_label.custom_minimum_size.x = NAME_WIDTH
+	name_label.custom_minimum_size.x = width
 	text.add_child(name_label)
 	var hand_label := UiTheme.label(entry["hand_name"], HAND_FONT, UiTheme.BRASS_BRIGHT)
 	hand_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	hand_label.custom_minimum_size.x = NAME_WIDTH
+	hand_label.custom_minimum_size.x = width
 	text.add_child(hand_label)
 	return cell

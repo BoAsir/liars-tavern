@@ -5,12 +5,14 @@ extends Node
 #   --species=物种id     本次运行想要的形象(fox/bear/…/crocodile),只覆盖本次、不写设置;
 #                        每次名单更新与开局时打印 [debug] species {pid: id}(冒烟测试比对各进程)
 #   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
-#   --mode=玩法id        房主开房的玩法(liars / bomb_cat / holdem / short_deck,默认骗子酒馆)
+#   --mode=玩法id        配合 --autohost:liars / bomb_cat / holdem / short_deck(默认 liars;非法值退出码 1),默认房名跟着玩法
+#   --hands=N            德州房主:演到第 N 手开始时散局(本手结束后结算);非法值退出码 1
 #   --port=端口          房主优先绑定的游戏端口(并行测试互不串房)
 #   --room=房名          房主的房间名
 #   --autojoin=IP[:端口] 自动直连
 #   --discover[=房名]    自动加入局域网发现的(指定名字的)房间
 #   --bot                自动准备/选牌/出牌/质疑(走真实界面路径);开局后朝别人丢一个番茄、按 Q 说一句快捷语;
+#                        德州按合法动作下注、输光再领(见 PokerBot);
 #                        炸弹猫里由 BombCatBot 出牌、偶尔不行!、摸牌、塞回、给牌(同样走牌桌的公开入口)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
@@ -27,6 +29,9 @@ const BOT_FIDGET_KEYS := [KEY_W, KEY_S]
 const SHOT_SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛)
 const BOT_BANTER_DELAY := 2.0  # 开局后 bot 过这么久丢番茄,再过 BOT_SAY_DELAY 说快捷语(冒烟测试核对各端都收到)
 const BOT_SAY_DELAY := 1.8
+const BOT_RETRY := 2.0         # 德州 bot 提交后(被拒或没生效)再试的间隔
+const SPECTATE_HOLD := 5.0     # 截图模式下 bot 第一次输光先观战,看这么久再领筹码上桌(拍到观战机位)
+const MainMenuScreen := preload("res://src/ui/main_menu/main_menu.gd")
 
 var app: Node
 var opts := {}
@@ -40,6 +45,9 @@ var _fidget_step := 0
 var _tomato_from := {}   # 收到过谁丢的番茄(冒烟测试据此确认丢番茄走通)
 var _said_from := {}     # 收到过谁说的快捷语
 var _bomb_bot: BombCatBot = null
+var _hands_limit := 0      # --hands:演到第几手开始时散局;0 = 不自动散局
+var _hands_dealt := 0      # 自己被发到牌的手数(冒烟测试据此确认迟到者真的上了桌)
+var _spectated := false    # 截图模式下已经观战过一次
 
 
 func _init(p_app: Node) -> void:
@@ -78,6 +86,39 @@ static func species_line(entries: Array) -> String:
 	return "[debug] species {%s}" % ", ".join(parts)
 
 
+static func mode_option(p_opts: Dictionary) -> String:
+	# --mode:不写为默认玩法;不认识的值返回 "",由调用方以退出码 1 结束
+	var mode: String = p_opts.get("mode", GameMode.DEFAULT)
+	return mode if GameMode.is_valid(mode) else ""
+
+
+static func hands_option(p_opts: Dictionary) -> int:
+	# --hands:不写为 0(不自动散局);不是正整数返回 -1
+	if not p_opts.has("hands"):
+		return 0
+	var text: String = p_opts["hands"]
+	return int(text) if text.is_valid_int() and int(text) > 0 else -1
+
+
+static func room_option(p_opts: Dictionary, player_name: String, mode: String) -> String:
+	return p_opts.get("room", MainMenuScreen.default_room_name(player_name, mode))
+
+
+static func net_of(results: Array, pid: int) -> int:
+	for row in results:
+		if row is Dictionary and row.get("pid") == pid and row.get("net") is int:
+			return row["net"]
+	return 0
+
+
+static func net_sum(results: Array) -> int:
+	var total := 0
+	for row in results:
+		if row is Dictionary and row.get("net") is int:
+			total += row["net"]
+	return total
+
+
 func _ready() -> void:
 	if opts.is_empty():
 		set_process(false)
@@ -90,6 +131,12 @@ func _ready() -> void:
 		return
 	if opts.has("fast"):
 		Engine.time_scale = float(opts["fast"]) if opts["fast"] != "true" else 3.0
+	var mode := mode_option(opts)
+	_hands_limit = hands_option(opts)
+	if mode == "" or _hands_limit < 0:
+		push_error("[debug] FAIL bad_flag mode=%s hands=%s" % [opts.get("mode", ""), opts.get("hands", "")])
+		app.quit_game(1)
+		return
 	Net.joined_lobby.connect(_on_joined)
 	Net.lobby_updated.connect(_on_lobby)
 	Net.game_events.connect(_on_events)
@@ -107,8 +154,7 @@ func _ready() -> void:
 		_capture_later("menu", 2.5)
 	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
 	if opts.has("autohost"):
-		var room: String = opts.get("room", "%s 的酒馆" % player_name)
-		var err := Net.host_game(player_name, room, int(opts.get("port", "0")), host_mode(opts), _species())
+		var err := Net.host_game(player_name, room_option(opts, player_name, mode), int(opts.get("port", "0")), mode, _species())
 		print("[debug] host_game -> ", error_string(err))
 		if err != OK:
 			_fail("host_failed")
@@ -151,6 +197,9 @@ func _process(delta: float) -> void:
 	if screen != null and screen.get("state") is BombCatScreenState:
 		_bomb_bot_tick(screen, delta)
 		return
+	if screen != null and screen.has_method("choose_rebuy"):
+		_poker_tick(screen, delta)
+		return
 	if screen == null or not screen.has_method("_my_turn") or not screen._my_turn():
 		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
 		return
@@ -159,6 +208,31 @@ func _process(delta: float) -> void:
 		return
 	_think_timer = 999.0
 	_bot_act(screen)
+
+
+func _poker_tick(screen: Node, delta: float) -> void:
+	# 轮到自己就下注;输光再领(截图模式第一次先观战);挂机离座就回座。都走 PokerScreen 给按钮用的入口。
+	# 散局后什么都不做(结算事件到了、面板还没弹出时去领筹码只会被房主拒绝)
+	if _match_finished:
+		return
+	var status: String = screen.my_status()
+	var seat_choice := status in [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY]
+	if not screen.is_my_turn() and not seat_choice:
+		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
+		return
+	_think_timer -= delta
+	if _think_timer > 0.0:
+		return
+	_think_timer = BOT_RETRY
+	if screen.is_my_turn():
+		PokerBot.act(screen)
+	elif status == PokerRules.STATUS_BUSTED and opts.has("shots") and not _spectated:
+		_spectated = screen.choose_spectate()
+		_think_timer = SPECTATE_HOLD
+	elif status == PokerRules.STATUS_AWAY:
+		screen.choose_sit_in()
+	else:
+		screen.choose_rebuy()
 
 
 func _update_from(address: String, url: String) -> void:
@@ -275,11 +349,26 @@ func _on_lobby(players: Array) -> void:
 
 func _on_events(events: Array) -> void:
 	for ev in events:
-		if ev["type"] == "match_over":
-			print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
-			print("[debug] BANTER tomatoes=%d said=%d" % [_tomato_from.size(), _said_from.size()])
-			print("[debug] MATCH_OVER winner=", ev["winner"])
-			_match_finished = true
+		match ev["type"]:
+			"match_over":
+				print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
+				print("[debug] BANTER tomatoes=%d said=%d" % [_tomato_from.size(), _said_from.size()])
+				print("[debug] MATCH_OVER winner=", ev["winner"])
+				_match_finished = true
+			"hand_started":
+				print("[debug] HAND_STARTED hand=", ev.get("hand"))
+			"hole_cards":
+				if Net.my_pid() in ev.get("pids", []):
+					_hands_dealt += 1
+					print("[debug] DEALT hand=", ev.get("hand"))
+			"session_over":
+				var results: Array = ev.get("results", [])
+				print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
+				print("[debug] BANTER tomatoes=%d said=%d" % [_tomato_from.size(), _said_from.size()])
+				print("[debug] SESSION_OVER hands_dealt=%d net=%d" % [_hands_dealt, net_of(results, Net.my_pid())])
+				if Net.is_host:
+					print("[debug] net_sum=%d" % net_sum(results))
+				_match_finished = true
 
 
 func _on_game_started(seats: Array) -> void:
@@ -292,9 +381,11 @@ func _on_game_started(seats: Array) -> void:
 	var director = screen.get("director") if screen != null else null
 	if director is TableDirector or director is BombCatDirector:
 		director.event_started.connect(_on_director_event)
-		if opts.has("camera"):
-			director.seat_camera.set_first_person(opts["camera"] == "first", false)
-			_capture_once("seat", 3.0)
+	elif director is PokerDirector:
+		director.event_started.connect(_on_poker_event)
+	if director != null and opts.has("camera") and director.get("seat_camera") != null:
+		director.seat_camera.set_first_person(opts["camera"] == "first", false)
+		_capture_once("seat", 3.0)
 
 
 func _on_director_event(ev: Dictionary) -> void:
@@ -317,6 +408,38 @@ func _on_director_event(ev: Dictionary) -> void:
 		"match_over":
 			_capture_once("victory", 1.5)
 			_capture_once("settlement", 3.3)
+			if opts.has("quit-after-match"):
+				await get_tree().create_timer(5.0 if Net.is_host else 4.0).timeout
+				app.quit_game(0)
+
+
+func _on_poker_event(ev: Dictionary) -> void:
+	# 德州截图标记(规格 §8):deal、flop、my_turn、allin、showdown、pot_won、spectate、settlement
+	match ev.get("type", ""):
+		"hand_started":
+			_capture_once("deal", PokerDirector.HAND_START_SETTLE + 1.5)
+			if Net.is_host and _hands_limit > 0 and ev.get("hand") == _hands_limit:
+				print("[debug] ending session after hand ", _hands_limit)
+				Net.end_poker_session()
+		"street":
+			if ev.get("street") == PokerRules.FLOP:
+				_capture_once("flop", 1.0)
+		"turn":
+			if ev.get("pid") == Net.my_pid():
+				_capture_once("my_turn", 0.3)
+		"action":
+			if ev.get("all_in", false):
+				_capture_once("allin", 0.8)
+		"reveal":
+			if ev.get("reason") == PokerRules.SHOWDOWN:
+				_capture_once("showdown", 1.0)
+		"pot_won":
+			_capture_once("pot_won", 1.2)
+		"spectate":
+			if ev.get("pid") == Net.my_pid():
+				_capture_once("spectate", PokerDirector.CAMERA_MOVE + 0.8)
+		"session_over":
+			_capture_once("settlement", PokerDirector.SESSION_OVER_HOLD + 1.0)
 			if opts.has("quit-after-match"):
 				await get_tree().create_timer(5.0 if Net.is_host else 4.0).timeout
 				app.quit_game(0)

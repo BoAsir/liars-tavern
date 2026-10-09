@@ -71,6 +71,6 @@ func test_join_request_still_takes_two_arguments():
 	assert_eq(_args("rpc_join_request").size(), 2, "rpc_join_request(pname, version)")
 
 
-func test_protocol_stays_at_v5():
-	# 自选形象并入未发布的 v5(和德州一起作为 0.7.0 发布),不另升 v6
-	assert_eq(Protocol.VERSION, 5)
+func test_protocol_is_v6():
+	# 德州单独随 0.7.0 用 v5 发布了;自选形象、丢番茄与快捷语、炸弹猫随 0.8.0 升到 v6(握手仍能告诉 v5 客户端「版本不匹配」)
+	assert_eq(Protocol.VERSION, 6)

@@ -99,8 +99,9 @@ func test_rpc_table_is_four_reliable_methods():
 		assert_false(config[name]["call_local"], name)
 
 
-func test_protocol_number_is_unchanged():
-	assert_eq(Protocol.VERSION, 5)
+func test_protocol_number_is_v6():
+	# 德州单独随 0.7.0 用 v5 发布;丢番茄、快捷语、自选形象、炸弹猫随 0.8.0 一起升到 v6,不和 0.7.0 同桌
+	assert_eq(Protocol.VERSION, 6)
 
 
 # —— 丢番茄 ——

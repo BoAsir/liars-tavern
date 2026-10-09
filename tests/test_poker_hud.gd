@@ -49,7 +49,13 @@ func test_bottom_mode_follows_my_status_then_the_showdown():
 	assert_eq(PokerHud.bottom_mode_for(_player("busted"), false), PokerHud.BOTTOM_BUST)
 	assert_eq(PokerHud.bottom_mode_for(_player("spectating"), false), PokerHud.BOTTOM_SPECTATE)
 	assert_eq(PokerHud.bottom_mode_for(_player("away"), false), PokerHud.BOTTOM_AWAY)
-	assert_eq(PokerHud.bottom_mode_for(_player("waiting"), true), PokerHud.BOTTOM_WAITING, "等待下一手只看 status")
+	assert_eq(PokerHud.bottom_mode_for(_player("waiting"), false), PokerHud.BOTTOM_WAITING, "等待下一手只看 status")
+	# 摊牌条是公共信息:观战 / 离座 / 等待下一手的人在摊牌时也看它;输光提示仍然最优先
+	assert_eq(PokerHud.bottom_mode_for(_player("waiting"), true), PokerHud.BOTTOM_SHOWDOWN)
+	assert_eq(PokerHud.bottom_mode_for(_player("spectating"), true), PokerHud.BOTTOM_SHOWDOWN)
+	assert_eq(PokerHud.bottom_mode_for(_player("away"), true), PokerHud.BOTTOM_SHOWDOWN)
+	assert_eq(PokerHud.bottom_mode_for(_player("busted"), true), PokerHud.BOTTOM_BUST)
+	assert_eq(PokerHud.bottom_mode_for({}, true), PokerHud.BOTTOM_SHOWDOWN, "还没进座位表的迟到者也看摊牌")
 	assert_eq(PokerHud.bottom_mode_for(_player("active"), true), PokerHud.BOTTOM_SHOWDOWN)
 	assert_eq(PokerHud.bottom_mode_for(_player("folded"), true), PokerHud.BOTTOM_SHOWDOWN)
 	assert_eq(PokerHud.bottom_mode_for(_player("active"), false), PokerHud.BOTTOM_BET)
@@ -281,6 +287,24 @@ func test_bottom_centre_fits_its_budget_in_every_mode():
 			"%s 横向 %s" % [mode, box.position])
 		assert_true(box.position.y >= PokerHud.BOTTOM_TOP_MIN, "%s 顶边 %s" % [mode, box.position.y])
 		assert_true(box.position.y + box.size.y <= SCREEN.y, "%s 底边" % mode)
+
+
+func test_showdown_text_column_widens_when_few_players_show():
+	assert_eq(ShowdownStrip.text_width(2), ShowdownStrip.WIDE_NAME_WIDTH, "单挑:牌型名不被省略")
+	assert_gt(ShowdownStrip.text_width(3), ShowdownStrip.text_width(4))
+	assert_gte(ShowdownStrip.text_width(8), ShowdownStrip.NAME_WIDTH)
+	assert_eq(ShowdownStrip.text_width(0), ShowdownStrip.WIDE_NAME_WIDTH)
+
+
+func test_showdown_strip_stays_in_budget_for_every_player_count():
+	for count in range(1, ShowdownStrip.MAX_ENTRIES + 1):
+		var entries := []
+		for i in count:
+			entries.append({"name": "第 %d 位名字很长的客人" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "葫芦 · Q 带 7"})
+		hud.set_showdown(entries)
+		hud.set_bottom_mode(PokerHud.BOTTOM_SHOWDOWN)
+		await wait_process_frames(3)
+		assert_true(hud.bottom_box.size.x <= PokerHud.BOTTOM_MAX.x, "%d 人宽 %s" % [count, hud.bottom_box.size])
 
 
 func test_showdown_strip_shows_at_most_two_rows_of_four():
