@@ -28,8 +28,8 @@
 | 7a HUD 控件 | ✅ 已写完、已审查修复(th/hud-fix),展台截图收尾完成 | BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护;新回合按 hand/street/current_pid 或合法动作变化判定,牌桌要对每个公共视图都调 `update`)、PokerHud、CardStrip、PokerNameplate(两行各自按文字宽度给足)、PokerPrompts、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测;主题给 HSlider 铜色轨道。`tools/poker_showcase.gd` + `tools/shot.gd` 已能摆出全部 8 种底部状态(bet/wait/showdown/bust/spectate/waiting/away/settlement)与观战机位,1280×720 与 1280×960 都核对过规格 §6.1 预算、铭牌不相撞 |
 | 7b 控制器与演出 | ✅ 已写完、已独立审查修复(a9618e1) | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。2026-10-09 两路独立审查(规格符合性、运行时健壮性)修掉:迟到者第一帧不重排、同一手里离场者座位被提前收走、旁人事件重置加注额、结算面板下露出输光提示与机位被拉回、最大牌型剧透、观战者看不到摊牌条、再领回执、散局按钮、过期的弃牌确认、节奏余量 4 帧;新增 `tests/poker_screen_harness.gd`(流程测试公共装置)与 `test_poker_screen_edges.gd`;规格 §4.2、§4.7、§6.1 补写了对应规则 |
 | 8 bot 与冒烟 | ✅ fd37f43 | DebugFlags `--mode` / `--hands` / 日志标记 / 德州截图标记;`PokerBot`(概率表纯函数 + 经 `PokerScreen.submit`);`tools/poker_smoke.sh`(holdem、short_deck 都通过);README 两种玩法、德州规则与操作键、新开关、冒烟与截图命令 |
-| 9 联调与截图验收 | ⬜ 未开始 | |
-| 10 审查 | ⬜ 未开始 | |
+| 9 联调与截图验收 | ✅ 2026-10-09 | 全量 898 测试;`lan_smoke.sh`、`MODE=holdem/short_deck poker_smoke.sh` 都通过。真机:8 人长牌(有窗口房主 + 7 个无头直连 bot,`--hands=6`)全部 9 个德州截图标记都拍到、退出码 0、net_sum=0;2 人短牌单挑;3 人骗子酒馆(桌子、烛台、立牌正常)。修了结算面板下露出输光提示/错误吐司、单挑摊牌条牌型名被省略。性能:德州 8 人展台与骗子酒馆 4 人展台同机帧耗时相当(1080p 10.95 vs 11.10 ms,4K 37.4 vs 38.5 ms;要求 ≤ 1.25 倍),绘制调用 726 vs 544。有窗口的房主要加 `--disable-vsync`、bot 晚 10 秒启动,否则窗口在后台时房主帧率太低、bot 8 秒握手超时 |
+| 10 审查 | 🔄 进行中 | 三路只读审查:规则引擎、网络与活性、主菜单/等待厅/3D/骗子酒馆回归(7b 已单独审过) |
 
 ## 合并清单(第一批 → feature/texas-holdem)—— 已完成,留作记录
 
