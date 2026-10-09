@@ -62,13 +62,24 @@ static var _cache := {}
 
 
 static func wood(preset: String) -> ShaderMaterial:
-	return _cached("wood:" + preset, func():
+	return wood_with("wood:" + preset, WOOD_PRESETS[preset])
+
+
+static func wood_with(key: String, params: Dictionary) -> ShaderMaterial:
+	# 自定义木材(参数同 WOOD_PRESETS 的条目),按 key 缓存;各区域建模器在自己的文件里定义新木材,不必改预设表
+	return _cached(key, func():
 		var mat := ShaderMaterial.new()
 		mat.shader = WOOD_SHADER
-		for key in WOOD_PRESETS[preset]:
-			var value = WOOD_PRESETS[preset][key]
-			mat.set_shader_parameter(key, Vector3(value.r, value.g, value.b) if value is Color else value)
+		for param in params:
+			var value = params[param]
+			mat.set_shader_parameter(param, Vector3(value.r, value.g, value.b) if value is Color else value)
 		return mat)
+
+
+static func cached(key: String, factory: Callable) -> Variant:
+	# 各区域建模器自定义材质的统一缓存:同一 key 只创建一次。材质都在开场搭建时建好,
+	# 对局中不再新建(首次用到新材质要编译管线,会卡一下)
+	return _cached(key, factory)
 
 
 static func felt() -> ShaderMaterial:

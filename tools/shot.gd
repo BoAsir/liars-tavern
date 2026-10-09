@@ -1,9 +1,12 @@
 extends SceneTree
 # 视觉检查:搭建酒馆并按指定机位截图(需要窗口渲染,不能 --headless)。
-# 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase | --poker-showcase]
+# 用法:godot --path . -s tools/shot.gd -- --out=/tmp/shots --views=seat,menu,overhead [--showcase | --poker-showcase] [--size=1600x900] [--fov=40]
 # --showcase 时在桌边摆上 4 名酒客、手牌与左轮,用于检查角色与道具。
 # --poker-showcase 时摆德州展台(tools/poker_showcase.gd);德州机位 poker_seat / poker_overview / poker_lobby
 # 取自 TableWorld 的机位函数(不抄数字),没有展台时另建一个放大的空德州桌。4:3 检查加引擎参数 --resolution 1280x960。
+# 机位可以是下面的预设名,也可以是自由机位 "px,py,pz:tx,ty,tz"(相机位置:看向的点),
+# 含自由机位时各机位改用分号分隔,如 --views="seat;0,1.4,0.5:0,1.1,-1.25"。
+# 自由机位的文件名为 cam1.png、cam2.png……(按出现顺序);--fov 只作用于自由机位。
 # --hud=bet,showdown,… 给展台的德州机位叠上整套 HUD(状态与 --views 按位置对应,不够的沿用最后一个;见 PokerShowcase.HUD_STATES),
 # --neck=x,z 让展台上所有酒客把脖子伸到这个座位偏移(-z 朝桌心,会按 Patron.NECK_REACH 截断),检查探头的样子。
 # 文件名带状态,同一机位可以拍几种底部区域。没写 --hud 时展台的德州机位也带 HUD:座位机位 bet,观战机位 spectate。
@@ -12,7 +15,9 @@ extends SceneTree
 
 
 const WARMUP_FRAMES := 45
-const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
+# 截图前连续强制绘制几帧再读图:窗口被其他窗口挡住时 macOS 不再调度正常绘制(等 frame_post_draw 会永远卡住),
+# 强制绘制不依赖窗口可见;体积雾的时域累积也要几帧才收敛
+const SETTLE_DRAWS := 8
 const POKER_ME := 1
 const NECK_SETTLE := 1.5   # 秒:--neck 之后等弹簧脖子停稳
 
@@ -40,7 +45,11 @@ func _draw_when_covered() -> void:
 func _run() -> void:
 	var out_dir: String = opts.get("out", OS.get_user_data_dir() + "/shots")
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	if opts.has("size"):
+		var dims: PackedStringArray = opts["size"].split("x")
+		root.size = Vector2i(int(dims[0]), int(dims[1]))
 	RenderBudget.apply(root)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
 	if opts.has("showcase"):
@@ -56,14 +65,25 @@ func _run() -> void:
 		_poker = poker
 	if opts.has("neck"):
 		await _stretch_necks(opts["neck"])
-	var views: PackedStringArray = opts.get("views", "seat").split(",")
+	var views: PackedStringArray = opts.get("views", "seat").split(";" if opts.get("views", "").contains(":") else ",")
 	var hud_states: PackedStringArray = opts.get("hud", "").split(",")
+	var custom := 0
+	var default_fov := tavern.camera_rig.camera.fov
 	for index in views.size():
 		var view: String = views[index]
+		var label := view
 		var hud_state: String = hud_states[mini(index, hud_states.size() - 1)]
-		if hud_state == "" and _poker != null:
+		if hud_state == "" and _poker != null and view.begins_with("poker_"):
 			hud_state = PokerShowcase.SPECTATE_STATE if view == "poker_overview" else PokerShowcase.BET_STATE
-		if view.begins_with("poker_"):
+		tavern.camera_rig.camera.fov = default_fov
+		if view.contains(":"):
+			custom += 1
+			label = "cam%d" % custom
+			var ends := view.split(":")
+			tavern.camera_rig.snap(_vec(ends[0]), _vec(ends[1]))
+			tavern.camera_rig.fill_light.light_energy = 0.0
+			tavern.camera_rig.camera.fov = float(opts.get("fov", str(default_fov)))
+		elif view.begins_with("poker_"):
 			_place_poker_camera(tavern, view)
 			_stage_hud(tavern, view, hud_state)
 		else:
@@ -72,10 +92,15 @@ func _run() -> void:
 			await process_frame
 		for i in SETTLE_DRAWS:
 			RenderingServer.force_draw(false)
-		var path := "%s/%s.png" % [out_dir, view if hud_state == "" else view + "_" + hud_state]
+		var path := "%s/%s.png" % [out_dir, label if hud_state == "" else label + "_" + hud_state]
 		root.get_texture().get_image().save_png(path)
 		print("saved ", path)
 	quit()
+
+
+func _vec(text: String) -> Vector3:
+	var parts := text.split(",")
+	return Vector3(float(parts[0]), float(parts[1]), float(parts[2]))
 
 
 func _stretch_necks(spec: String) -> void:

@@ -1,4 +1,6 @@
 // 程序化木纹:年轮 + 纤维纹理,可选木板拼接(地板/护墙板)。纹理在物体空间计算,无需 UV。
+// 合批网格(MeshBatch)里按部件自身坐标(CUSTOM0)取纹理,合并前后纹理一致;部件种子(CUSTOM1)错开年轮,
+// 顶点色作为部件染色(未合批的网格顶点色为白色,不受影响)。
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
@@ -18,9 +20,12 @@ uniform float varnish = 0.0;
 uniform float wear = 0.0;
 
 varying vec3 obj_pos;
+varying float part_seed;
 
 void vertex() {
-	obj_pos = VERTEX * scale;
+	bool batched = CUSTOM1.x >= 2.0;
+	obj_pos = (batched ? CUSTOM0.xyz : VERTEX) * scale;
+	part_seed = batched ? fract(CUSTOM1.x) : 0.0;
 }
 
 float axis_component(vec3 v, int axis) {
@@ -43,7 +48,7 @@ void fragment() {
 		float edge = min(min(fa, 1.0 - fa) * plank_width, min(fl, 1.0 - fl) * plank_length);
 		seam = 1.0 - smoothstep(0.0, 0.005, edge);
 	}
-	float rnd = hash12(vec2(plank_id, 1.3));
+	float rnd = hash12(vec2(plank_id + part_seed * 113.0, 1.3));
 	float warp = fbm(vec2(along * 0.45, across * 1.6) + rnd * 10.0);
 	vec2 ring_p = vec2(across + rnd * 13.0, depth * 0.6 + rnd * 7.0);
 	float rings = fract(length(ring_p) * ring_frequency + warp * 1.1);
@@ -55,7 +60,7 @@ void fragment() {
 	float blotch = fbm(vec2(along, across) * 1.7 + 4.0);
 	col *= mix(1.0, 0.7 + 0.6 * blotch, wear);
 	col *= mix(1.0, 0.2, seam);
-	ALBEDO = col;
+	ALBEDO = col * COLOR.rgb;
 	ROUGHNESS = clamp(roughness_base - varnish * 0.45 + grain * 0.18 + seam * 0.3, 0.06, 1.0);
 	SPECULAR = 0.45;
 }

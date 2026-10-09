@@ -13,7 +13,7 @@ const SEATS := 8
 const SETTLE := 0.8                   # 秒:登场缩放(0.55 秒)走完,头部位置才是坐定后的
 # 吊灯罩(照 Tavern._build_lamp):灯罩中心在吊点下 LAMP_DROP + 0.1,高 0.2,上口半径 0.07,
 # 下口 0.36 外加一圈外径 0.37 的黄铜圈;吊点在天花板正中
-const SHADE_CENTER_Y := Tavern.ROOM_HEIGHT - Tavern.LAMP_DROP - 0.1
+const SHADE_CENTER_Y := Tavern.ROOM_HEIGHT - TavernTable.LAMP_DROP - 0.1
 const SHADE_HALF_HEIGHT := 0.1
 const SHADE_TOP_RADIUS := 0.07
 const SHADE_RIM_RADIUS := 0.37

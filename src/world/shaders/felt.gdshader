@@ -38,5 +38,6 @@ void fragment() {
 }
 
 void vertex() {
-	obj_pos = VERTEX;
+	// 合批网格(MeshBatch)里用部件自身坐标(CUSTOM0),合并前后图案一致
+	obj_pos = CUSTOM1.x >= 2.0 ? CUSTOM0.xyz : VERTEX;
 }
