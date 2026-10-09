@@ -161,7 +161,7 @@ func test_held_key_stretches_the_neck_up_to_the_reach():
 	gaze.held = Vector3(0, 0, -1)
 	_frames(1)
 	assert_almost_eq(gaze.neck_input().z, -SeatGaze.NECK_SPEED * FRAME, 0.0001, "按住 W 朝桌心探出")
-	_frames(30)
+	_frames(ceili(Patron.NECK_REACH / (SeatGaze.NECK_SPEED * FRAME)) + 1)   # 按住够久,一定探到上限
 	# 上限是这位酒客自己的 neck_reach():Q 版大头的狐狸吻变长,按「头部伸出 + 吻长 ≤ FRONT_REACH_MAX」少伸一点
 	assert_almost_eq(gaze.neck_input().length(), _patron(ME).neck_reach(), 0.0001, "探到上限为止")
 	assert_eq(_patron(ME).asked_neck, gaze.neck_input(), "自己的头跟着探出去")

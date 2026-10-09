@@ -6,12 +6,12 @@ extends GutTest
 
 
 const SETTLE := 1.2          # 秒:登场缩放与前倾插值走完
-const NECK_SETTLE := 1.2     # 秒:脖子弹簧追到目标(最远 2.55 米)
+const NECK_SETTLE := 1.2     # 秒:脖子弹簧追到目标(最远 3 米)
 const MAX_BLOCKED := 0.05    # 允许被包围盒挡住的采样点比例(包围盒的角比实际形状大)
 const R := Patron.NECK_REACH
 const NECK_OFFSETS := [Vector3.ZERO, Vector3(0.4, 0, 0), Vector3(0.85, 0, 0), Vector3(0.6, 0, -0.6),
 	Vector3(0, 0, -0.85), Vector3(-0.85, 0, 0), Vector3(0.6, 0, 0.6),
-	# 伸到最远(三倍之后):正前、两侧、斜前,以及中途扫过牌扇的位置
+	# 伸到最远(3 米):正前、两侧、斜前,以及中途扫过牌扇的位置
 	Vector3(R, 0, 0), Vector3(-R, 0, 0), Vector3(0, 0, -R), Vector3(R * 0.7, 0, -R * 0.7), Vector3(-R * 0.7, 0, -R * 0.7),
 	Vector3(1.5, 0, 0), Vector3(1.5, 0, -0.5)]
 const RISKY_OFFSETS := [Vector3.ZERO, Vector3(0.4, 0, 0), Vector3(0.85, 0, 0), Vector3(0.6, 0, 0.6)]
