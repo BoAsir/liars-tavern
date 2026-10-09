@@ -4,8 +4,9 @@ class_name Protocol
 
 # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了);
 # v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent);
-# v6:快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌)
-const VERSION := 6
+# v6:快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌);
+# v7:德州「开始下一手」(意图 next、事件 next_ready)与牌局记录(hand_record),旧版没有开始按钮,不能同桌
+const VERSION := 7
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800
