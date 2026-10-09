@@ -38,7 +38,7 @@ jobs:
       notes: ${{ steps.plan.outputs.notes }}
       release_notes: ${{ steps.plan.outputs.release_notes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: plan
         env:
           NOTES_OVERRIDE: ${{ inputs.notes }}
@@ -50,7 +50,7 @@ jobs:
     runs-on: macos-15   # release.sh 用到 ditto / plutil / codesign
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0   # ship.sh 要核对提交在 origin/main 上,seed 要读上一版的 tag
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: Cache Godot
         id: godot-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/godot
@@ -105,7 +105,7 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/update_signing_key.pem"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: release-build-${{ needs.plan.outputs.build }}
           path: |
@@ -122,12 +122,12 @@ jobs:
     permissions:
       contents: write   # 推 updates 分支、建 tag 与 Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: release-build-${{ needs.plan.outputs.build }}
           path: build
