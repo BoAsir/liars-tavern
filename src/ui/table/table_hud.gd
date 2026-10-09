@@ -81,7 +81,7 @@ func _build_rules_button() -> void:
 	add_child(row)
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY), quip_pressed))
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(Quips.HOTKEY), quip_pressed))
 	row.add_child(_top_button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY), rules_pressed))
 
 

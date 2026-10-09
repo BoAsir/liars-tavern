@@ -51,7 +51,7 @@ func test_action_sets():
 
 func test_seat_intents_include_sitting_back_in():
 	# 网络层按 BET_ACTIONS + SEAT_ACTIONS 校验意图(规格 §3.3),这几个字符串是协议的一部分
-	assert_eq(PokerRules.SEAT_ACTIONS, ["rebuy", "spectate", "sit_in"])
+	assert_eq(PokerRules.SEAT_ACTIONS, ["rebuy", "spectate", "sit_in", "next"])
 	for action in PokerRules.SEAT_ACTIONS:
 		assert_false(PokerRules.BET_ACTIONS.has(action))
 	assert_eq(PokerRules.STATUS_AWAY, "away")

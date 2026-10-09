@@ -136,6 +136,12 @@ func play(ev: Dictionary) -> void:
 			_spectate(ev)
 		"away", "sit_in":
 			_seat_change(ev)
+		"next_ready":
+			screen.note_event(ev)
+			screen.refresh_actions()   # 铭牌「已准备」、底部「等待其他人(2/5)」
+		"hand_record":
+			screen.note_event(ev)
+			screen.add_record()
 		"player_joined":
 			_player_joined(ev)
 		"player_left":

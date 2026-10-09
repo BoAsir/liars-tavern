@@ -190,12 +190,13 @@ func _bot_quip(screen: Node, delta: float) -> void:
 
 
 func _poker_tick(screen: Node, delta: float) -> void:
-	# 轮到自己就下注;输光再领(截图模式第一次先观战);挂机离座就回座。都走 PokerScreen 给按钮用的入口。
+	# 轮到自己就下注;输光再领(截图模式第一次先观战);挂机离座就回座;一手结束点「开始下一手」。都走 PokerScreen 给按钮用的入口。
 	# 散局后什么都不做(结算事件到了、面板还没弹出时去领筹码只会被房主拒绝)
 	if _match_finished:
 		return
 	var status: String = screen.my_status()
-	var seat_choice := status in [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY]
+	var seat_choice: bool = status in [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY] \
+		or screen.wants_next()
 	if not screen.is_my_turn() and not seat_choice:
 		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
 		return
@@ -210,6 +211,8 @@ func _poker_tick(screen: Node, delta: float) -> void:
 		_think_timer = SPECTATE_HOLD
 	elif status == PokerRules.STATUS_AWAY:
 		screen.choose_sit_in()
+	elif screen.wants_next():
+		screen.choose_next()
 	else:
 		screen.choose_rebuy()
 
@@ -360,6 +363,17 @@ func _on_poker_event(ev: Dictionary) -> void:
 				_capture_once("showdown", 1.0)
 		"pot_won":
 			_capture_once("pot_won", 1.2)
+		"hand_over":
+			_capture_once("next_prompt", 1.0)
+		"hand_record":
+			if opts.has("shots") and not _shot_counts.has("history") and _hands_dealt >= 2:
+				# 打过两手后打开牌局记录拍一张,再收起
+				var screen: Node = app.current_screen()
+				screen.toggle_history()
+				_capture_once("history", 0.5)
+				await get_tree().create_timer(1.5).timeout
+				if is_instance_valid(screen) and is_instance_valid(screen.get("_history")):
+					screen.toggle_history()
 		"spectate":
 			if ev.get("pid") == Net.my_pid():
 				_capture_once("spectate", PokerDirector.CAMERA_MOVE + 0.8)

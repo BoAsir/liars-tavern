@@ -13,6 +13,8 @@ signal end_pressed
 signal rebuy_pressed
 signal spectate_pressed
 signal sit_in_pressed
+signal next_pressed
+signal history_pressed
 signal action_chosen(action: String, amount: int)
 signal fold_confirm_requested
 
@@ -43,6 +45,8 @@ const BOTTOM_BUST := PokerPrompts.BUST
 const BOTTOM_SPECTATE := PokerPrompts.SPECTATE
 const BOTTOM_WAITING := PokerPrompts.WAITING
 const BOTTOM_AWAY := PokerPrompts.AWAY
+const BOTTOM_NEXT := PokerPrompts.NEXT
+const BOTTOM_NEXT_WAIT := PokerPrompts.NEXT_WAIT
 const STATUS_MODES := {
 	PokerRules.STATUS_BUSTED: BOTTOM_BUST,
 	PokerRules.STATUS_SPECTATING: BOTTOM_SPECTATE,
@@ -101,11 +105,15 @@ static func my_status_text(player: Dictionary) -> String:
 	return "筹码 %s · 盈亏 %s · 领取 %d 次" % [ChipText.format(_int(player, "stack")), ChipText.signed(_int(player, "net")), _int(player, "buyins")]
 
 
-static func bottom_mode_for(player: Dictionary) -> String:
-	# 按 status 的座位提示(输光 / 观战 / 离座 / 等待下一手);否则下注控件(含旁人回合的横幅)。摊牌在右侧面板,不占底部
+static func bottom_mode_for(player: Dictionary, between_hands := false) -> String:
+	# 按 status 的座位提示(输光 / 观战 / 离座 / 等待下一手);两手之间要接着打的人是「开始下一手」(点过了是等别人);
+	# 否则下注控件(含旁人回合的横幅)。摊牌在右侧面板,不占底部
 	if player.is_empty():
 		return BOTTOM_NONE
-	return STATUS_MODES.get(player.get("status"), BOTTOM_BET)
+	var status: Variant = player.get("status")
+	if between_hands and not [PokerRules.STATUS_BUSTED, PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY].has(status):
+		return BOTTOM_NEXT_WAIT if player.get("confirmed") == true else BOTTOM_NEXT
+	return STATUS_MODES.get(status, BOTTOM_BET)
 
 
 static func _int(player: Dictionary, key: String) -> int:
@@ -155,16 +163,21 @@ func _build_top_right() -> void:
 	end_button.visible = false
 	end_button.pressed.connect(func(): end_pressed.emit())
 	row.add_child(end_button)
-	var quip_button := UiTheme.button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY))
-	quip_button.add_theme_font_size_override("font_size", 15)
-	quip_button.focus_mode = Control.FOCUS_NONE
-	quip_button.pressed.connect(func(): quip_pressed.emit())
-	row.add_child(quip_button)
+	row.add_child(_top_button("记录 · %s" % OS.get_keycode_string(HandHistoryPanel.HOTKEY), history_pressed))
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(Quips.HOTKEY), quip_pressed))
 	rules_button = UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
 	rules_button.add_theme_font_size_override("font_size", 15)
 	rules_button.focus_mode = Control.FOCUS_NONE
 	rules_button.pressed.connect(func(): rules_pressed.emit())
 	row.add_child(rules_button)
+
+
+func _top_button(text: String, sig: Signal) -> Button:
+	var button := UiTheme.button(text)
+	button.add_theme_font_size_override("font_size", 15)
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func(): sig.emit())
+	return button
 
 
 func _build_bottom() -> void:
@@ -185,6 +198,7 @@ func _build_bottom() -> void:
 	prompts.rebuy_pressed.connect(func(): rebuy_pressed.emit())
 	prompts.spectate_pressed.connect(func(): spectate_pressed.emit())
 	prompts.sit_in_pressed.connect(func(): sit_in_pressed.emit())
+	prompts.next_pressed.connect(func(): next_pressed.emit())
 	bottom_box.add_child(prompts)
 
 
@@ -302,7 +316,12 @@ func set_showdown(entries: Variant) -> void:
 
 
 func set_bust_countdown(remaining: float, total: float) -> void:
+	# 输光 / 开始下一手:距下一手自动开始的倒计时
 	prompts.set_countdown(remaining, total)
+
+
+func set_next_progress(confirmed: int, needed: int) -> void:
+	prompts.set_progress(confirmed, needed)
 
 
 func set_turn(text: String, mine: bool) -> void:

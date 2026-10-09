@@ -9,7 +9,7 @@ extends Control
 
 
 const KEY_PREFIX := "quip:%d"   # WorldLabels 里他人气泡的键(与出牌的气泡分开,两个可以同时在)
-const TOGGLE_KEY := KEY_T
+
 
 var app: Node
 var my_pid := 0
@@ -69,7 +69,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		menu.close()
 		return
-	if event.keycode == TOGGLE_KEY and not app.is_modal_open():
+	if event.keycode == Quips.HOTKEY and not app.is_modal_open():
 		get_viewport().set_input_as_handled()
 		toggle()
 		return

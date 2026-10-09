@@ -23,6 +23,7 @@ const STATUS_TEXT := {
 	PokerRules.STATUS_AWAY: "离座",
 	PokerRules.STATUS_LEFT: "已离开",
 }
+const CONFIRMED_TEXT := "已准备"
 const DIMMED_STATUSES := [PokerRules.STATUS_FOLDED, PokerRules.STATUS_SPECTATING]
 
 var _name: Label
@@ -35,6 +36,8 @@ static func status_text(player: Dictionary) -> String:
 	# 已离开优先(全下后离开的人 status 仍是 allin);在本手中的人显示本轮下注
 	if has_left(player):
 		return STATUS_TEXT[PokerRules.STATUS_LEFT]
+	if player.get("confirmed") is bool and player["confirmed"]:
+		return CONFIRMED_TEXT   # 两手之间点了「开始下一手」
 	var status: Variant = player.get("status")
 	if not status is String:
 		return ""

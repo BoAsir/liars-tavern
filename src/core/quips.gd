@@ -14,6 +14,7 @@ const LINES := [
 	"给阿姨倒一杯卡布奇诺",
 	"17 张牌你能秒我?",
 ]
+const HOTKEY := KEY_T             # 开关九宫格(牌桌 HUD 的按钮文案也用它;放在这里,离线截图工具不用编译 Net)
 const COOLDOWN := 3.0          # 秒:每人说完一句后多久才能再说(客户端本地;房主另有略宽的限速)
 const BUBBLE_SECONDS := 2.5    # 气泡停留多久(不含弹出与淡出)
 

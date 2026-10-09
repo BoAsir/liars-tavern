@@ -21,7 +21,7 @@ const WORST_POTS := 7           # 8 人全下额度各不相同时最多 7 个�
 const BET_STATE := "bet"
 const SPECTATE_STATE := "spectate"
 const SETTLEMENT_STATE := "settlement"
-const HUD_STATES := [BET_STATE, "wait", "showdown", "bust", SPECTATE_STATE, "waiting", "away", SETTLEMENT_STATE]
+const HUD_STATES := [BET_STATE, "wait", "showdown", "bust", SPECTATE_STATE, "waiting", "away", SETTLEMENT_STATE, "next", "next_wait"]
 const LEFT_ROWS := [["早退的猫", 0, 2, -4000], ["路过的鸭", 3480, 1, 1480]]   # 散局前离开的人:名字、筹码、领取、盈亏
 const NAMES := {1: "我", 2: "阿狸", 3: "酒馆常客", 4: "一个名字非常非常长的客人", 5: "小熊", 6: "狼叔", 7: "猪猪侠", 8: "老狐狸"}
 const TURN_LEFT := 23.0
@@ -215,6 +215,11 @@ func _stage_bottom(pub: Dictionary, state: String) -> void:
 			hud.set_bottom_mode(PokerHud.BOTTOM_WAITING)
 		"away":
 			hud.set_bottom_mode(PokerHud.BOTTOM_AWAY)
+		"next", "next_wait":
+			hud.set_bottom_mode(PokerHud.BOTTOM_NEXT if state == "next" else PokerHud.BOTTOM_NEXT_WAIT)
+			hud.set_next_progress(3, 8)
+			hud.set_bust_countdown(BUST_LEFT, PokerPacing.NEXT_HAND_TIMEOUT)
+			hud.set_showdown(_showdown_entries())
 		SETTLEMENT_STATE:
 			hud.set_bottom_mode(PokerHud.BOTTOM_NONE)
 

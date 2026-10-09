@@ -10,7 +10,7 @@ const PUBLIC_PATHS := [
 	"actions", "actions.call_amount", "actions.can_allin", "actions.can_check", "actions.can_raise",
 	"actions.max_raise_to", "actions.min_raise_to", "actions.pid", "actions.to_call",
 	"bb", "blinds", "board", "button", "current_bet", "current_pid", "ending", "hand", "mode", "phase",
-	"players", "players[].bet", "players[].buyins", "players[].committed", "players[].left", "players[].name",
+	"players", "players[].bet", "players[].buyins", "players[].committed", "players[].confirmed", "players[].left", "players[].name",
 	"players[].net", "players[].pid", "players[].shown", "players[].stack", "players[].status",
 	"pots", "pots[].amount", "pots[].eligible", "results", "sb", "seats", "street", "turn_time_left",
 ]

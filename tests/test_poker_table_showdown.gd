@@ -14,8 +14,8 @@ func test_river_showdown_reveals_everyone_after_the_button_and_pays_the_best_han
 	var t := make_table([1, 2, 3])
 	start_with_button(t, 1, _rig({1: "Ah Kh", 2: "Qs Qd", 3: "7c 2d"}, "Qh Jh Th 3s 4c"))
 	var events := check_down(t)
-	var tail := events.slice(events.size() - 3)
-	assert_eq(H.types(tail), ["reveal", "pot_won", "hand_over"])
+	var tail := events.slice(events.size() - 4)
+	assert_eq(H.types(tail), ["reveal", "pot_won", "hand_over", "hand_record"])
 	assert_eq(tail[0], {"type": "reveal", "reason": "showdown", "hands": [
 		{"pid": 2, "cards": H.cards("Qs Qd")}, {"pid": 3, "cards": H.cards("7c 2d")}, {"pid": 1, "cards": H.cards("Ah Kh")},
 	]})
@@ -46,7 +46,7 @@ func test_preflop_all_in_reveals_first_then_runs_out_three_streets():
 	start_with_button(t, 1, _rig({1: "As Ad", 2: "Kc Kd"}, "2h 7s 9c Jd 3h"))
 	play_as(t, 1, R.ALLIN)
 	var events := play_as(t, 2, R.CALL)
-	assert_eq(H.types(events), ["action", "bets_collected", "reveal", "street", "street", "street", "pot_won", "hand_over"])
+	assert_eq(H.types(events), ["action", "bets_collected", "reveal", "street", "street", "street", "pot_won", "hand_over", "hand_record"])
 	var reveal := H.find(events, "reveal")
 	assert_eq([reveal["reason"], reveal["hands"].map(func(h): return h["pid"])], ["allin", [2, 1]])
 	var streets := H.find_all(events, "street")

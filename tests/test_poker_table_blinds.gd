@@ -123,7 +123,7 @@ func test_heads_up_big_blind_with_ten_chips_runs_out_the_board_at_once():
 	assert_eq([bb["amount"], bb["bet"], bb["stack"], bb["all_in"]], [10, 10, 0, true])
 	assert_eq(H.types(events), [
 		"hand_started", "blind", "blind", "hole_cards", "bets_collected", "reveal",
-		"street", "street", "street", "pot_won", "hand_over",
+		"street", "street", "street", "pot_won", "hand_over", "hand_record",
 	], "小盲 to_call 为 0、对手已全下:不用行动,直接发完")
 	assert_eq(H.find(events, "bets_collected")["pots"], [{"amount": 20, "eligible": [1, 2]}])
 	assert_eq(H.find(events, "reveal")["reason"], "allin")
@@ -144,7 +144,7 @@ func test_short_big_blind_small_blind_need_not_act_after_the_button_folds():
 	var t := make_table([1, 2, 3])
 	start_with_button(t, 1, {"stacks": {3: 10}})
 	var events := play_as(t, 1, R.FOLD)
-	assert_eq(H.types(events), ["action", "bets_collected", "reveal", "street", "street", "street", "pot_won", "hand_over"])
+	assert_eq(H.types(events), ["action", "bets_collected", "reveal", "street", "street", "street", "pot_won", "hand_over", "hand_record"])
 	assert_eq(H.find(events, "reveal")["hands"].map(func(h): return h["pid"]), [2, 3])
 
 

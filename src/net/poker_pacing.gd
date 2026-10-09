@@ -21,10 +21,11 @@ const REBUY := 0.6
 const PLAYER_LEFT := 0.8
 const PLAYER_JOINED := 0.0           # 新人下一手才登场,这时只记一行日志,不演
 const SESSION_OVER := 3.0            # 结算面板之前的谢幕
-const HAND_GAP := 1.5                # 一手之间的停顿:房主排期用,不对应事件
-# 有人输光的那一手之后的停顿(规格 §2.6):留时间给他选再领/观战;输光者都选完就恢复 HAND_GAP。
-# away / sit_in / spectate 事件不占演出时间
-const BUST_DECISION := 6.0
+# 一手结束后:等要发牌的人都点「开始下一手」(输光的人再领也算),最多 NEXT_HAND_TIMEOUT(到点等于替大家点了);
+# 都点了就演完再停 HAND_GAP 开下一手。房主排期用,不对应事件。
+# away / sit_in / spectate / next_ready / hand_record 事件不占演出时间
+const NEXT_HAND_TIMEOUT := 30.0
+const HAND_GAP := 0.5
 
 # 这些事件会让客户端在演出结束时把回合交给某人(重新起算回合时间)
 const TURN_EVENTS := ["turn"]

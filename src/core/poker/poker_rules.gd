@@ -23,8 +23,9 @@ const ALLIN := "allin"
 const REBUY := "rebuy"
 const SPECTATE := "spectate"
 const SIT_IN := "sit_in"         # 挂机离座的人回到牌桌
+const NEXT := "next"             # 一手结束后点「开始下一手」:要发牌的人都点了(或 30 秒到了)才开下一手
 const BET_ACTIONS := [FOLD, CHECK, CALL, RAISE, ALLIN]
-const SEAT_ACTIONS := [REBUY, SPECTATE, SIT_IN]
+const SEAT_ACTIONS := [REBUY, SPECTATE, SIT_IN, NEXT]
 
 # —— 玩家状态(公共视图 players[].status,规格 §4.4)——
 const STATUS_ACTIVE := "active"          # 本手(或刚结束的一手)中没弃牌、没全下

@@ -9,7 +9,6 @@ const MAX_AMOUNT := 1_000_000   # 意图里的金额上限(规格 §3.3):超过�
 var _mode: String
 var _table: PokerTable = null
 var _names := {}                # 含已离开者:结算行要用
-var _fresh_busted: Array = []   # 最近一手 hand_over 里输光的人:只有他们没做选择时下一手才多等(规格 §2.6)
 
 
 func _init(mode: String) -> void:
@@ -48,6 +47,8 @@ func handle_intent(pid: int, intent: Dictionary) -> Dictionary:
 			result = _table.spectate(pid)
 		PokerRules.SIT_IN:
 			result = _table.sit_in(pid)
+		PokerRules.NEXT:
+			result = _table.confirm_next(pid)
 		_:
 			result = _table.act(pid, action, amount)
 	if not result["ok"]:
@@ -121,12 +122,8 @@ func next_hand_ready() -> bool:
 
 
 func hand_gap() -> float:
-	# 有输光者还没选再领/观战(且没离开)时留出选择时间(规格 §2.6)
-	for pid in _fresh_busted:
-		var p := _table.player(pid)
-		if p.get("status") == PokerRules.STATUS_BUSTED and not p.get("left", true):
-			return PokerPacing.BUST_DECISION
-	return PokerPacing.HAND_GAP
+	# 一手结束后等要发牌的人都点「开始下一手」,最多 30 秒;都点了(或没确认的人走了 / 选了观战)就只停一下
+	return PokerPacing.HAND_GAP if _table.all_confirmed() else PokerPacing.NEXT_HAND_TIMEOUT
 
 
 func start_next_hand() -> Array:
@@ -147,19 +144,14 @@ func name_of(pid: int) -> String:
 
 func _named(events: Array) -> Array:
 	# player_joined 与 session_over 里的名字由会话补(引擎不知道名字);引擎的字典不就地改,补了名字的是新字典。
-	# 顺带记下最近一手输光的人(所有事件都经过这里)
-	for ev in events:
-		match ev.get("type", ""):
-			"hand_started":
-				_fresh_busted = []
-			"hand_over":
-				_fresh_busted = ev.get("busted", []).duplicate()
 	return events.map(func(ev: Dictionary) -> Dictionary:
 		match ev.get("type", ""):
 			"player_joined":
 				return ev.merged({"name": name_of(ev["pid"])}, true)
 			"session_over":
 				return ev.merged({"results": ev["results"].map(_named_row)}, true)
+			"hand_record":
+				return ev.merged({"players": ev["players"].map(_named_row)}, true)
 		return ev)
 
 

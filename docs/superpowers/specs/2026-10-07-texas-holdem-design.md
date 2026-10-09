@@ -78,7 +78,7 @@
 ### 2.6 输光、再领与观战
 
 - 一手结束时筹码为 0 的人**输光**(status `busted`):他的屏幕底部出现「再领 2000」/「观战」(带倒计时)。不选不会卡住牌局,只是不发牌给他。
-- **留出选择时间**:有人输光的那一手之后,下一手最早在演出结束后 `PokerPacing.BUST_DECISION`(6 秒)开始;这一手的输光者都做了选择(再领/观战/离开)就恢复为 `HAND_GAP`(1.5 秒)。只等这一次:一直不选的人不拖慢之后的每一手。
+- **选择时间**:输光的人和其他人一样有一手结束后的 30 秒(见 §2.10「开始下一手」);再领算点了开始,选观战或离开就不再等他。
 - **再领**:status 为 `busted` 或 `spectating` 时可以(注意:手牌中全下的人筹码也是 0,但不能领)。每次 2000,不限次数,累计领取 +1,status 变 `waiting`,下一手发牌。当前没有进行中的手牌且凑够 2 人时自动排期开下一手。
 - **观战**:只有 `busted` 可以选。角色留在座位上不发牌;镜头切到俯视观战机位;HUD 常驻「领取 2000 上桌」。
 - 其他情况的再领/观战请求回 `cannot_rebuy` / `invalid_action`,不产生事件。
@@ -97,6 +97,16 @@
 
 - 每次行动限时 30 秒,外加演出时间(房主权威计时,同骗子酒馆)。超时:to_call 为 0 就过牌,否则弃牌。
 - **挂机离座**:连续 2 次超时的人,从下一手起离座(status `away`):保留筹码,不发牌,按钮与盲注跳过他;他的屏幕底部显示「你已离座 · 回到牌桌」,点了(意图 `sit_in`)回到 `waiting`,下一手发牌。他自己的任何一次行动都会把连续超时清零。
+
+### 2.10 开始下一手与牌局记录(2026-10-09 按用户要求新增)
+
+- **开始下一手**:一手结束(演完分池)后不自动开下一手。要接着打的人(没离开、不在观战 / 离座;含输光还没选的、中途加入等发牌的)
+  底部出现「开始下一手」按钮和 30 秒倒计时;都点了(意图 `next`,事件 `next_ready`,视图 `players[].confirmed`,铭牌显示「已准备」)
+  就演完再停 `HAND_GAP`(0.5 秒)开下一手;30 秒(`PokerPacing.NEXT_HAND_TIMEOUT`)到了等于替没点的人点了,照常开。
+  点过的人底部显示「已准备 · 等待其他人(2/5)」。再领算点了开始;选观战、离开的人不再等。点开始只在两手之间有效,其他时候回 `invalid_action`。
+- **牌局记录**:每手结束(`hand_over` 之后)房主发 `hand_record`:公共牌、每个被发到牌的人的两张手牌(**含弃牌的**,用户要求赛后能看每个人的牌)、
+  牌型(公共牌 ≥ 3 张时)、是否弃牌 / 已离开、这一手的输赢(发牌前后筹码差,含盲注)。它只在一手结束后才发,手牌进行中不泄露。
+  客户端保存自己看到过的每一手(最多 200 手);右上「记录 · H」打开记录面板,一手一页,默认最近一手,← / → 翻页,Esc / H 关闭;不是模态框。
 
 ### 2.9 散局与结算
 
@@ -179,7 +189,7 @@ func turn_timer_after(events: Array, pending: float, time_left: float) -> float
 func accepts_late_join() -> bool                # 骗子酒馆 false;德州 = 没散局且未结束
 func add_player(pid: int, name: String) -> Array
 func next_hand_ready() -> bool                  # 骗子酒馆 false
-func hand_gap() -> float                        # 德州:最近一手的输光者有人没做选择时 BUST_DECISION,否则 HAND_GAP
+func hand_gap() -> float                        # 德州:要接着打的人都点了「开始下一手」时 HAND_GAP,否则 NEXT_HAND_TIMEOUT(30 秒)
 func start_next_hand() -> Array
 func request_end() -> Array
 ```
@@ -305,6 +315,8 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 | `player_left` | pid, folded(这次离开是否让他弃了牌) | 离开或断线 |
 | `ending` | — | 房主散局:本手结束后结算 |
 | `session_over` | results([{pid, name, stack, buyins, net, left}]) | 结算 |
+| `next_ready` | pid | 两手之间点了「开始下一手」(§2.10) |
+| `hand_record` | hand, board, players([{pid, name, cards, hand_name, folded, left, delta}]) | 一手结束后的牌局记录,紧跟 `hand_over`(§2.10) |
 
 - `uncontested` 为真(没摊牌就赢)时 `hand_name = ""`、`best = {}`;`best` 只能包含本手已经亮过牌的人。
 - `player_joined` 与 `session_over` 里的名字由网络会话补(引擎不知道名字)。
@@ -335,7 +347,7 @@ func results() -> Array                    # [{"pid", "stack", "buyins", "net", 
 
 ### 4.7 演出预算(`PokerPacing`,已实现)
 
-HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8(还没登场的新人离开标 `offstage`,不占时间)、PLAYER_JOINED 0(下一手才登场,只记日志)、SESSION_OVER 3.0、HAND_GAP 1.5、BUST_DECISION 6.0(有人输光后的一手间隔);`away` / `sit_in` / `spectate` 不占演出时间;交出回合的事件只有 `turn`。
+HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、BETS_COLLECTED 0.7、STREET 0.5 + 0.4/张、REVEAL 0.4 + 0.5/人、POT_WON 2.0、HAND_OVER 0.6、REBUY 0.6、PLAYER_LEFT 0.8(还没登场的新人离开标 `offstage`,不占时间)、PLAYER_JOINED 0(下一手才登场,只记日志)、SESSION_OVER 3.0、HAND_GAP 0.5(都点了「开始下一手」之后)、NEXT_HAND_TIMEOUT 30(等人点开始的上限);`next_ready` / `hand_record` 不占演出时间;`away` / `sit_in` / `spectate` 不占演出时间;交出回合的事件只有 `turn`。
 新入座者(中途加入或离座回来)的镜头从观战机位回到自己座位,这段运镜算在 HAND_STARTED 的 1.4 秒里。
 导演每段演出的实际时长加余量(每个 await 一帧,至少 4 帧)必须不超过预算,由测试读取导演与资产类的节奏常量来保证(同骗子酒馆的 `test_pacing.gd`)。
 
