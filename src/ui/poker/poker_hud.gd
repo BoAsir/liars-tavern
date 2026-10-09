@@ -2,7 +2,7 @@ class_name PokerHud
 extends Control
 # 德州牌桌 HUD(规格 §6.1,按 1280×720 的布局预算):
 # 左上 ≤ 380×108(玩法 · 盲注 · 第 N 手;底池合计与边池摘要;5 张公共牌的 2D 牌条)、右上「规则」与房主的「散局」、
-# 底部中间 ≤ 600×170(轮到自己时的下注控件 / 摊牌条 / 输光、观战、等待、离座的提示)、
+# 底部中间 ≤ 600×170(轮到自己时的下注控件 / 输光、观战、等待、离座的提示)、右侧摊牌面板(亮牌到下一手开始)、
 # 左下 ≤ 300 宽(自己的名字、筹码、盈亏、领取次数;两张手牌的 2D 大图 + 当前最大牌型)、右下事件日志、画面中部大字宣告。
 # 只发信号,不直接调用 Net / Sfx;所有按钮 FOCUS_NONE(焦点会吃掉空格/回车)。界面文字里不出现花色符号。
 
@@ -37,7 +37,6 @@ const WAITING_TEXT := "等待开局"
 
 const BOTTOM_NONE := "none"
 const BOTTOM_BET := "bet"
-const BOTTOM_SHOWDOWN := "showdown"
 const BOTTOM_BUST := PokerPrompts.BUST
 const BOTTOM_SPECTATE := PokerPrompts.SPECTATE
 const BOTTOM_WAITING := PokerPrompts.WAITING
@@ -55,7 +54,7 @@ var rules_button: Button
 var end_button: Button
 var bottom_box: VBoxContainer
 var controls: BetControls
-var showdown: ShowdownStrip
+var showdown: ShowdownPanel
 var prompts: PokerPrompts
 var my_panel: PanelContainer
 var my_strip: CardStrip
@@ -99,17 +98,11 @@ static func my_status_text(player: Dictionary) -> String:
 	return "筹码 %s · 盈亏 %s · 领取 %d 次" % [ChipText.format(_int(player, "stack")), ChipText.signed(_int(player, "net")), _int(player, "buyins")]
 
 
-static func bottom_mode_for(player: Dictionary, in_showdown: bool) -> String:
-	# 输光提示最优先(要做选择);其次摊牌条(公共信息人人都要看到,观战 / 离座 / 等待下一手的人也一样,规格 §5.3);
-	# 再其次按 status 的座位提示(等待下一手只看 status);否则下注控件(含旁人回合的横幅)
+static func bottom_mode_for(player: Dictionary) -> String:
+	# 按 status 的座位提示(输光 / 观战 / 离座 / 等待下一手);否则下注控件(含旁人回合的横幅)。摊牌在右侧面板,不占底部
 	if player.is_empty():
-		return BOTTOM_SHOWDOWN if in_showdown else BOTTOM_NONE
-	var status: Variant = player.get("status")
-	if status == PokerRules.STATUS_BUSTED:
-		return BOTTOM_BUST
-	if in_showdown:
-		return BOTTOM_SHOWDOWN
-	return STATUS_MODES.get(status, BOTTOM_BET)
+		return BOTTOM_NONE
+	return STATUS_MODES.get(player.get("status"), BOTTOM_BET)
 
 
 static func _int(player: Dictionary, key: String) -> int:
@@ -125,6 +118,8 @@ func _ready() -> void:
 	_build_header()
 	_build_top_right()
 	_build_bottom()
+	showdown = ShowdownPanel.new()
+	add_child(showdown)
 	_build_my_panel()
 	_build_log()
 	_build_announce()
@@ -178,8 +173,6 @@ func _build_bottom() -> void:
 	controls.action_chosen.connect(func(action: String, amount: int): action_chosen.emit(action, amount))
 	controls.fold_confirm_requested.connect(func(): fold_confirm_requested.emit())
 	bottom_box.add_child(controls)
-	showdown = ShowdownStrip.new()
-	bottom_box.add_child(showdown)
 	prompts = PokerPrompts.new()
 	prompts.rebuy_pressed.connect(func(): rebuy_pressed.emit())
 	prompts.spectate_pressed.connect(func(): spectate_pressed.emit())
@@ -286,7 +279,6 @@ func set_ending(ending: bool) -> void:
 func set_bottom_mode(mode: String) -> void:
 	_bottom_mode = mode
 	controls.visible = mode == BOTTOM_BET
-	showdown.visible = mode == BOTTOM_SHOWDOWN
 	prompts.visible = PokerPrompts.MESSAGES.has(mode)
 	if prompts.visible:
 		prompts.show_mode(mode)
@@ -297,6 +289,7 @@ func bottom_mode() -> String:
 
 
 func set_showdown(entries: Variant) -> void:
+	# 有人亮牌时显示,传空收起
 	showdown.set_entries(entries)
 
 

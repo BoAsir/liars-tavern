@@ -253,7 +253,6 @@ func _street(ev: Dictionary) -> void:
 
 func _reveal(ev: Dictionary) -> void:
 	screen.note_event(ev)
-	screen.refresh_actions()   # 底部换成摊牌条
 	if ev.get("reason") == "allin":
 		hud.announce("亮牌", UiTheme.BRASS_BRIGHT, "全下后先亮牌,再发完公共牌", 0.8)
 	for entry in (ev["hands"] if ev.get("hands") is Array else []):
@@ -281,6 +280,8 @@ func _pot_won(ev: Dictionary) -> void:
 		if world.patrons.has(pid):
 			world.patrons[pid].celebrate()
 	var shares: Dictionary = ev["shares"] if ev.get("shares") is Dictionary else {}
+	if screen.state.in_showdown:
+		hud.set_showdown(screen.state.showdown_entries(screen.state.is_short_deck()))   # 结果列:谁赢了多少
 	await chips.award(_int(ev, "index"), shares, {})
 	await _wait(POT_HOLD)
 

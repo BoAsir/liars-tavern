@@ -45,22 +45,15 @@ func test_my_status_text():
 	assert_eq(PokerHud.my_status_text(_player("busted", {"stack": 0, "net": -4000, "buyins": 2})), "筹码 0 · 盈亏 -4,000 · 领取 2 次")
 
 
-func test_bottom_mode_follows_my_status_then_the_showdown():
-	assert_eq(PokerHud.bottom_mode_for(_player("busted"), false), PokerHud.BOTTOM_BUST)
-	assert_eq(PokerHud.bottom_mode_for(_player("spectating"), false), PokerHud.BOTTOM_SPECTATE)
-	assert_eq(PokerHud.bottom_mode_for(_player("away"), false), PokerHud.BOTTOM_AWAY)
-	assert_eq(PokerHud.bottom_mode_for(_player("waiting"), false), PokerHud.BOTTOM_WAITING, "等待下一手只看 status")
-	# 摊牌条是公共信息:观战 / 离座 / 等待下一手的人在摊牌时也看它;输光提示仍然最优先
-	assert_eq(PokerHud.bottom_mode_for(_player("waiting"), true), PokerHud.BOTTOM_SHOWDOWN)
-	assert_eq(PokerHud.bottom_mode_for(_player("spectating"), true), PokerHud.BOTTOM_SHOWDOWN)
-	assert_eq(PokerHud.bottom_mode_for(_player("away"), true), PokerHud.BOTTOM_SHOWDOWN)
-	assert_eq(PokerHud.bottom_mode_for(_player("busted"), true), PokerHud.BOTTOM_BUST)
-	assert_eq(PokerHud.bottom_mode_for({}, true), PokerHud.BOTTOM_SHOWDOWN, "还没进座位表的迟到者也看摊牌")
-	assert_eq(PokerHud.bottom_mode_for(_player("active"), true), PokerHud.BOTTOM_SHOWDOWN)
-	assert_eq(PokerHud.bottom_mode_for(_player("folded"), true), PokerHud.BOTTOM_SHOWDOWN)
-	assert_eq(PokerHud.bottom_mode_for(_player("active"), false), PokerHud.BOTTOM_BET)
-	assert_eq(PokerHud.bottom_mode_for(_player("folded"), false), PokerHud.BOTTOM_BET, "弃牌后仍看别人的回合横幅")
-	assert_eq(PokerHud.bottom_mode_for({}, false), PokerHud.BOTTOM_NONE, "还没进座位表的迟到者")
+func test_bottom_mode_follows_my_status():
+	# 摊牌在右侧面板,底部只看自己的座位状态
+	assert_eq(PokerHud.bottom_mode_for(_player("busted")), PokerHud.BOTTOM_BUST)
+	assert_eq(PokerHud.bottom_mode_for(_player("spectating")), PokerHud.BOTTOM_SPECTATE)
+	assert_eq(PokerHud.bottom_mode_for(_player("away")), PokerHud.BOTTOM_AWAY)
+	assert_eq(PokerHud.bottom_mode_for(_player("waiting")), PokerHud.BOTTOM_WAITING, "等待下一手只看 status")
+	assert_eq(PokerHud.bottom_mode_for({}), PokerHud.BOTTOM_NONE, "还没进座位表的迟到者")
+	assert_eq(PokerHud.bottom_mode_for(_player("active")), PokerHud.BOTTOM_BET)
+	assert_eq(PokerHud.bottom_mode_for(_player("folded")), PokerHud.BOTTOM_BET, "弃牌后仍看别人的回合横幅")
 
 
 # —— 底部区域 ——
@@ -103,10 +96,6 @@ func test_each_bottom_mode_shows_one_thing():
 	hud.set_bottom_mode(PokerHud.BOTTOM_BET)
 	assert_true(hud.controls.visible)
 	assert_false(hud.prompts.visible)
-	assert_false(hud.showdown.visible)
-	hud.set_bottom_mode(PokerHud.BOTTOM_SHOWDOWN)
-	assert_true(hud.showdown.visible)
-	assert_false(hud.controls.visible)
 	for mode in [PokerHud.BOTTOM_SPECTATE, PokerHud.BOTTOM_WAITING, PokerHud.BOTTOM_AWAY]:
 		hud.set_bottom_mode(mode)
 		assert_true(hud.prompts.visible, mode)
@@ -272,11 +261,7 @@ func test_bottom_centre_fits_its_budget_in_every_mode():
 	hud.controls.update(pub, ME)
 	hud.set_turn("轮到你了", true)
 	hud.set_countdown(30.0, 30.0, true)
-	var entries := []
-	for i in 8:
-		entries.append({"name": "第 %d 位名字很长的客人" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "两对 · K 和 Q"})
-	hud.set_showdown(entries)
-	for mode in [PokerHud.BOTTOM_BET, PokerHud.BOTTOM_SHOWDOWN, PokerHud.BOTTOM_BUST, PokerHud.BOTTOM_SPECTATE,
+	for mode in [PokerHud.BOTTOM_BET, PokerHud.BOTTOM_BUST, PokerHud.BOTTOM_SPECTATE,
 			PokerHud.BOTTOM_WAITING, PokerHud.BOTTOM_AWAY]:
 		hud.set_bottom_mode(mode)
 		await wait_process_frames(3)
@@ -289,35 +274,46 @@ func test_bottom_centre_fits_its_budget_in_every_mode():
 		assert_true(box.position.y + box.size.y <= SCREEN.y, "%s 底边" % mode)
 
 
-func test_showdown_text_column_widens_when_few_players_show():
-	assert_eq(ShowdownStrip.text_width(2), ShowdownStrip.WIDE_NAME_WIDTH, "单挑:牌型名不被省略")
-	assert_gt(ShowdownStrip.text_width(3), ShowdownStrip.text_width(4))
-	assert_gte(ShowdownStrip.text_width(8), ShowdownStrip.NAME_WIDTH)
-	assert_eq(ShowdownStrip.text_width(0), ShowdownStrip.WIDE_NAME_WIDTH)
-
-
-func test_showdown_strip_stays_in_budget_for_every_player_count():
-	for count in range(1, ShowdownStrip.MAX_ENTRIES + 1):
-		var entries := []
-		for i in count:
-			entries.append({"name": "第 %d 位名字很长的客人" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "葫芦 · Q 带 7"})
-		hud.set_showdown(entries)
-		hud.set_bottom_mode(PokerHud.BOTTOM_SHOWDOWN)
-		await wait_process_frames(3)
-		assert_true(hud.bottom_box.size.x <= PokerHud.BOTTOM_MAX.x, "%d 人宽 %s" % [count, hud.bottom_box.size])
-
-
-func test_showdown_strip_shows_at_most_two_rows_of_four():
+func _showdown_entries(count: int) -> Array:
 	var entries := []
-	for i in 9:
-		entries.append({"name": "P%d" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "高牌 · A"})
-	hud.set_showdown(entries)
-	assert_eq(hud.showdown._grid.get_child_count(), 8)
-	assert_eq(hud.showdown._grid.columns, 4)
-	hud.set_showdown([{"name": "P", "cards": "junk", "hand_name": 3}, "junk"])
-	assert_eq(hud.showdown._grid.get_child_count(), 1, "坏条目丢掉,坏字段当空")
-	for face in hud.showdown.find_children("*", "TextureRect", true, false):
+	for i in count:
+		entries.append({"name": "第 %d 位名字很长的客人" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "葫芦 · Q 带 7",
+			"won": 12400 if i == 0 else 0})
+	return entries
+
+
+func test_showdown_panel_sits_on_the_right_above_the_log():
+	# 右侧:x 956–1256,在右上按钮下面,8 人全亮牌也不压到右下角的事件日志
+	_fill()
+	hud.set_showdown(_showdown_entries(ShowdownPanel.MAX_ENTRIES))
+	await wait_process_frames(3)
+	var panel := hud.showdown
+	assert_true(panel.visible)
+	assert_true(panel.position.x >= PokerHud.LOG_LEFT_EDGE - 0.5, "左缘 %s" % panel.position.x)
+	assert_true(panel.position.x + panel.size.x <= SCREEN.x - PokerHud.MARGIN.x + 0.5, "右缘 %s" % (panel.position.x + panel.size.x))
+	assert_true(panel.position.y >= ShowdownPanel.TOP - 0.5, "顶边 %s" % panel.position.y)
+	assert_true(panel.size.y <= ShowdownPanel.MAX_HEIGHT, "高 %s" % panel.size.y)
+	var rules_bottom := hud.rules_button.get_global_rect().end.y
+	assert_true(panel.position.y >= rules_bottom, "不压右上按钮:%s < %s" % [panel.position.y, rules_bottom])
+	for face in panel.find_children("*", "TextureRect", true, false):
 		assert_true((face as TextureRect).custom_minimum_size.x >= 30.0 and (face as TextureRect).custom_minimum_size.y >= 42.0)
+
+
+func test_showdown_panel_hides_when_empty_and_drops_bad_entries():
+	assert_false(hud.showdown.visible, "开局没人亮牌")
+	var entries := _showdown_entries(9)
+	hud.set_showdown(entries)
+	assert_eq(hud.showdown.row_count(), ShowdownPanel.MAX_ENTRIES)
+	hud.set_showdown([{"name": "P", "cards": "junk", "hand_name": 3, "won": "x"}, "junk"])
+	assert_eq(hud.showdown.row_count(), 1, "坏条目丢掉,坏字段当空")
+	hud.set_showdown([])
+	assert_false(hud.showdown.visible)
+
+
+func test_showdown_result_text():
+	assert_eq(ShowdownPanel.result_text(1240), "赢 1,240")
+	assert_eq(ShowdownPanel.result_text(0), "—")
+	assert_eq(ShowdownPanel.result_text(null), "", "还没演到分池(迟到者):结果留空")
 
 
 func test_left_column_and_log_stay_in_their_lanes():

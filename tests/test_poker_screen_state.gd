@@ -159,7 +159,7 @@ func test_street_reveal_pot_and_hand_over():
 		"best": {2: H.cards("Ac Ad Ah Kd 2c")}, "uncontested": false})
 	assert_eq(state.row(2)["stack"], 2100)
 	state.apply_event({"type": "hand_over", "hand": 3, "stacks": {1: 0, 2: 4000}, "busted": [1]})
-	assert_false(state.in_showdown)
+	assert_true(state.in_showdown, "摊牌面板留到下一手开始")
 	assert_eq(state.row(1)["stack"], 0)
 	assert_eq(state.row(1)["status"], PokerRules.STATUS_BUSTED)
 	assert_eq(state.row(2)["stack"], 4000)
@@ -224,7 +224,7 @@ func test_bottom_mode_shows_bet_controls_only_while_someone_is_acting():
 	state.apply_event({"type": "turn", "pid": 2})
 	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_BET, "看别人的回合横幅")
 	state.apply_event({"type": "reveal", "hands": [{"pid": 2, "cards": H.cards("Ac Ad")}], "reason": "showdown"})
-	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_SHOWDOWN)
+	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_BET, "摊牌在右侧面板,底部不变")
 	state.apply_event({"type": "hand_over", "hand": 3, "stacks": {1: 0, 2: 4000}, "busted": [1]})
 	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_BUST)
 	state.apply_event({"type": "spectate", "pid": ME})
@@ -272,10 +272,30 @@ func test_showdown_entries_name_the_hand_only_with_three_or_more_board_cards():
 	assert_eq(entries.size(), 2)
 	assert_eq(entries[0]["name"], "P1", "按视图顺序")
 	assert_eq(entries[0]["hand_name"], "", "翻牌前亮牌:还没有牌型")
+	assert_null(entries[0]["won"], "还没分池:结果留空")
 	state.apply_event({"type": "street", "street": "flop", "cards": H.cards("Ah Kd 2c"), "board": H.cards("Ah Kd 2c")})
 	entries = state.showdown_entries(false)
 	assert_eq(entries[1]["hand_name"], "三条 · A")
 	assert_eq(entries[1]["cards"], H.cards("Ac Ad"))
+
+
+func test_showdown_entries_put_winners_first_with_what_they_won():
+	_apply(_pub([1, 2, 3]))
+	state.apply_event({"type": "street", "street": "river", "cards": H.cards("Ah Kd 2c 9s 9d"), "board": H.cards("Ah Kd 2c 9s 9d")})
+	state.apply_event({"type": "reveal", "reason": "showdown", "hands": [{"pid": 1, "cards": H.cards("7s 2h")},
+		{"pid": 2, "cards": H.cards("Ac Ad")}, {"pid": 3, "cards": H.cards("Kc Ks")}]})
+	state.apply_event({"type": "pot_won", "index": 1, "amount": 300, "winners": [3], "shares": {3: 300}, "hand_name": "葫芦",
+		"best": {}, "uncontested": false})
+	state.apply_event({"type": "pot_won", "index": 0, "amount": 900, "winners": [2], "shares": {2: 900}, "hand_name": "葫芦",
+		"best": {}, "uncontested": false})
+	var entries := state.showdown_entries(false)
+	assert_eq(entries.map(func(e): return e["name"]), ["P2", "P3", "P1"], "赢家按赢到的多少排在前面,其余按视图顺序")
+	assert_eq(entries.map(func(e): return e["won"]), [900, 300, 0])
+	assert_eq(entries[0]["hand_name"], "葫芦 · A 带 9")
+	state.apply_event({"type": "hand_over", "hand": 3, "stacks": {}, "busted": []})
+	assert_eq(state.showdown_entries(false).size(), 3, "一手结束后还在")
+	state.apply_event({"type": "hand_started", "hand": 4, "seats": [1, 2, 3], "dealt": [1, 2, 3]})
+	assert_eq(state.showdown_entries(false), [], "下一手开始才收")
 
 
 func test_my_status_and_legal_actions_come_from_the_view():

@@ -268,8 +268,7 @@ func refresh_hud() -> void:
 	hud.set_my_status(name_of(my_pid), state.row(my_pid))
 	hud.set_my_hole(state.hole())
 	hud.set_my_best(state.best_detail())
-	if state.in_showdown:
-		hud.set_showdown(state.showdown_entries(state.is_short_deck()))
+	hud.set_showdown(state.showdown_entries(state.is_short_deck()) if state.in_showdown else [])
 	_update_nameplates()
 	refresh_actions()
 
