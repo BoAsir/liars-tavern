@@ -9,7 +9,6 @@ class_name PatronParts
 const SPECIES := PatronSpecies.ALL
 const EXPRESSIONS := PatronFace.EXPRESSIONS
 
-static var _chair: Array = []    # 椅子各部件 [网格, 变换, material_override, 表面材质数组, 投影设置]
 
 
 static func species(index: int) -> Dictionary:
@@ -20,7 +19,7 @@ static func prewarm() -> void:
 	# 开场时调用:提前建好各物种要用的网格(与椅子),中途加入、复活时不再现场拼装
 	for i in SPECIES.size():
 		meshes(i)
-	chair_parts()
+	ChairModel.mesh()
 
 
 static func first_free_species(used: Array) -> int:
@@ -65,31 +64,9 @@ static func meshes(index: int) -> Dictionary:
 	return out
 
 
-static func chair_parts() -> Array:
-	# 椅子(ChairModel)只搭一次:记下每个网格节点相对椅子原点的变换与材质,各酒客按记录摆出共用同一批网格
-	if _chair.is_empty():
-		var template := Node3D.new()
-		ChairModel.build(template)
-		for node in template.find_children("*", "MeshInstance3D", true, false):
-			var inst := node as MeshInstance3D
-			var surfaces := []
-			for i in inst.get_surface_override_material_count():
-				surfaces.append(inst.get_surface_override_material(i))
-			_chair.append([inst.mesh, _relative_xform(inst, template), inst.material_override, surfaces, inst.cast_shadow])
-		template.free()
-	return _chair
-
-
 static func add_chair(parent: Node3D) -> void:
-	for part in chair_parts():
-		var inst := MeshInstance3D.new()
-		inst.mesh = part[0]
-		inst.transform = part[1]
-		inst.material_override = part[2]
-		for i in (part[3] as Array).size():
-			inst.set_surface_override_material(i, part[3][i])
-		inst.cast_shadow = part[4]
-		parent.add_child(inst)
+	# 椅子网格由 ChairModel 缓存,各酒客共用同一个
+	ChairModel.build(parent)
 
 
 # —— 合批 ——
@@ -128,12 +105,3 @@ static func _add(batch: MeshBatch, arrays: Array) -> void:
 static func _add_all(batch: MeshBatch, list: Array) -> void:
 	for arrays in list:
 		_add(batch, arrays)
-
-
-static func _relative_xform(node: Node3D, root: Node3D) -> Transform3D:
-	var xform := Transform3D.IDENTITY
-	var current := node
-	while current != root and current != null:
-		xform = current.transform * xform
-		current = current.get_parent() as Node3D
-	return xform
