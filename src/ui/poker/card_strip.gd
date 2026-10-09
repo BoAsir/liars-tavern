@@ -1,6 +1,6 @@
 class_name CardStrip
 extends HBoxContainer
-# 2D 小牌条(规格 §5.3、§6.1):公共牌条(固定 5 个槽位,空槽只画框)、摊牌条里每人的两张、自己的手牌大图。
+# 2D 小牌条(规格 §5.3、§6.1):公共牌条(固定 5 个槽位,空槽只画框)、摊牌面板里每人的两张、自己的手牌大图。
 # 纹理从 256×372 的德州牌面缩小很多倍,一律 TEXTURE_FILTER_LINEAR_WITH_MIPMAPS;
 # PokerFaces 在后台生成完会发 built 信号,这里重新取纹理(生成前取到的是占位素纸)。
 # 牌值来自视图或事件,先过 PokerCard.is_card,不是牌的值丢掉。

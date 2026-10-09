@@ -74,7 +74,9 @@ func test_a_whole_session_from_deal_to_settlement():
 	assert_eq(screen.chips.stack_amount(3), 4010)
 	assert_eq(screen.chips.pot_amounts(), [])
 	assert_eq(screen.cards.shown_cards(3).size(), 2, "亮出的牌摊在座位前")
-	assert_false(screen.state.in_showdown, "hand_over 后摊牌条收起")
+	assert_true(screen.hud.showdown.visible, "一手结束后摊牌面板还在,到下一手开始才收")
+	assert_eq(screen.hud.showdown.row_count(), 2, "两人亮了牌")
+	assert_eq(screen.state.showdown_entries(false)[0]["won"], 4010, "赢家排第一、带赢到的数")
 	assert_false(screen.is_my_turn())
 	# 观战:酒客本机隐藏、镜头到观战机位;随后再领回座
 	statuses[ME] = PokerRules.STATUS_SPECTATING
@@ -120,6 +122,7 @@ func test_a_whole_session_from_deal_to_settlement():
 	assert_not_null(_plate(3))
 	assert_eq(screen.chips.button_pid(), 3)
 	assert_eq(screen.cards.board_cards().size(), 0, "上一手的公共牌收走")
+	assert_false(screen.hud.showdown.visible, "新一手开始收起摊牌面板")
 	assert_eq(screen.cards.shown_cards(3).size(), 0)
 	assert_eq(screen.hud.my_strip.cards(), hole2)
 	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_BET, "看别人的回合横幅")

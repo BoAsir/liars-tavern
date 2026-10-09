@@ -152,7 +152,7 @@ src/net/network_manager.gd ✎  protocol.gd ✎  lobby_model.gd ✎  room_list.g
 src/world/poker/poker_faces.gd ★  chip_stack_3d.gd ★  poker_chips.gd ★  poker_cards.gd ★  dealer_button_3d.gd ★  poker_layout.gd ★
 src/world/table_world.gd ✎  seat_layout.gd ✎  card_table.gd ✎  card_faces.gd ✎  tavern.gd ✎(仅接口桩)
 src/ui/poker/poker_screen.gd ★  poker_director.gd ★  poker_hud.gd ★  bet_controls.gd ★  poker_nameplate.gd ★
-src/ui/poker/poker_settlement.gd ★  card_strip.gd ★(2D 小牌条:公共牌条、摊牌条、自己的手牌)
+src/ui/poker/poker_settlement.gd ★  card_strip.gd ★(2D 小牌条:公共牌条、摊牌面板、自己的手牌)  showdown_panel.gd ★
 src/ui/table/seat_gaze.gd ★(从 table_screen 抽出)  table_screen.gd ✎
 src/ui/main.gd ✎  main_menu/main_menu.gd ✎  lobby/lobby.gd ✎  settings.gd ✎  sfx.gd ✎  debug_flags.gd ✎  rulebook/* ✎
 tools/shot.gd ✎  tools/poker_showcase.gd ★  tools/poker_smoke.sh ★  README.md ✎
@@ -364,7 +364,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 透视算下来,1280×720 下从自己座位看桌心,平放的牌只有二三十像素宽,光靠放大不够。因此:
 
-- **所有公共信息都有 2D 大图**(§6.1):公共牌条常驻左上;摊牌条从 `reveal` 到 `hand_over` 显示在底部中间。
+- **所有公共信息都有 2D 大图**(§6.1):公共牌条常驻左上;摊牌面板在画面右侧,从这一手第一次 `reveal` 显示到下一手 `hand_started`。
 - 3D 公共牌放大 1.8 倍,立在桌心一道向本机镜头倾斜 35° 的小牌架上(约 41×50 像素)。
 - 桌上所有牌(公共牌、亮出的牌)都按**本机视角正立**摆放(牌顶朝 −Z,因为每个客户端都把自己的座位放在 +Z),不按座位径向摆。
 - 自己举着的两张手牌总放大倍数 1.4(与骗子酒馆牌扇相同);德州时牌扇抬到座位坐标 HIP + (0.30, 0.74, −0.30),落在公共牌与下注控件之间(由德州牌桌设置 `fan.transform`,不改 `patron_3d.gd`)。
@@ -400,9 +400,10 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 
 - **左上** ≤ 380×108(底边 ≤ y 128):「德州·长牌 · 盲注 10/20 · 第 N 手」、底池合计与边池摘要一行(「底池 3,240 · 边池 ×2」)、5 张公共牌的 2D 牌条(每张 ≥ 36×50)。
 - **右上**:「规则 · F1」;房主另有「散局」(请求后变灰,显示「本手结束后散局」)。离开牌桌用 Esc(确认后离开;房主离开会解散)。
-- **底部中间** ≤ 600×170(x 340–940,顶边 ≥ y 528):轮到自己时是下注控件;从 `reveal` 到 `hand_over` 换成摊牌条(每人:名字省略显示、2 张 ≥ 30×42 的小牌、牌型名;最多 2 行 × 4 人,≤ 600×170);
+- **右侧摊牌面板**(x 956–1256,y 76 起,高 ≤ 440,在右上按钮下、右下日志上;0.7.0 之后按玩家反馈从底部移来):从这一手第一次亮牌到下一手开始一直显示,列出每个亮了牌的人——名字(省略号)、2 张 ≥ 30×42 的小牌、牌型名、结果(赢家「赢 1,240」排在最前,按赢到的多少;其余「—」并压暗;迟到者没看到分池时留空)。弃牌的人没亮牌,不列出。底色几乎不透明(右侧座位的铭牌在它下面)。
+- **底部中间** ≤ 600×170(x 340–940,顶边 ≥ y 528):轮到自己时是下注控件;
   输光时是「再领 2000 / 观战」;观战时是「领取 2000 上桌」;等待下一手时是「已入座,下一手开始发牌」。
-  优先级:输光提示 > 摊牌条 > 观战 / 离座 / 等待下一手的提示 > 下注控件(摊牌是公共信息,观战的人也要看到 2D 大图)。结算面板出现后底部清空。
+  底部按自己的 status 显示座位提示(输光 / 观战 / 离座 / 等待下一手),否则是下注控件(含旁人回合的横幅)。结算面板出现后底部清空。
 - **左下** ≤ 300 宽(x 24–324):自己的名字、筹码、盈亏、领取次数;两张手牌的 2D 大图 + 当前最大牌型(`best.detail`)。
 - **右下**(x 956–1256):事件日志。画面中部是大字宣告(「翻牌」「全下!」「X 赢得 1,240 · 葫芦」)。
 - 界面文字里**不出现花色符号**(界面字体里没有 ♠♥♦♣ 字形,系统回退可能变成彩色 emoji):要展示具体的牌一律用 2D 小牌;日志与宣告只写牌型名与点数(如「葫芦 · Q 带 7」)。

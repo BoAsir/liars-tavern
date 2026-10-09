@@ -4,7 +4,7 @@ extends Node
 # 德州桌坐满 8 位酒客,5 张公共牌、2 人亮牌、2 人弃牌、各家筹码与本轮下注、2 个底池、庄家按钮、自己的两张手牌。
 # 用假视图数据走与德州牌桌相同的对账接口(PokerChips.sync / PokerCards.sync),机位取自 TableWorld。
 # worst_case 为真时每摞筹码、每处下注都摆满(40 枚)、底池 7 个:约 900 枚筹码,性能对比用的最坏情况。
-# stage_hud 再用同一份假视图喂 PokerHud / BetControls / 铭牌 / 摊牌条(规格 §8 截图验收),HUD_STATES 列出底部区域的几种状态,
+# stage_hud 再用同一份假视图喂 PokerHud / BetControls / 铭牌 / 摊牌面板(规格 §8 截图验收),HUD_STATES 列出底部区域的几种状态,
 # settlement 另在 HUD 上盖散局结算面板(10 行,其中 2 人已离开,列表要滚动)。
 
 
@@ -201,7 +201,7 @@ func _stage_bottom(pub: Dictionary, state: String) -> void:
 			if state == "bet":
 				hud.announce("河牌", UiTheme.BRASS_BRIGHT, "", ANNOUNCE_HOLD)
 		"showdown":
-			hud.set_bottom_mode(PokerHud.BOTTOM_SHOWDOWN)
+			hud.set_bottom_mode(PokerHud.BOTTOM_NONE)
 			hud.set_showdown(_showdown_entries())
 			hud.board_strip.highlight([PokerCard.make(PokerCard.QUEEN, PokerCard.HEARTS), PokerCard.make(9, PokerCard.HEARTS),
 				PokerCard.make(PokerCard.KING, PokerCard.CLUBS)])
@@ -229,7 +229,7 @@ func _results() -> Array:
 
 
 func _showdown_entries() -> Array:
-	# 摊牌条最坏情况:8 个人都亮牌,牌型名用 HandEvaluator 算
+	# 摊牌面板最坏情况:8 个人都亮牌,牌型名用 HandEvaluator 算;3 号赢主池、6 号赢边池(赢家排在最前)
 	var c := func(rank: int, suit: int) -> int: return PokerCard.make(rank, suit)
 	var holes := {
 		1: _my_hole(), 2: [c.call(7, PokerCard.CLUBS), c.call(7, PokerCard.DIAMONDS)],
@@ -239,7 +239,9 @@ func _showdown_entries() -> Array:
 		6: [c.call(PokerCard.JACK, PokerCard.HEARTS), c.call(10, PokerCard.HEARTS)],
 		7: [c.call(4, PokerCard.CLUBS), c.call(4, PokerCard.DIAMONDS)], 8: [c.call(2, PokerCard.SPADES), c.call(2, PokerCard.CLUBS)],
 	}
+	var won := {3: 2400, 6: 860}
 	var entries := []
-	for pid in holes:
-		entries.append({"name": NAMES[pid], "cards": holes[pid], "hand_name": HandEvaluator.evaluate(holes[pid] + _board(), false)["detail"]})
+	for pid in [3, 6, 1, 2, 4, 5, 7, 8]:
+		entries.append({"name": NAMES[pid], "cards": holes[pid], "hand_name": HandEvaluator.evaluate(holes[pid] + _board(), false)["detail"],
+			"won": won.get(pid, 0)})
 	return entries

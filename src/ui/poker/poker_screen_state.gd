@@ -2,7 +2,7 @@ class_name PokerScreenState
 extends RefCounted
 # 德州牌桌的本地状态(纯逻辑,不依赖场景树):最新的公共 / 私有视图、演出进行到哪一步的「影子行」
 # (各人的筹码、下注、状态——铭牌在演出期间按它显示,视图领先于演出)、自己保存的座位表(规格 §4.2:
-# 演到 hand_started 时取它的 seats,对账时视图的 seats 不同就重排)、当前行动者与摊牌条。
+# 演到 hand_started 时取它的 seats,对账时视图的 seats 不同就重排)、当前行动者与摊牌面板(亮牌、各人这一手赢到的数)。
 # 事件只改影子行;演出结束后 refresh_from_view 用视图整体覆盖。视图与事件来自网络,字段类型不对的一律当作没有。
 
 
@@ -23,8 +23,10 @@ var hand := 0
 var mode := GameMode.HOLDEM
 var positions := {"button": null, "sb": null, "bb": null}
 var current_pid = null        # 演出进行到的行动者(事件驱动,不随视图跳)
-var in_showdown := false      # reveal 到 hand_over 之间:底部显示摊牌条
-var revealed := {}            # pid -> 两张牌(摊牌条的条目)
+var in_showdown := false      # 这一手有人亮过牌:右侧摊牌面板从亮牌一直显示到下一手 hand_started
+var revealed := {}            # pid -> 两张牌(摊牌面板的条目)
+var winnings := {}            # pid -> 这一手分池赢到的总额(摊牌面板的结果列)
+var winnings_known := false   # 演到过这一手的分池;迟到者第一帧没看到分池,结果列留空
 var ending := false
 
 
@@ -93,11 +95,14 @@ func sync_from_view() -> bool:
 	var reseat := refresh_from_view(true)
 	current_pid = pub["current_pid"] if pub.get("current_pid") is int else null
 	revealed = {}
+	winnings = {}
+	winnings_known = false
 	for pid in order:
 		var shown: Array = rows[pid]["shown"]
 		if shown.size() == PokerRules.HOLE_CARDS and not has_left(pid):
 			revealed[pid] = shown
-	in_showdown = not revealed.is_empty() and pub.get("phase") == "betting"
+	# 两手之间视图仍保留上一手亮的牌(规格 §4.4):面板照样显示
+	in_showdown = not revealed.is_empty()
 	return reseat
 
 
@@ -120,9 +125,11 @@ func apply_event(ev: Dictionary) -> void:
 			_reveal(ev)
 		"pot_won":
 			var shares: Dictionary = ev["shares"] if ev.get("shares") is Dictionary else {}
+			winnings_known = true
 			for winner in shares:
 				if rows.has(winner) and shares[winner] is int:
 					rows[winner]["stack"] += shares[winner]
+					winnings[winner] = winnings.get(winner, 0) + shares[winner]
 		"hand_over":
 			_hand_over(ev)
 		"rebuy":
@@ -159,6 +166,8 @@ func _hand_started(ev: Dictionary) -> void:
 	current_pid = null
 	in_showdown = false
 	revealed = {}
+	winnings = {}
+	winnings_known = false
 
 
 func _bet_made(pid: Variant, ev: Dictionary) -> void:
@@ -198,8 +207,6 @@ func _hand_over(ev: Dictionary) -> void:
 	for pid in _array(ev.get("busted")):
 		_set_fields(pid, {"status": PokerRules.STATUS_BUSTED})
 	current_pid = null
-	in_showdown = false
-	revealed = {}
 
 
 func _player_joined(pid: Variant, name: Variant) -> void:
@@ -283,8 +290,8 @@ func is_excluded(pid: Variant) -> bool:
 
 
 func bottom_mode(my_pid: int) -> String:
-	# 底部中间放什么(规格 §6.1):座位状态优先,其次摊牌条;下注控件(含旁人回合横幅)只在有人行动时
-	var bottom := PokerHud.bottom_mode_for(row(my_pid), in_showdown)
+	# 底部中间放什么(规格 §6.1):座位状态的提示;下注控件(含旁人回合横幅)只在有人行动时
+	var bottom := PokerHud.bottom_mode_for(row(my_pid))
 	if bottom == PokerHud.BOTTOM_BET and current_pid == null:
 		return PokerHud.BOTTOM_NONE
 	return bottom
@@ -299,16 +306,24 @@ func seat_entries(my_pid: int) -> Array:
 
 
 func showdown_entries(short_deck: bool) -> Array:
-	# 摊牌条:按视图顺序列出亮了牌的人;公共牌不足 3 张(翻牌前全下)时还没有牌型名
-	var entries := []
+	# 摊牌面板:亮了牌的人,赢家按赢到的多少排在最前,其余按视图顺序;公共牌不足 3 张(翻牌前全下)时还没有牌型名。
+	# won:演到分池之前为 null(结果列留空),之后赢家为总额、其余为 0
+	var winners := []
+	var others := []
 	for pid in order:
 		if not revealed.has(pid):
 			continue
 		var hand_name := ""
 		if board.size() >= PokerRules.FLOP_CARDS:
 			hand_name = HandEvaluator.evaluate(revealed[pid] + board, short_deck).get("detail", "")
-		entries.append({"name": name_of(pid), "cards": revealed[pid], "hand_name": hand_name})
-	return entries
+		var won: Variant = winnings.get(pid, 0) if winnings_known else null
+		var entry := {"name": name_of(pid), "cards": revealed[pid], "hand_name": hand_name, "won": won}
+		if won is int and won > 0:
+			winners.append(entry)
+		else:
+			others.append(entry)
+	winners.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["won"] > b["won"])
+	return winners + others
 
 
 # —— 工具 ——
