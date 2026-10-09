@@ -14,6 +14,9 @@ const LINES := [
 	"给阿姨倒一杯卡布奇诺",
 	"17 张牌你能秒我?",
 ]
+# 开关九宫格的键。放在这个纯数据模块里:HUD 引用它时不会把 QuipController 依赖的自动加载单例(Net)拖进来,
+# tools/shot.gd(不带自动加载编译)才不报「Identifier not found: Net」
+const TOGGLE_KEY := KEY_T
 const COOLDOWN := 3.0          # 秒:每人说完一句后多久才能再说(客户端本地;房主另有略宽的限速)
 const BUBBLE_SECONDS := 2.5    # 气泡停留多久(不含弹出与淡出)
 

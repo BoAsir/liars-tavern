@@ -11,8 +11,8 @@ extends Control
 
 
 const PICK_RADIUS := 140.0      # 像素:光标离酒客头的屏幕距离上限
-const TOMATO_KEY := KEY_G       # 丢番茄(T 归九宫格快捷对话)
-const SAY_KEY := KEY_Q
+const TOMATO_KEY := Banter.TOMATO_KEY   # 丢番茄 G(T 归九宫格快捷对话)
+const SAY_KEY := Banter.SAY_KEY
 const BUBBLE_KEY := "banter:%d" # WorldLabels 里快捷语气泡的键
 const PLATE_KEYS := ["plate:%d", "lobby:%d"]   # 牌桌 / 等待厅的铭牌键:气泡挂在它们之上
 const CLAIM_KEY := "bubble:%d"  # 牌桌上声称 /「骗子!」的气泡(TableDirector.BUBBLE_KEY):快捷语气泡再叠在它上面

@@ -13,6 +13,9 @@ const TOMATO_COOLDOWN := 3.0   # 秒:每人两次丢番茄之间,房主为准
 const SAY_COOLDOWN := 1.5      # 秒:每人两句快捷语之间,房主为准
 # 快捷语(协议里只传编号,文案改了不影响联机;两种玩法都说得通)
 const PHRASES := ["你骗人!", "真的假的?", "这把稳了~", "救命啊!", "哈哈哈哈!", "快点啦…", "好牌啊!", "呜呜呜…"]
+# 丢番茄 / 快捷语面板的键(界面 BanterView 用)。放在这里而不是 BanterView:HUD 引用它们时不会把 Net 拖进编译
+const TOMATO_KEY := KEY_G   # 原来是 T,让给九宫格快捷对话
+const SAY_KEY := KEY_Q
 const SEED_MAX := 0x7fffffff
 const HOST_ID := LobbyModel.HOST_ID
 

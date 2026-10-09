@@ -59,13 +59,17 @@ func clear() -> void:
 
 
 func _process(_delta: float) -> void:
-	for key in _entries.keys():
-		var entry: Dictionary = _entries[key]
-		var node = entry["node"]
-		if not is_instance_valid(node):
-			_entries.erase(key)
-			continue
-		_place(node, entry)
+	# 两遍:先摆固定偏移的(铭牌、声称气泡、九宫格快捷对话气泡),再摆偏移现算的(快捷语气泡);
+	# 后者读前者这一帧的位置叠上去,镜头在动时也不会差一帧而压到别人身上
+	for dependent in [false, true]:
+		for key in _entries.keys():
+			var entry: Dictionary = _entries[key]
+			var node = entry["node"]
+			if not is_instance_valid(node):
+				_entries.erase(key)
+				continue
+			if (entry["offset"] is Callable) == dependent:
+				_place(node, entry)
 
 
 func _place(node: Control, entry: Dictionary) -> void:

@@ -155,7 +155,7 @@ func _build_top_right() -> void:
 	end_button.visible = false
 	end_button.pressed.connect(func(): end_pressed.emit())
 	row.add_child(end_button)
-	var quip_button := UiTheme.button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY))
+	var quip_button := UiTheme.button("对话 · %s" % OS.get_keycode_string(Quips.TOGGLE_KEY))
 	quip_button.add_theme_font_size_override("font_size", 15)
 	quip_button.focus_mode = Control.FOCUS_NONE
 	quip_button.pressed.connect(func(): quip_pressed.emit())

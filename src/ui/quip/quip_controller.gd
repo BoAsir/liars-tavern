@@ -10,7 +10,7 @@ extends Control
 
 
 const KEY_PREFIX := "quip:%d"   # WorldLabels 里他人气泡的键(与出牌的气泡分开,两个可以同时在)
-const TOGGLE_KEY := KEY_T
+const TOGGLE_KEY := Quips.TOGGLE_KEY
 
 var app: Node
 var my_pid := 0

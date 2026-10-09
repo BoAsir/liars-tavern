@@ -81,7 +81,7 @@ func _build_rules_button() -> void:
 	add_child(row)
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY), quip_pressed))
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(Quips.TOGGLE_KEY), quip_pressed))
 	row.add_child(_top_button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY), rules_pressed))
 
 
@@ -264,9 +264,9 @@ func set_actions(can_play: bool, can_challenge: bool, selected: int, my_turn: bo
 	elif selected > 0:
 		_hint.text = "已预选 %d 张,轮到你时按 Enter 出牌" % selected
 	else:
-		_hint.text = "可以先点选手牌预选 · WASD 探头 · V 切换视角 · %s 对话 · %s 丢番茄 · %s 快捷语 · %s 规则 · Esc 离开" \
-			% [OS.get_keycode_string(QuipController.TOGGLE_KEY), OS.get_keycode_string(BanterView.TOMATO_KEY),
-				OS.get_keycode_string(BanterView.SAY_KEY), OS.get_keycode_string(RulebookContent.HOTKEY)]
+		_hint.text = "可先点选手牌预选 · WASD 探头 · V 视角 · %s 对话 · %s 番茄 · %s 快捷语 · %s 规则 · Esc 离开" \
+			% [OS.get_keycode_string(Quips.TOGGLE_KEY), OS.get_keycode_string(Banter.TOMATO_KEY),
+				OS.get_keycode_string(Banter.SAY_KEY), OS.get_keycode_string(RulebookContent.HOTKEY)]
 
 
 func set_actions_visible(visible_actions: bool) -> void:
