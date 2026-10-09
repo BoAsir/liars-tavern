@@ -99,9 +99,10 @@ func test_rpc_table_is_four_reliable_methods():
 		assert_false(config[name]["call_local"], name)
 
 
-func test_protocol_number_is_v6():
-	# 德州单独随 0.7.0 用 v5 发布;丢番茄、快捷语、自选形象、炸弹猫随 0.8.0 一起升到 v6,不和 0.7.0 同桌
-	assert_eq(Protocol.VERSION, 6)
+func test_protocol_number_is_v7():
+	# 德州单独随 0.7.0 用 v5 发布;丢番茄、快捷语、自选形象、炸弹猫随 0.8.0 升到 v6;
+	# 上游的九宫格快捷对话也叫 v6 但 RPC 表不同,两边合并后升到 v7,两种 v6 都不能同桌
+	assert_eq(Protocol.VERSION, 7)
 
 
 # —— 丢番茄 ——

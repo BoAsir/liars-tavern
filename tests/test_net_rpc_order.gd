@@ -1,13 +1,13 @@
 extends GutTest
-# 协议 v5 的完整 RPC 表(子项目② §3.6):Godot 按方法名排序给 RPC 编号。
+# 协议的完整 RPC 表(子项目② §3.6;现为 v7):Godot 按方法名排序给 RPC 编号。
 # 自选形象新增的 rpc_lobby_species 排在 rpc_join_request 之后,v1 以来的握手前缀(下标 0–7)一个不动,
 # 新旧版本互连时照样收到「版本不匹配」;握手前缀与参数的冻结另见 test_rpc_order。
 
 
 const NETWORK_MANAGER := "res://src/net/network_manager.gd"
-# v5 冻结的完整列表(德州的 rpc_poker_intent + 自选形象的 rpc_lobby_species + 炸弹猫的字典意图 rpc_session_intent,
-# 三者都并入未发布的 0.7.0);以后加 RPC 要升协议并改这里
-const V5_RPCS := [
+# v7 的完整列表(德州的 rpc_poker_intent + 自选形象的 rpc_lobby_species + 炸弹猫的字典意图 rpc_session_intent
+# + 上游九宫格快捷对话的 rpc_quip / rpc_quip_shown);以后加 RPC 要升协议并改这里
+const V7_RPCS := [
 	"rpc_game_events", "rpc_game_started", "rpc_intent_challenge", "rpc_intent_play",
 	"rpc_intent_rejected", "rpc_join_accepted", "rpc_join_denied", "rpc_join_request",
 	"rpc_kicked", "rpc_lobby_ready", "rpc_lobby_species", "rpc_lobby_state", "rpc_look", "rpc_look_relay",
@@ -37,8 +37,8 @@ func _args(method: String) -> Array:
 	return []
 
 
-func test_sorted_rpc_table_is_the_frozen_v5_list():
-	assert_eq(_sorted_names(), V5_RPCS)
+func test_sorted_rpc_table_is_the_frozen_v7_list():
+	assert_eq(_sorted_names(), V7_RPCS)
 
 
 func test_handshake_prefix_is_unchanged_up_to_the_join_request():
@@ -71,6 +71,7 @@ func test_join_request_still_takes_two_arguments():
 	assert_eq(_args("rpc_join_request").size(), 2, "rpc_join_request(pname, version)")
 
 
-func test_protocol_is_v6():
-	# 德州单独随 0.7.0 用 v5 发布了;自选形象、丢番茄与快捷语、炸弹猫随 0.8.0 升到 v6(握手仍能告诉 v5 客户端「版本不匹配」)
-	assert_eq(Protocol.VERSION, 6)
+func test_protocol_is_v7():
+	# 德州单独随 0.7.0 用 v5 发布了;自选形象、丢番茄与快捷语、炸弹猫随 0.8.0 升到 v6;上游的九宫格快捷对话
+	# (rpc_quip / rpc_quip_shown)也用了 v6,两个 v6 的 RPC 表不同。合在一起升 v7(握手仍能告诉旧客户端「版本不匹配」)
+	assert_eq(Protocol.VERSION, 7)
