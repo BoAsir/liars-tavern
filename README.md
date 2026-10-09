@@ -20,7 +20,7 @@
 
 ## 下载
 
-到 [Releases](https://github.com/BoAsir/liars-tavern/releases) 下载最新安装包:
+到 [Releases](https://github.com/Murphycx94/liars-tavern/releases) 下载最新安装包:
 
 - **macOS**(Intel 与 Apple 芯片通用):`LiarsTavern-<版本>-macOS.zip`,用访达双击解压得到 `骗子酒馆.app`。
   安装包没有经过苹果公证，第一次打开会被系统拦下：到「系统设置 → 隐私与安全性」底部点「仍要打开」
@@ -32,9 +32,6 @@
 - 附带的 `SHA256SUMS.txt` 是两个安装包的 SHA-256 校验值。
 
 ## 在线更新
-
-> **0.8.0 起更新源搬到了本仓库(BoAsir/liars-tavern)并换了签名钥匙**:0.7.0 及更早的版本收不到 0.8.0,
-> 需要从上面的 Releases 重新下载安装一次;装好 0.8.0 之后的更新照常自动进行。
 
 装好一次之后,游戏会自己更新,不用再下载安装包:
 
