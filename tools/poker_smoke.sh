@@ -2,7 +2,7 @@
 # 德州无头联机冒烟(规格 §8):1 个房主 + 直连 bot + 局域网发现 bot 开局;房主开始第 1 手后再来一个发现 bot(验证对局中可加入)。
 # 房主打到第 HANDS 手后散局。用法:MODE=holdem|short_deck tools/poker_smoke.sh
 # 通过条件:4 个进程都以 0 退出、都打印 SESSION_OVER、迟到者至少被发到一手牌、房主 net_sum=0、
-#          每个日志都收到另外 3 人的视线与脖子(GAZE peers=3 necks=3)、没有脚本错误。
+#          每个日志都收到另外 3 人的视线与脖子(GAZE peers=3 necks=3)与快捷对话(QUIPS heard=3)、没有脚本错误。
 set -u
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -58,6 +58,7 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT" "late:$LATE"; do
 	[ "$errors" -ne 0 ] && problems="$problems script_errors=$errors"
 	grep -q "SESSION_OVER" "$log" || problems="$problems no_session_over"
 	grep -q "GAZE peers=$PEERS necks=$PEERS" "$log" || problems="$problems gaze"
+	grep -q "QUIPS heard=$PEERS" "$log" || problems="$problems quips"
 	if [ "$name" = "host" ] && ! grep -q "net_sum=0$" "$log"; then
 		problems="$problems net_sum"
 	fi
@@ -69,7 +70,7 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT" "late:$LATE"; do
 		grep -A3 "SCRIPT ERROR\|FAIL" "$log" | head -20
 		status=1
 	else
-		echo "ok   $name — $(grep -m1 SESSION_OVER "$log" | sed 's/.*SESSION_OVER //') · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log")$(grep -m1 -o " net_sum=-*[0-9]*" "$log")"
+		echo "ok   $name — $(grep -m1 SESSION_OVER "$log" | sed 's/.*SESSION_OVER //') · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log") · $(grep -m1 -o "QUIPS heard=[0-9]*" "$log")$(grep -m1 -o " net_sum=-*[0-9]*" "$log")"
 	fi
 done
 [ "$status" -eq 0 ] && echo "德州联机冒烟($MODE)通过(日志:$LOG_DIR)"

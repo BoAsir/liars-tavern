@@ -21,6 +21,7 @@ const END_CONFIRM := "散局:打完当前这一手后结算,全员回到等待�
 const LEAVE_CONFIRM := "离开牌桌后这一手按弃牌处理,确定吗?"
 const HOST_LEAVE_CONFIRM := "你是房主,离开会解散整桌,确定吗?"
 const FOLD_CONFIRM := "现在可以免费过牌,确定要弃牌吗?"
+const QUIP_GAP := 6.0   # 他人快捷对话气泡的小三角尖与铭牌之间的留白
 const SEAT_EVENTS := ["rebuy", "spectate", "sit_in"]   # 再领 / 观战 / 回座请求的回执(事件里是自己的 pid)
 
 var app: Node
@@ -42,6 +43,7 @@ var _awaiting_intent := false        # 已提交下注动作,等房主回执
 var _seat_request_pending := false   # 已提交再领 / 观战 / 回座,等房主回执
 var _bust_left := -1.0               # 输光后到下一手开始的本地倒计时(规格 §2.6);< 0 表示没在数
 var _settlement: PokerSettlement = null
+var quips: QuipController
 var _end_requested := false             # 房主已确认散局:按钮立刻变灰,不等 ending 事件演到
 var _fold_confirm: ConfirmOverlay = null   # 「可以免费过牌,确定弃牌吗」:换了行动者就作废
 
@@ -73,6 +75,9 @@ func _ready() -> void:
 	hud = PokerHud.new()
 	add_child(hud)
 	_connect_hud()
+	quips = _make_quips()
+	add_child(quips)
+	hud.quip_pressed.connect(quips.toggle)
 	director = PokerDirector.new(self, app, hud)
 	add_child(director)
 	_sync_nameplates()
@@ -103,6 +108,7 @@ func _exit_tree() -> void:
 		return
 	for pid in state.names:
 		app.labels.untrack(PLATE_KEY % pid)
+		app.labels.untrack(QuipController.KEY_PREFIX % pid)
 	world.set_patron_visible(my_pid, true)
 	world.clear_poker()
 
@@ -126,6 +132,18 @@ func _connect_hud() -> void:
 	hud.sit_in_pressed.connect(choose_sit_in)
 	hud.action_chosen.connect(submit)
 	hud.fold_confirm_requested.connect(_confirm_fold)
+
+
+func _make_quips() -> QuipController:
+	# 快捷对话:他人的气泡挂在铭牌正上方(没登场的人只记日志),自己的弹在左下自己那一栏上方
+	var quip := QuipController.new(app, my_pid)
+	quip.name_of = name_of
+	quip.anchor_for = func(pid: int) -> Callable:
+		return world.nameplate_anchor.bind(pid) if world.patrons.has(pid) else Callable()
+	quip.show_mine = func(text: String) -> void: hud.my_bubble(text)
+	quip.log_line = hud.log_event
+	quip.bubble_offset = Vector2(0, -PokerNameplate.MAX_SIZE.y - QUIP_GAP)
+	return quip
 
 
 func _make_gaze() -> SeatGaze:
