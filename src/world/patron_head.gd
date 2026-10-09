@@ -177,6 +177,10 @@ static func nose(spec: Dictionary, batch: MeshBatch, shape: Callable) -> void:
 	match n["shape"]:
 		"disc":
 			_pig_snout(spec, batch, tip, basis, size)
+		"beak":
+			batch.add_arrays(PatronBeak.upper(spec, shape), PatronSkin.SLOT)
+		"dots":
+			_dot_nostrils(batch, shape, spec, size)
 		_:
 			var arrays := PatronGeo.ellipsoid_fn(func(d: Vector3) -> Vector3:
 				# 上宽下窄的圆角三角(熊、猫),"oval" 时不收窄
@@ -214,6 +218,16 @@ static func _pig_snout(spec: Dictionary, batch: MeshBatch, tip: Vector3, basis: 
 		var pos := tip + basis * Vector3(side * r * 0.4, 0.0, -0.002)
 		batch.add_arrays(hole, PatronSkin.SLOT, Transform3D(basis * Basis(Vector3.FORWARD, side * 0.25), pos),
 			PatronSkin.tag(PatronSkin.MOUTH, 0.0, 0.0, 0.6))
+
+
+static func _dot_nostrils(batch: MeshBatch, shape: Callable, spec: Dictionary, size: Vector3) -> void:
+	# 青蛙:吻端两个小小的深色鼻孔,左右分开、微微隆起
+	var snout := Basis.looking_at(snout_axis(spec), Vector3.UP)
+	for side in [-1.0, 1.0]:
+		var d := snout * dir(side * size.x, size.y)
+		var hole := PatronGeo.sphere(Vector3(size.z, size.z * 0.7, size.z * 0.5), 8, 5)
+		var frame := PatronGeo.frame_at(point_at(shape, d, -size.z * 0.15), normal_at(shape, d))
+		batch.add_arrays(hole, PatronSkin.SLOT, frame, PatronSkin.tag(PatronSkin.LASH))
 
 
 static func whiskers(spec: Dictionary, batch: MeshBatch, shape: Callable) -> void:

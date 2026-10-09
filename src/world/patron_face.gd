@@ -21,10 +21,15 @@ const X_SIZE := 0.62           # 叉叉眼的大小(眼睑半径的倍数)
 const MOUTH_LIFT := 0.0006     # 嘴各层离口鼻表面的高度:口腔 < 舌头/牙齿 < 描边
 const INNER_LIFT := 0.0011
 const LINE_LIFT := 0.0004
-const LINE_WIDTH := 0.0026
-const LINE_HEIGHT := 0.0009
+const LINE_WIDTH := 0.0034
+const LINE_HEIGHT := 0.0012
 const PHILTRUM_TOP := -0.11    # 人中从鼻子下沿(口鼻局部俯仰角)开始
 const EXPRESSIONS := ["neutral", "angry", "worried", "happy", "smug", "dead"]
+# 嘴形没有"ω"、没有人中的物种:平时是一道浅笑(猪、青蛙的阔嘴)
+const SMILERS := ["pig", "frog"]
+const TOOTH_WIDTH := 0.017     # 兔子门牙:每颗的宽(米,口鼻表面上)与长(口鼻局部俯仰角,弧度)
+const TOOTH_LENGTH := 0.075
+const SNOUT_ARC := 0.15        # 口鼻表面上每弧度大约多少米(把门牙宽度换成嘴的横向参数)
 
 
 # —— 眼睛 ——
@@ -35,7 +40,8 @@ static func eye_rest(spec: Dictionary, shape: Callable, side: float) -> Transfor
 	var r: float = e["radius"]
 	var yaw: float = side * e["yaw"]
 	var surface := PatronHead.point(shape, yaw, e["pitch"])
-	var center := surface - PatronHead.normal(shape, yaw, e["pitch"]) * r * EYE_SINK
+	var sink: float = e.get("sink", EYE_SINK)
+	var center := surface - PatronHead.normal(shape, yaw, e["pitch"]) * r * sink
 	var forward := Vector3(side * sin(EYE_TURN), -0.04, -cos(EYE_TURN)).normalized()
 	return Transform3D(Basis.looking_at(forward, Vector3.UP), center)
 
@@ -148,6 +154,8 @@ static func brow(spec: Dictionary, shape: Callable, side: float) -> Array:
 static func mouth(spec: Dictionary, shape: Callable, expression: String) -> Array:
 	# 某个表情的嘴(头部坐标):张开的嘴 = 口腔 + 舌头/牙齿 + 上下描边;闭着的嘴 = 一道描边;外加人中
 	var m: Dictionary = spec["mouth"]
+	if m["kind"] == "beak":
+		return PatronBeak.lower(spec, shape, expression)
 	var snout := Basis.looking_at(PatronHead.snout_axis(spec), Vector3.UP)
 	var curves := _curves(m["kind"], expression)
 	var width: float = m["width"] * curves["width"]
@@ -165,8 +173,10 @@ static func mouth(spec: Dictionary, shape: Callable, expression: String) -> Arra
 			parts.append(_mouth_fill(at, up, low, 0.24, 0.76, 0.52, 1.0, INNER_LIFT, PatronSkin.TONGUE))
 		parts.append(_mouth_line(at, shape, snout, width, drop, low))
 	parts.append(_mouth_line(at, shape, snout, width, drop, up))
-	if m["kind"] != "pig":
+	if not SMILERS.has(m["kind"]):
 		parts.append(_philtrum(shape, snout, drop, up))
+	if m["kind"] == "rabbit":
+		parts.append(_buck_teeth(at, up, width))
 	if curves.get("fangs", false) and m["kind"] == "cat":
 		parts.append(_fangs(at, up, low_or(curves)))
 	if expression == "dead":
@@ -180,7 +190,7 @@ static func low_or(curves: Dictionary) -> Callable:
 
 static func _curves(kind: String, expression: String) -> Dictionary:
 	# 嘴形:x ∈ [-1, 1] 从左嘴角到右嘴角,返回相对嘴线中心的俯仰偏移(弧度,正为上)
-	var pig := kind == "pig"
+	var pig := SMILERS.has(kind)
 	match expression:
 		"happy":
 			return {"width": 1.0, "tongue": true,
@@ -251,6 +261,25 @@ static func _fangs(at: Callable, up: Callable, low: Callable) -> Array:
 		var normal := (top2 - top).cross(tip - top).normalized()
 		parts.append(_tagged(_triangle(top, top2, tip, normal), PatronSkin.TEETH))
 	return PatronGeo.concat(parts)
+
+
+static func _buck_teeth(at: Callable, up: Callable, width: float) -> Array:
+	# 兔子的两颗大门牙:从上唇中间垂下来,中间一道细缝;贴着口鼻表面,比口腔高一层
+	var half := TOOTH_WIDTH / maxf(width * SNOUT_ARC, 1e-4)
+	var teeth := PatronGeo.grid(func(s: float, t: float) -> Vector3:
+			var x := lerpf(-half, half, s)
+			var v: float = up.call(x) + 0.004 - TOOTH_LENGTH * t * (1.0 - 0.25 * pow(absf(x / half), 4.0))
+			return at.call(x, v, INNER_LIFT + 0.0012),
+		8, 3, PatronHead.CENTER)
+	var gap := PackedVector3Array()
+	var normals := PackedVector3Array()
+	for i in 4:
+		var v: float = up.call(0.0) - TOOTH_LENGTH * 0.95 * i / 3.0
+		var p: Vector3 = at.call(0.0, v, INNER_LIFT + 0.0016)
+		gap.append(p)
+		normals.append((p - PatronHead.CENTER).normalized())
+	var line := PatronGeo.stroke(gap, normals, PackedFloat32Array([0.0012, 0.0012, 0.0012, 0.0008]), 0.0004, 3)
+	return PatronGeo.concat([_tagged(teeth, PatronSkin.TEETH), _tagged(line, PatronSkin.LASH)])
 
 
 static func _hanging_tongue(at: Callable, up: Callable) -> Array:

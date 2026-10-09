@@ -24,6 +24,8 @@ const int P_CHECK = 2;
 const int P_TWEED = 3;
 const int P_STRIPES = 4;
 const int P_VELVET = 5;
+const int P_DOTS = 6;
+const int P_STRAW = 7;
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 uniform vec4 palette[SLOTS];       // 与 StandardMaterial3D 的 albedo_color 同样原样使用(实测本引擎下两者像素一致)
@@ -95,6 +97,18 @@ vec3 cloth(vec3 base, vec4 lk) {
 		base = mix(base, ink.rgb, (1.0 - lines(p.x, 0.36)) * 0.8);
 	} else if (pattern == P_VELVET) {
 		base *= 0.85 + value_noise(v_uv * 60.0) * 0.15;
+	} else if (pattern == P_DOTS) {
+		// 波点(领巾):错行排列的圆点,远处按像素尺寸淡成平均色
+		vec2 cell = vec2(p.x + 0.5 * floor(p.y), p.y);
+		float d = length(fract(cell) - 0.5);
+		float w = max(fwidth(p.x), 1e-4);
+		float dot_mask = mix(smoothstep(0.24 + w, 0.24 - w, d), 0.18, clamp(w * 2.0 - 0.6, 0.0, 1.0));
+		base = mix(base, vec3(0.93, 0.9, 0.82), dot_mask);
+	} else if (pattern == P_STRAW) {
+		// 草编:一圈圈压扁的草辫(沿 V)+ 斜向编纹
+		float braid = abs(fract(p.y) - 0.5) * 2.0;
+		float twill = lines(p.x * 2.0 + p.y * 2.0, 0.4);
+		base *= 0.78 + 0.22 * smoothstep(0.0, 0.6, braid) + (twill - 0.5) * 0.12 * weave_fade;
 	}
 	return base;
 }

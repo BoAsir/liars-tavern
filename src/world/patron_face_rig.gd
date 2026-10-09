@@ -68,9 +68,10 @@ func _init(owner: Node3D, head: Node3D, spec: Dictionary, meshes: Dictionary, ma
 		var brow := PatronFace.brow_frame(spec, shape, side)
 		_brow_rest.append(brow)
 		_brows.append(_part(head, "brow_" + low, "Brow" + suffix, brow))
-		var ear := PatronEars.pivot(spec, shape, side)
-		_ear_rest.append(ear)
-		_ears.append(_part(head, "ear", "Ear" + suffix, ear))
+		if (meshes["ear"] as ArrayMesh).get_surface_count() > 0:   # 没有耳朵的物种(青蛙)不建耳朵节点
+			var ear := PatronEars.pivot(spec, shape, side)
+			_ear_rest.append(ear)
+			_ears.append(_part(head, "ear", "Ear" + suffix, ear))
 	_mouth = _part(head, "mouth:neutral", "Mouth", Transform3D.IDENTITY)
 	_x_eyes = _part(head, "x_eyes", "XEyes", Transform3D.IDENTITY)
 	_x_eyes.visible = false
@@ -139,7 +140,8 @@ func _apply() -> void:
 		var lid := Basis(Vector3.BACK, side * lid_tilt) * Basis(Vector3.RIGHT, PatronFace.lid_angle(open))
 		_lids[i].transform = _eye_rest[i] * Transform3D(lid, Vector3.ZERO)
 		_brows[i].transform = _brow_rest[i] * Transform3D(Basis(Vector3.BACK, side * brow_tilt), Vector3(0, brow_raise, 0))
-		_ears[i].transform = _ear_rest[i] * Transform3D(Basis(Vector3.RIGHT, ear_droop + twitch[i]), Vector3.ZERO)
+		if i < _ears.size():
+			_ears[i].transform = _ear_rest[i] * Transform3D(Basis(Vector3.RIGHT, ear_droop + twitch[i]), Vector3.ZERO)
 
 
 func _start_blink() -> void:

@@ -14,6 +14,7 @@ const FADE_TIME := 1.4
 enum {
 	FUR, MUZZLE, DARK, SKIN, NOSE, EYE, IRIS, MOUTH, TONGUE, TEETH, LASH, WHISKER, CLAW, PAD,
 	COAT, TRIM, VEST, SHIRT, TIE, POCKET, BRASS, TROUSERS, SHOES, SOLE, HAT, HAT_BAND, STONE, LINING, INNER,
+	WOOD, SCARF, PETAL,
 }
 # 物种表 palette / patterns 里用的槽位名
 const SLOT_NAMES := {
@@ -21,12 +22,12 @@ const SLOT_NAMES := {
 	"mouth": MOUTH, "tongue": TONGUE, "teeth": TEETH, "lash": LASH, "whisker": WHISKER, "claw": CLAW, "pad": PAD,
 	"coat": COAT, "trim": TRIM, "vest": VEST, "shirt": SHIRT, "tie": TIE, "pocket": POCKET, "brass": BRASS,
 	"trousers": TROUSERS, "shoes": SHOES, "sole": SOLE, "hat": HAT, "hat_band": HAT_BAND, "stone": STONE,
-	"lining": LINING, "inner": INNER,
+	"lining": LINING, "inner": INNER, "wood": WOOD, "scarf": SCARF, "petal": PETAL,
 }
 # 质感类型(与着色器的 K_* 一致)
 enum { KIND_FUR, KIND_SKIN, KIND_GLOSS, KIND_EYE, KIND_IRIS, KIND_CLOTH, KIND_SATIN, KIND_METAL }
 # 布料图案(与着色器的 P_* 一致)
-const PATTERNS := {"plain": 0, "pinstripe": 1, "check": 2, "tweed": 3, "stripes": 4, "velvet": 5}
+const PATTERNS := {"plain": 0, "pinstripe": 1, "check": 2, "tweed": 3, "stripes": 4, "velvet": 5, "dots": 6, "straw": 7}
 const PUPILS := {"round": 0, "slit": 1, "bar": 2}
 
 # 槽位 → [质感, 粗糙度, 绒面光泽(边缘光)]
@@ -41,6 +42,7 @@ const SURFACES := {
 	BRASS: [KIND_METAL, 0.3, 0.0], TROUSERS: [KIND_CLOTH, 0.85, 0.15], SHOES: [KIND_GLOSS, 0.3, 0.0],
 	SOLE: [KIND_CLOTH, 0.9, 0.0], HAT: [KIND_CLOTH, 0.8, 0.25], HAT_BAND: [KIND_SATIN, 0.4, 0.3],
 	STONE: [KIND_GLOSS, 0.1, 0.0], LINING: [KIND_SATIN, 0.45, 0.2], INNER: [KIND_FUR, 0.7, 0.2],
+	WOOD: [KIND_GLOSS, 0.35, 0.0], SCARF: [KIND_CLOTH, 0.62, 0.25], PETAL: [KIND_SKIN, 0.5, 0.25],
 }
 # 物种表没给时的通用颜色(sRGB)
 const DEFAULT_COLORS := {
@@ -49,7 +51,8 @@ const DEFAULT_COLORS := {
 	WHISKER: Color(0.95, 0.93, 0.88), CLAW: Color(0.9, 0.86, 0.78), PAD: Color(0.22, 0.12, 0.12),
 	SHIRT: Color(0.88, 0.86, 0.81), BRASS: Color(0.8, 0.58, 0.26), SHOES: Color(0.1, 0.06, 0.045),
 	SOLE: Color(0.07, 0.045, 0.035), STONE: Color(0.75, 0.1, 0.14), LINING: Color(0.42, 0.08, 0.1),
-	SKIN: Color(0.9, 0.62, 0.6),
+	SKIN: Color(0.9, 0.62, 0.6), WOOD: Color(0.3, 0.16, 0.08), SCARF: Color(0.72, 0.12, 0.12),
+	PETAL: Color(0.92, 0.55, 0.62),
 }
 
 

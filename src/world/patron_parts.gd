@@ -90,10 +90,11 @@ static func _torso(batch: MeshBatch, spec: Dictionary) -> void:
 
 
 static func _head_detail(batch: MeshBatch, spec: Dictionary, shape: Callable) -> void:
-	# 头上的小件(不投影):鼻子、胡须、腮毛
+	# 头上的小件(不投影):鼻子(或喙)、胡须、腮毛、眼镜/耳环/烟斗
 	PatronHead.nose(spec, batch, shape)
 	PatronHead.whiskers(spec, batch, shape)
 	PatronHead.tufts(spec, batch, shape)
+	_add_all(batch, PatronAccessories.build(spec, shape))
 
 
 static func _add(batch: MeshBatch, arrays: Array) -> void:

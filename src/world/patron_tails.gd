@@ -22,9 +22,13 @@ const SLENDER := [
 const CURL_ROOT := Vector3(0.2, 0.575, 0.24)   # 猪尾:从臀侧伸出,在椅面外侧卷两圈半
 const CURL_TURNS := 2.5
 const CURL_COIL := 0.017
+const PUFF_ROOT := Vector3(0.0, 0.535, 0.248)  # 兔子的绒球尾巴:坐在臀后、椅背前的空当里
+const PUFF_LUMPS := 0.13      # 绒球表面一团团的起伏
 const FLUFF := 0.11           # 大尾巴表面一绺绺毛的起伏(占半径比例)
 const CLUMP := 0.05           # 沿尾巴一簇簇毛的粗细起伏
 const TIP_RAGGED := 0.035     # 浅色尾尖边缘的参差(沿程比例)
+const RING_EDGE := 0.2        # 环纹边缘的软硬(sin 值的过渡宽度)与随角度的轻微倾斜
+const RING_WOBBLE := 0.5
 const SIDES := 12
 const BUSHY_SIDES := 16
 const PER_SEGMENT := 3
@@ -41,12 +45,26 @@ static func root(spec: Dictionary) -> Vector3:
 			return SLENDER[0][0] * Vector3(side, 1, 1)
 		"curl":
 			return CURL_ROOT * Vector3(side, 1, 1)
+		"puff":
+			return PUFF_ROOT
 	return Vector3.ZERO
+
+
+static func puff(t: Dictionary) -> Array:
+	# 兔子尾巴:一团蓬松的浅色绒球(表面几团起伏,不是光溜溜的球)
+	var r: float = t.get("radius", 0.045)
+	var arrays := PatronGeo.ellipsoid_fn(func(d: Vector3) -> Vector3:
+		var lon := atan2(d.x, d.z)
+		var lumps := sin(lon * 5.0 + d.y * 3.0) * sin(d.y * 6.0 + lon) * PUFF_LUMPS
+		return d * r * (1.0 + lumps) * Vector3(1.0, 0.95, 0.85), 14, 10)
+	return PatronGeo.colored(arrays, func(_v: Vector3) -> Color: return PatronSkin.tag(PatronSkin.FUR, 1.0))
 
 
 static func bushy(t: Dictionary) -> Array:
 	var scale: float = t.get("radius", 0.084) / 0.084
 	var tip: float = t.get("tip", 0.0)
+	var rings: float = t.get("rings", 0)      # 浣熊:一圈圈深色环纹,尾尖也是深色
+	var tip_dark: bool = rings > 0.0
 	var fluff := func(s: float, angle: float) -> float:
 		# 一绺绺毛:两组绕尾巴斜着走的起伏叠加,再沿尾巴一簇簇鼓起;尾根附近收平,和臀部接得上
 		var locks := sin(angle * 6.0 + s * 24.0) * 0.6 + sin(angle * 11.0 - s * 40.0) * 0.4
@@ -54,7 +72,11 @@ static func bushy(t: Dictionary) -> Array:
 	return _from_controls(BUSHY, t.get("side", 1.0), scale, fluff, func(s: float, u: float) -> Vector2:
 		# 浅色尾尖:边缘随角度参差,像毛尖而不是一刀切
 		var edge := 1.0 - tip + TIP_RAGGED * sin(u * TAU * 5.0)
-		return Vector2(smoothstep(edge - 0.04, edge + 0.04, s), 0.0), BUSHY_SIDES, BUSHY_PER_SEGMENT)
+		var at_tip := smoothstep(edge - 0.04, edge + 0.04, s)
+		if not tip_dark:
+			return Vector2(at_tip, 0.0)
+		var band := smoothstep(-RING_EDGE, RING_EDGE, sin(s * rings * PI + RING_WOBBLE * sin(u * TAU))) * smoothstep(0.12, 0.25, s)
+		return Vector2(0.0, maxf(band, at_tip) * 0.9), BUSHY_SIDES, BUSHY_PER_SEGMENT)
 
 
 static func slender(t: Dictionary) -> Array:

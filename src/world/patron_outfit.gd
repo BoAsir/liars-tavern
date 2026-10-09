@@ -33,6 +33,8 @@ static func build(spec: Dictionary, torso: PatronTorso) -> Array:
 			parts.append_array(necktie(torso))
 		"bolo":
 			parts.append_array(bolo(torso))
+		"scarf":
+			parts.append_array(neckerchief())
 	parts.append(_button(torso.frame(0.0, PatronTorso.BUTTON_Y - 0.006, 0.002), BUTTON_RADIUS * 1.25, PatronSkin.BRASS))
 	if outfit.get("vest", true):
 		for y in VEST_BUTTONS:
@@ -111,6 +113,26 @@ static func bolo(torso: PatronTorso) -> Array:
 	parts.append(_placed(PatronGeo.transformed(slide, Transform3D(tilt, Vector3.ZERO)), frame, PatronSkin.BRASS))
 	parts.append(_placed(PatronGeo.sphere(Vector3(0.0085, 0.0105, 0.004), 10, 6), frame.translated_local(Vector3(0, 0, -0.004)),
 		PatronSkin.STONE))
+	return [_merged(parts)]
+
+
+static func neckerchief() -> Array:
+	# 波点领巾:绕脖子一圈的布卷 + 前面打的结 + 两片往两侧斜垂下来的尖角
+	var ring := PackedVector3Array()
+	for i in 17:
+		var a := lerpf(COLLAR_GAP * 0.6, TAU - COLLAR_GAP * 0.6, i / 16.0)
+		ring.append(Vector3(sin(a) * (COLLAR_RING + 0.008), COLLAR_Y - 0.006 + 0.01 * (1.0 - cos(a)) * 0.5,
+			NECK_Z - cos(a) * (COLLAR_RING + 0.008)))
+	var frame := PatronGeo.frame_at(KNOT + Vector3(0, 0.004, -0.004), Vector3(0, -0.15, -1.0))
+	var knot := MeshShapes.deform(MeshShapes.rounded_box(Vector3(0.03, 0.026, 0.022), 0.009, 2), func(v: Vector3) -> Vector3:
+		return Vector3(v.x * (1.0 + v.y * 10.0), v.y, v.z))
+	var parts := [_tagged(MeshShapes.tube(ring, 0.012, 8, true), PatronSkin.SCARF), _placed(knot, frame, PatronSkin.SCARF)]
+	for side in [-1.0, 1.0]:
+		var tail := PackedVector2Array([Vector2(-0.016, 0.0), Vector2(0.016, 0.0), Vector2(side * 0.006, -0.07)])
+		var flap := MeshShapes.deform(MeshShapes.extrude(tail, 0.005, 0.0015), func(v: Vector3) -> Vector3:
+			return Vector3(v.x, v.y, v.z - 1.2 * v.y * v.y))   # 下端往外飘(-Z 朝外),不贴着衬衫
+		var place := frame * Transform3D(Basis(Vector3.BACK, side * 0.38), Vector3(side * 0.006, -0.008, 0.004))
+		parts.append(_placed(flap, place, PatronSkin.SCARF))
 	return [_merged(parts)]
 
 

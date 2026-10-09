@@ -1,15 +1,27 @@
 extends SceneTree
-# 酒客造型检查:4 名酒客落座(可指定物种、表情、动作),按酒客相对的机位截图(需要窗口渲染,不能 --headless)。
-# 用法:godot --path . -s tools/patron_lab.gd -- --out=/tmp/lab [--species=0,1,2,3] [--expr=neutral,angry,worried,happy]
+# 酒客造型检查(需要窗口渲染,不能 --headless)。两种摆法:
+# 1) 桌边:4 名酒客落座(可指定物种、表情、动作),按酒客相对的机位截图。
+#    godot --path . -s tools/patron_lab.gd -- --out=/tmp/lab [--species=0,1,2,3] [--expr=neutral,angry,worried,happy]
 #       [--views=face3,body3,three3,side2,back4] [--dead=3] [--gun=4] [--cheer=2] [--neck=2] [--active=2] [--cards]
 #       [--nohat] [--size=1280x720] [--fov=30]
-# 机位(n = 1..4 号座位):face 脸部特写、prof 头部侧面、body 上半身正面、three 四分之三侧、side 侧面全身(看腿与尾巴)、
-# back 背后斜上方(看尾巴与椅子)、top 头顶俯视(看帽子与耳朵)。也可写自由机位 "px,py,pz:tx,ty,tz"(分号分隔)。
-
-
+#    机位(n = 1..4 号座位):face 脸部特写、prof 头部侧面、body 上半身正面、three 四分之三侧、side 侧面全身(看腿与尾巴)、
+#    back 背后斜上方(看尾巴与椅子)、top 头顶俯视(看帽子与耳朵)。也可写自由机位 "px,py,pz:tx,ty,tz"(分号分隔)。
+# 2) 一排(--lineup):全部物种各坐一把椅子排成一排、面朝镜头(收起牌桌),表情轮换,--dead=k 让第 k 个(0 起)出局;
+#    机位 row 正面全排、row_side 斜侧、row_back 背后、faces 全部物种脸部特写拼成一张对照表、
+#    faceN / threeN / profN / backN(N = 物种索引)。例:--lineup --views=row,faces,row_side,row_back --dead=7
 const WARMUP_FRAMES := 40
 # 截图前强制绘制几帧再读图:窗口被挡住时 macOS 不调度正常绘制(等 frame_post_draw 会卡住)
 const SETTLE_DRAWS := 6
+const LINEUP_SPACING := 0.66      # 一排里相邻两把椅子的间距(米)
+const LINEUP_Z := 0.0             # 一排摆在牌桌的位置(牌桌收起),吊灯正好照着
+const LINEUP_FOV := 36.0
+const LINEUP_EXPRESSIONS := ["neutral", "happy", "angry", "worried", "smug", "happy", "angry", "neutral"]
+const LINEUP_FILL := 0.6          # 一排摆在吊灯下、背对壁炉,开一点镜头补光,脸不至于逆光发黑
+const LINEUP_FILL_RANGE := 6.0
+const SHEET_COLUMNS := 4          # 脸部对照表:每格缩到这么大,4 列
+const SHEET_CELL := Vector2i(480, 360)
+
+var lineup: Array[Patron] = []
 
 var opts := {}
 var world: TableWorld
@@ -31,13 +43,21 @@ func _run() -> void:
 	RenderBudget.apply(root)
 	var tavern := Tavern.new()
 	root.add_child(tavern)
-	await _seat_patrons(tavern)
+	var is_lineup := opts.has("lineup")
+	if is_lineup:
+		await _line_up(tavern)
+	else:
+		await _seat_patrons(tavern)
 	var camera := tavern.camera_rig.camera
-	camera.fov = float(opts.get("fov", "30"))
-	var views: PackedStringArray = opts.get("views", "face3,body3").split(";" if opts.get("views", "").contains(":") else ",")
+	camera.fov = float(opts.get("fov", str(LINEUP_FOV) if is_lineup else "30"))
+	var default_views := "row,faces,row_side,row_back" if is_lineup else "face3,body3"
+	var views: PackedStringArray = opts.get("views", default_views).split(";" if opts.get("views", "").contains(":") else ",")
 	var custom := 0
 	for view in views:
 		var label := view
+		if view == "faces":
+			await _face_sheet(tavern, "%s/faces.png" % out_dir)
+			continue
 		var eye_target: Array
 		if view.contains(":"):
 			custom += 1
@@ -45,17 +65,95 @@ func _run() -> void:
 			var ends := view.split(":")
 			eye_target = [_vec(ends[0]), _vec(ends[1])]
 		else:
-			eye_target = _preset(view)
-		tavern.camera_rig.snap(eye_target[0], eye_target[1])
-		tavern.camera_rig.fill_light.light_energy = 0.0
-		for i in WARMUP_FRAMES:
-			await process_frame
-		for i in SETTLE_DRAWS:
-			RenderingServer.force_draw(false)
+			eye_target = _lineup_preset(view) if is_lineup else _preset(view)
 		var path := "%s/%s.png" % [out_dir, label]
-		root.get_texture().get_image().save_png(path)
+		(await _capture(tavern, eye_target)).save_png(path)
 		print("saved ", path)
 	quit()
+
+
+func _capture(tavern: Tavern, eye_target: Array) -> Image:
+	tavern.camera_rig.snap(eye_target[0], eye_target[1])
+	tavern.camera_rig.fill_light.light_energy = LINEUP_FILL if not lineup.is_empty() else 0.0
+	if not lineup.is_empty():
+		tavern.camera_rig.fill_light.omni_range = LINEUP_FILL_RANGE   # 正面全排的机位离得远,补光照得到
+	for i in WARMUP_FRAMES:
+		await process_frame
+	for i in SETTLE_DRAWS:
+		RenderingServer.force_draw(false)
+	return root.get_texture().get_image()
+
+
+# —— 一排对照 ——
+
+func _line_up(tavern: Tavern) -> void:
+	# 每个物种一把椅子排成一排、面朝 +Z(镜头那边);牌桌收起,免得挡住下半身
+	var table := tavern.get_node_or_null("TavernTable") as Node3D
+	if table != null:
+		table.visible = false
+	var count := PatronParts.SPECIES.size()
+	for i in count:
+		var patron := Patron.new(i)
+		patron.position = Vector3((i - (count - 1) / 2.0) * LINEUP_SPACING, 0.0, LINEUP_Z)
+		patron.rotation.y = PI
+		tavern.add_child(patron)
+		lineup.append(patron)
+	await create_timer(0.5).timeout
+	var expressions: PackedStringArray = opts.get("expr", ",".join(LINEUP_EXPRESSIONS)).split(",", false)
+	for i in count:
+		lineup[i].look_at_point(Vector3(lineup[i].position.x * 0.6, 1.3, LINEUP_Z + 3.0))
+		lineup[i].set_expression(expressions[i % expressions.size()])
+	if opts.has("cheer"):
+		lineup[int(opts["cheer"])].celebrate()
+	if opts.has("dead"):
+		lineup[int(opts["dead"])].die()
+	await create_timer(1.6).timeout
+
+
+func _lineup_preset(view: String) -> Array:
+	var row_center := Vector3(0, 0.95, LINEUP_Z)
+	match view:
+		"row":
+			return [Vector3(0, 1.35, LINEUP_Z + 4.1), row_center]
+		"row_side":
+			return [Vector3(3.6, 1.5, LINEUP_Z + 2.6), row_center + Vector3(0.4, 0, 0)]
+		"row_back":
+			return [Vector3(-0.6, 1.9, LINEUP_Z - 3.6), row_center + Vector3(0, -0.1, 0)]
+	# faceN / threeN / profN / backN:第 N 个物种(0 起)
+	var digits := view.lstrip("abcdefghijklmnopqrstuvwxyz_")
+	var patron: Patron = lineup[clampi(int(digits), 0, lineup.size() - 1)]
+	var forward := -patron.global_basis.z
+	var right := patron.global_basis.x
+	var head := patron.head_position()
+	match view.trim_suffix(digits):
+		"face":
+			return [head + forward * 0.62 + Vector3(0, 0.03, 0), head + Vector3(0, -0.01, 0)]
+		"three":
+			return [head + forward * 0.75 + right * 0.6 + Vector3(0, 0.05, 0), head + Vector3(0, -0.12, 0)]
+		"prof":
+			return [head + right * 0.7 + Vector3(0, 0.03, 0), head + Vector3(0, -0.01, 0)]
+		"back":
+			return [patron.global_position - forward * 1.3 + right * 0.9 + Vector3(0, 1.3, 0),
+				patron.global_position + Vector3(0, 0.6, 0)]
+	push_warning("unknown view " + view)
+	return [Vector3(0, 1.5, 4), row_center]
+
+
+func _face_sheet(tavern: Tavern, path: String) -> void:
+	# 全部物种的脸部特写缩小后拼成一张(SHEET_COLUMNS 列),一眼对比各物种的脸与表情
+	var rows := ceili(lineup.size() / float(SHEET_COLUMNS))
+	var sheet := Image.create(SHEET_CELL.x * SHEET_COLUMNS, SHEET_CELL.y * rows, false, Image.FORMAT_RGBA8)
+	for i in lineup.size():
+		var shot := await _capture(tavern, _lineup_preset("face%d" % i))
+		shot.convert(Image.FORMAT_RGBA8)
+		var side := mini(shot.get_width() * SHEET_CELL.y / SHEET_CELL.x, shot.get_height())
+		var crop := shot.get_region(Rect2i((shot.get_width() - side * SHEET_CELL.x / SHEET_CELL.y) / 2,
+			(shot.get_height() - side) / 2, side * SHEET_CELL.x / SHEET_CELL.y, side))
+		crop.resize(SHEET_CELL.x, SHEET_CELL.y, Image.INTERPOLATE_LANCZOS)
+		sheet.blit_rect(crop, Rect2i(Vector2i.ZERO, SHEET_CELL),
+			Vector2i(i % SHEET_COLUMNS * SHEET_CELL.x, i / SHEET_COLUMNS * SHEET_CELL.y))
+	sheet.save_png(path)
+	print("saved ", path)
 
 
 func _seat_patrons(tavern: Tavern) -> void:
