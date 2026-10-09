@@ -7,6 +7,7 @@ const MainMenuScreen := preload("res://src/ui/main_menu/main_menu.gd")
 const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
 const PokerScreen := preload("res://src/ui/poker/poker_screen.gd")
+const BombCatScreen := preload("res://src/ui/bomb_cat/bomb_cat_screen.gd")
 const VIEW_RESET_TIME := 0.8   # 切换屏幕时紧张度、闪光染色与镜头焦距回到平静的时长
 
 var tavern: Tavern
@@ -14,8 +15,10 @@ var world: TableWorld
 var post_fx: PostFx
 var labels: WorldLabels
 var toasts: ToastLayer
+var banter_view: BanterView   # 丢番茄与快捷语(等待厅、牌桌常驻一层)
 var flags: DebugFlags
 var settings_path := Settings.PATH   # 本机设置文件;测试换成临时文件
+var species := Species.UNASSIGNED    # 本机想要的形象:设置里的(首次启动随机一个并保存),--species 只覆盖本次运行
 
 var _ui: Control
 var _screen: Control = null
@@ -30,6 +33,9 @@ func _ready() -> void:
 	get_window().min_size = Vector2i(1024, 600)
 	RenderBudget.follow(get_window())
 	get_tree().auto_accept_quit = false
+	species = resolve_species(settings_path)
+	# 酒客、椅子、左轮的合批网格先投到工作线程里建(纯数组运算),和下面的场景搭建、牌面生成并行
+	MeshForge.prebuild(PatronParts.forge_jobs() + Revolver3D.forge_jobs())
 	tavern = Tavern.new()
 	add_child(tavern)
 	# 记下镜头的初始焦距:切换屏幕时恢复(被打断的演出可能把焦距留在半路)
@@ -37,11 +43,16 @@ func _ready() -> void:
 	world = TableWorld.new(tavern)
 	tavern.table_root.add_child(world)
 	world.cards.sfx.connect(Sfx.play)
+	world.banter.sfx.connect(Sfx.play.bind(0.08))
+	world.sfx.connect(Sfx.play.bind(0.02))   # 结算庆祝:礼炮、开场小号、掌声
 	post_fx = PostFx.new()
 	add_child(post_fx)
 	_ui = _ui_layer(5)
 	labels = WorldLabels.new(tavern.camera_rig.camera)
 	_ui.add_child(labels)
+	# 丢番茄与快捷语:压在屏幕之上(左侧小圆牌、快捷语面板),说明书之下
+	banter_view = BanterView.new(self)
+	_ui_layer(6).add_child(banter_view)
 	# 说明书单独一层:压在所有屏幕之上(切换屏幕也不会被盖住),提示条仍在它上面
 	_rules_root = _ui_layer(10)
 	toasts = ToastLayer.new()
@@ -50,12 +61,16 @@ func _ready() -> void:
 	Net.returned_to_lobby.connect(_show_lobby)
 	Net.left_lobby.connect(_back_to_menu)
 	Net.game_started.connect(_show_table)
+	RoomTextures.build(self)   # 墙地噪声与墙饰图集(不 await:与牌面共用等待帧,烘好后材质自动换图)
 	await CardFaces.build(self)
+	await MeshForge.wait_prebuilt(get_tree())
 	Card3D.refresh_materials()
 	# 先应用上次保存的静音设置再开环境音:静音启动时环境音等取消静音后才开始
 	Sfx.set_muted(Settings.get_bool(Settings.KEY_MUTED, false, settings_path))
 	Sfx.start_ambience()
 	_show_menu()
+	# 头像图集在菜单出来之后才开始做,不阻塞启动;没做好之前头像显示色圆片加首字
+	SpeciesPortraits.build(self)
 	flags = DebugFlags.new(self)
 	add_child(flags)
 
@@ -86,10 +101,26 @@ func _exit_tree() -> void:
 	Card3D.clear_materials()
 	CardFaces.clear()
 	PokerFaces.clear()
+	BombCatFaces.clear()
 	WorldMaterials.clear_cache()
+	MeshKit.clear_cache()
+	MeshForge.clear_cache()
 	ChipStack3D.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
+	SpeciesPortraits.clear()
+	PatronAntics.clear_cache()
+	PatronDance.clear_cache()
+	ConfettiFx.clear_cache()
+	AnimalVoice.clear_cache()
+	RoomTextures.clear()
+
+
+static func resolve_species(path: String, args: PackedStringArray = OS.get_cmdline_user_args()) -> int:
+	# 首次启动(还没存过形象)随机挑一个并立刻保存;调试开关 --species 只覆盖本次运行,不写设置
+	var saved := Settings.ensure_species(path)
+	var override := DebugFlags.species_override(args)
+	return override if override != Species.UNASSIGNED else saved
 
 
 func toast(text: String, color := UiTheme.PARCHMENT) -> void:
@@ -127,6 +158,13 @@ func show_rules() -> void:
 
 
 func _on_book_shown(book: String) -> void:
+	if book == RulebookContent.BOOK_BOMB_CAT and not BombCatFaces.is_built() and is_instance_valid(_rulebook):
+		# 炸弹猫那本的牌面小图同理:后台生成,生成完让当前页重新取纹理
+		var bomb_built := BombCatFaces.built_signal()
+		if not bomb_built.is_connected(_rulebook.refresh_card_faces):
+			bomb_built.connect(_rulebook.refresh_card_faces)
+		BombCatFaces.build(_rulebook)
+		return
 	if book != RulebookContent.BOOK_POKER or PokerFaces.is_built() or not is_instance_valid(_rulebook):
 		return
 	var built := PokerFaces.built_signal()
@@ -154,11 +192,12 @@ func is_rules_open() -> bool:
 
 
 func apply_table_mode(mode: String) -> void:
-	# 桌子跟着玩法走:德州桌更大,不摆烛台与目标牌立牌;主菜单与骗子酒馆用原来的桌子
+	# 桌子跟着玩法走:德州桌更大,不摆烛台与目标牌立牌;主菜单与骗子酒馆用原来的桌子;
+	# 炸弹猫用骗子酒馆的桌子与烛台,不摆目标牌立牌(5–6 人的大桌由炸弹猫牌桌按本局人数再摆)
 	var poker := GameMode.is_poker(mode)
 	world.configure_table(SeatLayout.table_radius_for(mode))
 	tavern.set_table_decor_visible(not poker)
-	world.cards.set_stand_visible(not poker)
+	world.cards.set_stand_visible(mode == GameMode.LIARS)
 
 
 # —— 屏幕切换 ——
@@ -180,6 +219,9 @@ func _show_lobby() -> void:
 
 func _show_table(_seats: Array) -> void:
 	# 按本房玩法选牌桌屏幕(game_started 发出之前 game_mode 已设好)
+	if GameMode.is_bomb_cat(Net.game_mode):
+		_switch_to(BombCatScreen.new(self))
+		return
 	_switch_to(PokerScreen.new(self) if GameMode.is_poker(Net.game_mode) else TableScreen.new(self))
 
 

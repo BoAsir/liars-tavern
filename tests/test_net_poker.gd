@@ -160,7 +160,8 @@ func test_poker_start_schedules_the_first_turn_after_the_intro():
 	net.start_game()
 	assert_eq(_methods_sent_to(10), ["rpc_game_started", "rpc_game_events", "rpc_state_public", "rpc_state_private"])
 	assert_eq(_sent_to(10)[0][2][1], {"mode": GameMode.SHORT_DECK, "late": false})
-	assert_eq(net.seats, [{"pid": 1, "name": "房主"}, {"pid": 10, "name": "客10"}, {"pid": 11, "name": "客11"}])
+	assert_eq(net.seats, [{"pid": 1, "name": "房主", "species": 0}, {"pid": 10, "name": "客10", "species": 1},
+		{"pid": 11, "name": "客11", "species": 2}])
 	var events := _events_sent_to(10)
 	assert_eq(events[0]["type"], "hand_started")
 	var expected := Protocol.TURN_TIMEOUT + PokerPacing.INTRO + PokerPacing.estimate(events)
@@ -372,7 +373,8 @@ func test_late_joiner_is_seated_in_the_documented_order_and_dealt_next_hand():
 	assert_eq(_methods_sent_to(50), ["rpc_join_accepted", "rpc_game_started", "rpc_game_events",
 		"rpc_state_public", "rpc_state_private", "rpc_lobby_state"])
 	assert_eq(_sent_to(50)[0][2], [{"in_game": true, "mode": GameMode.HOLDEM}])
-	assert_eq(_sent_to(50)[1][2], [[{"pid": 1, "name": "房主"}, {"pid": 10, "name": "客10"}, {"pid": 11, "name": "客11"}],
+	assert_eq(_sent_to(50)[1][2], [[{"pid": 1, "name": "房主", "species": 0}, {"pid": 10, "name": "客10", "species": 1},
+		{"pid": 11, "name": "客11", "species": 2}],
 		{"mode": GameMode.HOLDEM, "late": true}], "座位表是当前桌上有酒客的人,不含他自己")
 	assert_eq(_events_sent_to(50), [{"type": "player_joined", "pid": 50, "name": "迟到"}])
 	assert_eq(_events_sent_to(10), _events_sent_to(50), "全员都收到加入事件")

@@ -1,73 +1,143 @@
 class_name Card3D
 extends Node3D
-# 3D 卡牌:正反两面四边形(本地 +Y 为正面法线,宽沿 X、高沿 Z,牌顶朝 -Z)。
+# 3D 卡牌:一片带厚度的圆角薄片(本地 +Y 为正面法线,宽沿 X、高沿 Z,牌顶朝 -Z,以 y=0 为中面)。
+# 所有牌共用一份网格;骗子酒馆的牌还共用一份材质(牌型、两面、光晕都是实例参数),德州牌每张一份材质。
 # 支持翻面、弧线飞行、悬停抬起、选中高亮,以及射线拾取(纯数学,无需物理体)。
 
 
 const WIDTH := 0.12
 const HEIGHT := 0.1733
-const GAP := 0.0007
+const THICKNESS := 0.0008
+const CORNER := 0.012667        # = 38/360 × WIDTH,与贴图圆角一致(CardFaces.CORNER_RADIUS)
+const CORNER_STEPS := 6
 const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 
-static var _materials := {}
+static var _shared: ShaderMaterial = null   # 骗子酒馆的 5 种牌共用
+static var _poker := {}                     # 德州牌:牌值 -> 材质(正面是单张贴图)
 
 var kind := CardFaces.BACK     # 正面牌型;BACK 表示未知(他人的牌)
-var _front: MeshInstance3D
-var _back: MeshInstance3D
+var _mesh: MeshInstance3D
 var _glow_tween: Tween = null
 
 
 static func material_for(face_kind: int) -> ShaderMaterial:
-	if not _materials.has(face_kind):
-		var mat := ShaderMaterial.new()
-		mat.shader = CARD_SHADER
-		mat.set_shader_parameter("card_texture", CardFaces.texture(face_kind))
-		_materials[face_kind] = mat
-	return _materials[face_kind]
+	# 德州牌每张一份材质(正面贴图不同);骗子酒馆的牌都用共享材质,牌型走实例参数 face
+	if PokerCard.is_card(face_kind):
+		if not _poker.has(face_kind):
+			var mat := _new_material()
+			mat.set_shader_parameter("single_face", true)
+			mat.set_shader_parameter("card_texture", CardFaces.texture(face_kind))
+			_poker[face_kind] = mat
+		return _poker[face_kind]
+	if _shared == null:
+		_shared = _new_material()
+	return _shared
+
+
+static func _new_material() -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = CARD_SHADER
+	mat.set_shader_parameter("faces", CardFaces.face_array())
+	mat.set_shader_parameter("foil", CardFaces.foil_array())
+	return mat
 
 
 static func clear_materials() -> void:
-	_materials = {}
+	_shared = null
+	_poker = {}
 
 
 static func refresh_materials() -> void:
-	# 牌面纹理异步生成完毕后刷新已缓存的材质
-	for face_kind in _materials:
-		_materials[face_kind].set_shader_parameter("card_texture", CardFaces.texture(face_kind))
+	# 牌面纹理异步生成完毕后重绑数组纹理(与德州的单张牌面)
+	for mat: ShaderMaterial in ([_shared] if _shared != null else []) + _poker.values():
+		mat.set_shader_parameter("faces", CardFaces.face_array())
+		mat.set_shader_parameter("foil", CardFaces.foil_array())
+	for face_kind in _poker:
+		_poker[face_kind].set_shader_parameter("card_texture", CardFaces.texture(face_kind))
+
+
+static func slab_mesh() -> ArrayMesh:
+	return MeshForge.cached("prop:card", slab_recipe)
+
+
+static func outline() -> PackedVector2Array:
+	# 圆角矩形轮廓 (x, z):+z → +x → −z → −x(从 +Y 往下看是逆时针)
+	var pts := PackedVector2Array()
+	var hx := WIDTH / 2.0 - CORNER
+	var hz := HEIGHT / 2.0 - CORNER
+	var centers := [Vector2(hx, hz), Vector2(hx, -hz), Vector2(-hx, -hz), Vector2(-hx, hz)]
+	for c in 4:
+		for k in CORNER_STEPS + 1:
+			var a := PI / 2.0 - c * PI / 2.0 - PI / 2.0 * k / CORNER_STEPS
+			pts.append(centers[c] + Vector2(cos(a), sin(a)) * CORNER)
+	return pts
+
+
+static func slab_recipe(f: MeshForge) -> void:
+	# 正反面各一个扇面 + 一圈侧边;正面 u = x/W + 0.5、v = z/H + 0.5,背面 u 镜像(同原来背面绕 Z 转 π)
+	var ring := outline()
+	var n := ring.size()
+	var half := THICKNESS / 2.0
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for face in 2:
+		var y := half if face == 0 else -half
+		var base := points.size()
+		points.append(Vector3(0, y, 0))
+		normals.append(Vector3(0, 1 if face == 0 else -1, 0))
+		uvs.append(Vector2(0.5, 0.5))
+		for p in ring:
+			points.append(Vector3(p.x, y, p.y))
+			normals.append(Vector3(0, 1 if face == 0 else -1, 0))
+			uvs.append(Vector2(p.x / WIDTH + 0.5 if face == 0 else 0.5 - p.x / WIDTH, p.y / HEIGHT + 0.5))
+		for k in n:
+			var a := base + 1 + k
+			var b := base + 1 + (k + 1) % n
+			# 轮廓从 +Y 看是逆时针;Godot 正面是顺时针:正面按 中心→b→a,背面反过来(同 MeshForge.cylinder 的顶盖)
+			if face == 0:
+				indices.append_array([base, b, a])
+			else:
+				indices.append_array([base, a, b])
+	var side := points.size()
+	for k in n + 1:
+		var p := ring[k % n]
+		var prev := ring[(k - 1 + n) % n]
+		var next := ring[(k + 1) % n]
+		var t := (next - prev).normalized()
+		var out := Vector3(-t.y, 0, t.x)
+		for y in [half, -half]:
+			points.append(Vector3(p.x, y, p.y))
+			normals.append(out)
+			uvs.append(Vector2(p.x / WIDTH + 0.5, p.y / HEIGHT + 0.5))
+	for k in n:
+		var a := side + k * 2
+		indices.append_array([a, a + 2, a + 1, a + 2, a + 3, a + 1])
+	f.raw(points, normals, uvs, indices)
 
 
 func _init() -> void:
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(WIDTH, HEIGHT)
-	_front = MeshInstance3D.new()
-	_front.mesh = mesh
-	_front.position.y = GAP
-	_front.material_override = material_for(CardFaces.BACK)
-	add_child(_front)
-	_back = MeshInstance3D.new()
-	_back.mesh = mesh
-	_back.position.y = -GAP
-	_back.rotation.z = PI
-	_back.material_override = material_for(CardFaces.BACK)
-	add_child(_back)
+	_mesh = MeshKit.add(self, slab_mesh(), material_for(CardFaces.BACK))
+	_mesh.name = "Slab"
 	set_glow(0.0)
 
 
 func set_kind(face_kind: int) -> void:
 	kind = face_kind
-	_front.material_override = material_for(face_kind)
+	_mesh.material_override = material_for(face_kind)
+	_mesh.set_instance_shader_parameter("face", CardFaces.layer(face_kind))
 
 
 func set_both_faces(face_kind: int) -> void:
 	# 桌心立牌:两面都显示目标牌,旋转时任何角度都看得到
 	set_kind(face_kind)
-	_back.material_override = material_for(face_kind)
+	_mesh.set_instance_shader_parameter("both_faces", 1.0)
 
 
 func set_glow(amount: float, color := Color(1.0, 0.82, 0.4)) -> void:
-	for mesh in [_front, _back]:
-		mesh.set_instance_shader_parameter("glow", amount)
-		mesh.set_instance_shader_parameter("glow_color", color)
+	_mesh.set_instance_shader_parameter("glow", amount)
+	_mesh.set_instance_shader_parameter("glow_color", color)
 
 
 func pulse_glow(color: Color, peak: float, duration: float) -> void:

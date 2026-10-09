@@ -4,9 +4,15 @@ class_name Protocol
 
 # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了);
 # v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent);
-# v6:快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌);
-# v7:德州「开始下一手」(意图 next、事件 next_ready)与牌局记录(hand_record),旧版没有开始按钮,不能同桌
-const VERSION := 7
+#     (德州扑克单独随 0.7.0 发布,用的就是 v5)
+# v6:等待厅自选形象(新增 rpc_lobby_species 意图;lobby_state、game_started 每位玩家带 species 下标);
+#     丢番茄与快捷语(Banter 子节点的 RPC);炸弹猫(玩法 id bomb_cat,新增字典意图 rpc_session_intent)。随 0.8.0 发布
+# v6(上游):快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌)
+#     注意:上面两个 v6 是两条分支各自升的,RPC 表不一样(一个有 rpc_lobby_species / rpc_session_intent / Banter,
+#     一个有 rpc_quip / rpc_quip_shown),版本号相同却互不兼容,绝不能让它们同桌
+# v7:两边合到一起(形象 + 丢番茄快捷语 + 炸弹猫 + 九宫格快捷对话);升一号让两种 v6 客户端都收到「版本不匹配」
+# v8:德州「开始下一手」(意图 next、事件 next_ready)与牌局记录(hand_record);旧版没有开始按钮,不能同桌
+const VERSION := 8
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800

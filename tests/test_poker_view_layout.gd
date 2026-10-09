@@ -2,7 +2,7 @@ extends GutTest
 # 德州机位的无头布局检查(规格 §5.5、§8):
 # - 8 人桌的铭牌挂点在越肩与观战机位下投影到 1280×720,铭牌(按 150×64 估,底边中点在挂点,同 WorldLabels)
 #   都在 24 像素安全边内且两两不重叠;
-# - 越肩、观战、等待厅与散局环绕机位到每个头部、到 1.60 米高的帽顶的连线都不穿过吊灯罩(灯摆动 ±3 厘米)。
+# - 越肩、观战、等待厅与散局环绕机位到每个头部、到 HAT_TOP 高的帽顶的连线都不穿过吊灯罩(灯摆动 ±3 厘米)。
 # 投影用游戏里同一个 CameraRig 的相机(竖直视角、近裁面一致),放进 1280×720 的 SubViewport。
 
 
@@ -13,12 +13,12 @@ const SEATS := 8
 const SETTLE := 0.8                   # 秒:登场缩放(0.55 秒)走完,头部位置才是坐定后的
 # 吊灯罩(照 Tavern._build_lamp):灯罩中心在吊点下 LAMP_DROP + 0.1,高 0.2,上口半径 0.07,
 # 下口 0.36 外加一圈外径 0.37 的黄铜圈;吊点在天花板正中
-const SHADE_CENTER_Y := Tavern.ROOM_HEIGHT - TavernTable.LAMP_DROP - 0.1
+const SHADE_CENTER_Y := Tavern.ROOM_HEIGHT - Tavern.LAMP_DROP - 0.1
 const SHADE_HALF_HEIGHT := 0.1
 const SHADE_TOP_RADIUS := 0.07
 const SHADE_RIM_RADIUS := 0.37
 const LAMP_SWING := 0.03              # 规格 §5.5:灯摆动 ±3 厘米
-const HAT_TOP := 1.60                 # 最高的帽子
+const HAT_TOP := 1.70                 # 最高的头顶(动森式大头:羊驼耳尖 ≈1.70、礼帽 ≈1.69;Q 版按 1.60 算)
 const SEGMENT_SAMPLES := 400
 const ORBIT_SAMPLES := 16
 

@@ -6,9 +6,10 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabl
 
 uniform vec3 core_color : source_color = vec3(1.0, 0.92, 0.62);
 uniform vec3 edge_color : source_color = vec3(1.0, 0.36, 0.06);
-uniform float intensity = 3.0;
+// 强度与种子是实例参数:所有火焰共用一份材质,每簇火焰各自设定(相邻火苗不同步)
+instance uniform float intensity = 3.0;
 uniform float speed = 1.0;
-uniform float seed = 0.0;
+instance uniform float seed = 0.0;
 uniform float sway = 0.35;
 
 void vertex() {

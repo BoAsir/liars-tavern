@@ -1,58 +1,80 @@
 class_name Revolver3D
 extends Node3D
 # 左轮手枪模型:原点在握把(手持点),枪管沿本地 -Z。转轮可旋转、击锤可扳动、开火有后坐。
-# 网格由 RevolverModel(枪身、小件、击锤)与 RevolverDrum(转轮)拼装并缓存:四把枪、每局重建都
-# 共用同一份网格与材质,对局中只新建节点。只有枪身和转轮投射阴影,小件、击锤不投影。
+# 网格配方在 RevolverModel(单动左轮:胡桃木犁柄握把、五槽转轮、半月准星、黄铜护圈)。
 
 
-const BARREL_LENGTH := 0.15
-const DRUM_POS := Vector3(0, 0.045, -0.035)
-const MUZZLE_POS := Vector3(0, 0.058, -0.235)
-const HAMMER_POS := Vector3(0, 0.06, 0.022)
-const HAMMER_COCKED_DEG := 38.0
-# 右侧朝上平放在桌上时,原点(握把)离桌面的高度:转轮最宽,枪靠它贴着桌面;
-# 多出的一点是桌布与压边的厚度,枪不会陷进桌布里
-const LYING_HEIGHT := RevolverDrum.RADIUS + 0.0045
+const BARREL_Y := RevolverModel.BARREL_Y
+const DRUM_POS := RevolverModel.DRUM_POS
+const HAMMER_PIVOT := RevolverModel.HAMMER_PIVOT
+const MUZZLE_POS := RevolverModel.MUZZLE_POS
+const CHAMBER_STEP := TAU / Revolver.CHAMBERS
+# 握持:爪心 = 枪原点,枪管沿手的 −Z;往前挪 4 mm,机匣与转轮露在拳头外面,握把大半包在拳里
+const HOLD_OFFSET := Transform3D(Basis(), Vector3(0, 0, -0.004))
+# 侧放(左侧着地,绕枪管轴转 PI/2 + ROLL)。四个常量都由测试按网格顶点校验:
+# 地上:转轮与底帽同时着地,最低点离原点 REST_HALF_WIDTH;
+# 桌上:转轮压在毡面(FELT_TOP)、底帽落在木桌面(低 4 mm),转轮最低点离原点 TABLE_REST_LIFT
+const REST_ROLL := -0.1030
+const REST_HALF_WIDTH := 0.0253
+const TABLE_REST_ROLL := -0.1335
+const TABLE_REST_LIFT := 0.0236
 
 var drum: Node3D
 var hammer: Node3D
 var muzzle: Marker3D
 
 
+static func forge_jobs() -> Array:
+	# 启动时后台预建(材质在主线程先建好)
+	return [
+		["revolver:body", RevolverModel.body, _materials(true)],
+		["revolver:drum", RevolverModel.drum, _materials(false)],
+		["revolver:hammer", RevolverModel.hammer, _materials(false)],
+	]
+
+
+static func _materials(with_grip: bool) -> Dictionary:
+	if with_grip:
+		return {&"metal": WorldMaterials.prop(), &"grip": WorldMaterials.wood("grip", true)}
+	return {&"metal": WorldMaterials.prop()}
+
+
+static func aligned_angle(a: float) -> float:
+	# 弹膛角从 12 点起排:转角是整格时恰好一个弹膛在 12 点,与枪管同轴
+	return roundf(a / CHAMBER_STEP) * CHAMBER_STEP
+
+
 func _init() -> void:
 	var body := MeshKit.pivot(self, Vector3.ZERO, "Body")
-	MeshBatch.instance(body, RevolverModel.frame_mesh(), {}, "Frame")
-	MeshBatch.instance(body, RevolverModel.trim_mesh(), {}, "Trim", false)
-	# 转轮:绕本地 Z 转;每膛一个标记点(膛口位置),膛数与规则一致
+	MeshKit.add(body, MeshForge.cached("revolver:body", RevolverModel.body, _materials(true)), null).name = "BodyMesh"
+	# 转轮:5 个一模一样的弹膛(标记只表示位置,外观不区分),绕枪管轴旋转
 	drum = MeshKit.pivot(body, DRUM_POS, "Drum")
-	MeshBatch.instance(drum, RevolverDrum.mesh(Revolver.CHAMBERS), {}, "Cylinder")
-	MeshBatch.instance(drum, RevolverDrum.trim_mesh(Revolver.CHAMBERS), {}, "CylinderTrim", false)
+	MeshKit.add(drum, MeshForge.cached("revolver:drum", RevolverModel.drum, _materials(false)), null).name = "DrumMesh"
 	for i in Revolver.CHAMBERS:
-		var mouth := Marker3D.new()
-		mouth.name = "Chamber%d" % (i + 1)
-		mouth.position = RevolverDrum.chamber_mouth(i, Revolver.CHAMBERS)
-		drum.add_child(mouth)
-	# 击锤:绕后端铰点扳动
-	hammer = MeshKit.pivot(body, HAMMER_POS, "Hammer")
-	MeshBatch.instance(hammer, RevolverModel.hammer_mesh(), {}, "HammerMesh", false)
+		var marker := Marker3D.new()
+		marker.name = "Chamber%d" % (i + 1)
+		marker.position = RevolverModel.chamber_offset(i) + Vector3(0, 0, -RevolverModel.DRUM_LENGTH / 2.0)
+		drum.add_child(marker)
+	# 击锤:绕铰点扳动
+	hammer = MeshKit.pivot(body, HAMMER_PIVOT, "Hammer")
+	MeshKit.add(hammer, MeshForge.cached("revolver:hammer", RevolverModel.hammer, _materials(false)), null).name = "HammerMesh"
 	muzzle = Marker3D.new()
-	muzzle.name = "Muzzle"
 	muzzle.position = MUZZLE_POS
 	add_child(muzzle)
 
 
 func spin_drum(duration: float, turns := 2.5) -> Tween:
+	# 转整数格停下,总有一个弹膛对准枪管(转几格与子弹位置无关,所有弹膛外观一样)
+	var target := aligned_angle(drum.rotation.z + TAU * turns)
 	var tween := create_tween()
-	tween.tween_property(drum, "rotation:z", drum.rotation.z + TAU * turns, duration) \
-		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tween.tween_property(drum, "rotation:z", target, duration).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	return tween
 
 
 func cock_hammer(duration := 0.18) -> Tween:
-	# 扳起击锤的同时转轮转过一膛
 	var tween := create_tween()
-	tween.tween_property(hammer, "rotation:x", deg_to_rad(HAMMER_COCKED_DEG), duration).set_trans(Tween.TRANS_BACK)
-	tween.parallel().tween_property(drum, "rotation:z", drum.rotation.z + TAU / Revolver.CHAMBERS, duration)
+	tween.tween_property(hammer, "rotation:x", deg_to_rad(38.0), duration).set_trans(Tween.TRANS_BACK)
+	tween.parallel().tween_property(drum, "rotation:z", aligned_angle(drum.rotation.z + CHAMBER_STEP), duration)
 	return tween
 
 

@@ -71,10 +71,12 @@ func test_reach_is_three_times_the_old_limit():
 
 
 func test_reach_is_limited():
+	# 动森式大头的吻也长了,不少物种的上限由 FRONT_REACH_MAX − 吻长定(比 NECK_REACH 短):按酒客自己的上限比
 	patron.set_neck_target(Vector3(0, 0, -5.0))
 	await wait_seconds(SETTLE)
 	var flat := Vector2(patron.neck_offset().x, patron.neck_offset().z)
-	assert_almost_eq(flat.length(), Patron.NECK_REACH, EPS)
+	assert_almost_eq(flat.length(), patron.neck_reach(), EPS)
+	assert_lte(patron.neck_reach(), Patron.NECK_REACH)
 
 
 func test_settles_without_overshoot():

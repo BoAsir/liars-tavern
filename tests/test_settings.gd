@@ -72,3 +72,49 @@ func test_unknown_or_mistyped_last_mode_falls_back_to_the_default():
 	for junk in ["mahjong", "", 7, true]:
 		Settings.set_value(Settings.KEY_LAST_MODE, junk, PATH)
 		assert_eq(Settings.last_mode(PATH), GameMode.DEFAULT, str(junk))
+
+
+# —— 形象(子项目② §3.3):存 id 字符串,读回下标 ——
+
+func test_species_round_trips_as_an_id_string():
+	assert_eq(Settings.set_value(Settings.KEY_SPECIES, "crocodile", PATH), OK)
+	assert_eq(Settings.get_species(PATH), 7)
+	var config := ConfigFile.new()
+	config.load(PATH)
+	assert_eq(config.get_value("player", "species"), "crocodile", "存 id 不存下标:以后调整内部顺序也不会选错")
+
+
+func test_missing_species_is_unassigned_without_a_warning():
+	assert_eq(Settings.get_species(PATH), Species.UNASSIGNED)
+
+
+func test_unknown_or_mistyped_species_falls_back_to_unassigned():
+	for junk in ["dragon", "", 7, true]:
+		Settings.set_value(Settings.KEY_SPECIES, junk, PATH)
+		assert_eq(Settings.get_species(PATH), Species.UNASSIGNED, str(junk))
+
+
+func test_first_launch_picks_a_species_and_saves_it():
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 42
+	var picked := Settings.ensure_species(PATH, rng)
+	assert_true(Species.is_valid(picked))
+	assert_eq(Settings.get_species(PATH), picked, "随机选的立刻保存")
+	assert_eq(Settings.ensure_species(PATH, rng), picked, "之后启动沿用")
+
+
+func test_first_launch_spreads_over_every_species():
+	var seen := {}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 200:
+		_remove()
+		seen[Settings.ensure_species(PATH, rng)] = true
+	assert_eq(seen.size(), Species.count(), "新物种也会被随机到")
+
+
+func test_bad_saved_species_is_replaced_by_a_random_one():
+	Settings.set_value(Settings.KEY_SPECIES, "dragon", PATH)
+	var picked := Settings.ensure_species(PATH)
+	assert_true(Species.is_valid(picked))
+	assert_eq(Settings.get_species(PATH), picked)

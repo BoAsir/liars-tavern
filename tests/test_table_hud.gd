@@ -80,3 +80,12 @@ func test_clear_my_bubble_removes_pending_bubbles():
 	hud.my_bubble("骗子!")
 	hud.clear_my_bubble()
 	assert_eq(hud._bubble_anchor.get_child_count(), 0)
+
+
+func test_idle_hint_lists_both_chat_keys_and_the_tomato_on_g():
+	# 九宫格快捷对话 T、丢番茄 G、动物叫声快捷语 Q 三个键都写在提示行里
+	hud.set_actions(false, false, 0, false)
+	assert_string_contains(hud._hint.text, "T 对话")
+	assert_string_contains(hud._hint.text, "G 番茄")
+	assert_string_contains(hud._hint.text, "Q 快捷语")
+	assert_false(hud._hint.text.contains("T 番茄"))

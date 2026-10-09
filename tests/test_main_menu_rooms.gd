@@ -81,3 +81,4 @@ func test_default_room_name_follows_the_mode():
 	assert_eq(MainMenuScreen.default_room_name("老王", GameMode.LIARS), "老王 的酒馆")
 	assert_eq(MainMenuScreen.default_room_name("老王", GameMode.HOLDEM), "老王 的牌局")
 	assert_eq(MainMenuScreen.default_room_name("老王", GameMode.SHORT_DECK), "老王 的牌局")
+	assert_eq(MainMenuScreen.default_room_name("老王", GameMode.BOMB_CAT), "老王 的猫窝")

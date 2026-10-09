@@ -4,6 +4,7 @@ extends SceneTree
 #   godot --headless --path . -s tools/net_probe.gd -- --role=host --players=3
 #   godot --headless --path . -s tools/net_probe.gd -- --role=client --addr=127.0.0.1
 #   godot --headless --path . -s tools/net_probe.gd -- --role=client --discover
+#   任一角色都可加 --species=物种id(fox / bear / … / crocodile):建房、加入时报的形象
 # 退出码:0 = 收到 match_over;1 = 超时或出错。
 
 
@@ -38,7 +39,7 @@ func _start() -> void:
 	create_timer(TIMEOUT).timeout.connect(_fail.bind("timeout"))
 	var role: String = opts.get("role", "host")
 	if role == "host":
-		var err: Error = net.host_game("房主", "探针房间")
+		var err: Error = net.host_game("房主", "探针房间", 0, GameMode.DEFAULT, _species())
 		_log("host_game -> %s" % error_string(err))
 		if err != OK:
 			quit(1)
@@ -46,7 +47,7 @@ func _start() -> void:
 		discovery.rooms_updated.connect(_on_rooms)
 		_log("listening on discovery port %d" % [discovery.listen_port() if discovery.start_listening() else -1])
 	else:
-		net.join_game(opts.get("name", "客%d" % OS.get_process_id()), opts.get("addr", "127.0.0.1"))
+		net.join_game(opts.get("name", "客%d" % OS.get_process_id()), opts.get("addr", "127.0.0.1"), _species())
 
 
 func _on_rooms(rooms: Array) -> void:
@@ -55,7 +56,11 @@ func _on_rooms(rooms: Array) -> void:
 	var room: Dictionary = rooms[0]
 	_log("discovered room '%s' at %s:%d" % [room["room"], room["ip"], room["port"]])
 	discovery.stop_listening()
-	net.join_game("发现客%d" % OS.get_process_id(), Protocol.format_address(room["ip"], room["port"]))
+	net.join_game("发现客%d" % OS.get_process_id(), Protocol.format_address(room["ip"], room["port"]), _species())
+
+
+func _species() -> int:
+	return Species.index_of(opts.get("species", ""))
 
 
 func _on_joined() -> void:
@@ -65,7 +70,8 @@ func _on_joined() -> void:
 
 
 func _on_lobby(players: Array) -> void:
-	_log("lobby: %s" % [players.map(func(p): return "%s%s" % [p["name"], "✓" if p["ready"] else "…"])])
+	_log("lobby: %s" % [players.map(func(p): return "%s%s(%s)" % [p["name"], "✓" if p["ready"] else "…",
+		Species.IDS[p["species"]] if Species.is_valid(p.get("species")) else "-"])])
 	var want := int(opts.get("players", "2"))
 	if net.is_host and players.size() >= want and net.can_start():
 		_log("starting game")

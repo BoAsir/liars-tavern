@@ -10,7 +10,7 @@ const BUBBLE_KEY := "bubble:%d"   # WorldLabels 里他人对话气泡的键
 const BUBBLE_ABOVE_PLATE := -66.0  # 他人气泡挂在铭牌正上方(屏幕像素),不压住名字
 const SEAT_RETURN := 0.45          # 新一局前镜头回座的时长(强制验证为真话时没有开枪段)
 const SPECTATOR_SEAT_FACTOR := 1.6 # 观战者回俯视机位要走更远,时长按此倍数
-const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到越肩机位的时长(须在房主给的开场预算之内)
+const INTRO_MOVE := Pacing.INTRO - 0.1   # 开局运镜到座位机位(越肩或第一人称)的时长(须在房主给的开场预算之内)
 
 var screen: Node        # TableScreen
 var app: Node
@@ -20,6 +20,7 @@ var rig: CameraRig
 var fx: PostFx
 var hud: TableHud
 var spectator := false
+var seat_camera: SeatCamera   # 座位上的镜头:越肩 / 第一人称(V 切换)
 var _at_seat := false
 
 
@@ -31,13 +32,15 @@ func _init(p_screen: Node, p_app: Node, p_hud: TableHud) -> void:
 	cards = world.cards
 	rig = app.tavern.camera_rig
 	fx = app.post_fx
+	var path = app.get("settings_path")
+	seat_camera = SeatCamera.new(rig, world, screen.my_pid, path if path is String else Settings.PATH)
+	add_child(seat_camera)
 
 
 func intro() -> void:
 	rig.parallax_enabled = false
 	Sfx.play("whoosh")
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, INTRO_MOVE)
-	await rig.move_to(world.third_person_view(screen.my_pid), INTRO_MOVE, Tween.TRANS_CUBIC, Tween.EASE_IN_OUT).finished
+	await seat_camera.enter(INTRO_MOVE).finished
 	rig.parallax_enabled = true
 	_at_seat = true
 
@@ -118,6 +121,7 @@ func _reveal(ev: Dictionary) -> void:
 		if world.patrons.has(challenger):
 			await world.patrons[challenger].slam_table()
 		Sfx.play("slam")
+		_startle_all(challenger)   # 拍桌一声,其他人吓一跳
 		rig.shake(0.45)
 		app.tavern.kick_lamp(0.07)
 	_leave_seat()
@@ -135,6 +139,7 @@ func _reveal(ev: Dictionary) -> void:
 		Sfx.play("sting_lie")
 		hud.announce("骗子!", UiTheme.LIE, "%s 在撒谎" % screen.name_of(liar), 0.7)
 		if world.patrons.has(liar):
+			world.patrons[liar].startle()   # 被抓包:一蹦、眼睛瞪圆
 			world.patrons[liar].set_expression("worried")
 	await _wait(0.6)
 
@@ -178,6 +183,7 @@ func _third_person_shot(shooter: int, hit: bool) -> void:
 		_bang(gun.muzzle_transform())
 		gun.recoil()
 		patron.die(gun, world)
+		_startle_all(shooter)   # 枪响,其他人吓一跳
 		_announce_shot(shooter, true)
 		await _wait(1.0)
 	else:
@@ -243,19 +249,13 @@ func _match_over(ev: Dictionary) -> void:
 	var winner = ev["winner"]
 	fx.set_tension(0.0, 0.6)
 	_leave_seat()
-	Sfx.play("win")
 	var title := "你赢了!" if winner == screen.my_pid else "%s 赢了" % screen.name_of(winner)
 	hud.announce(title, UiTheme.BRASS_BRIGHT, "活到了最后", 1.8, TableHud.ANNOUNCE_Y_LOW)
-	if world.patrons.has(winner):
-		world.patrons[winner].celebrate()
-		# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),并给一点补光看清表情
-		var toward_table := -SeatLayout.direction(world.seat_angles.get(winner, 0.0))
-		rig.set_fill(TableWorld.SEAT_FILL_LIGHT * 0.6, 1.0)
-		rig.orbit(world.head_position(winner) + Vector3(0, -0.2, 0), 1.3, 0.35, 0.25, 1.4,
-			atan2(toward_table.x, toward_table.z))
-	else:
-		var orbit := world.table_orbit()
-		rig.orbit(orbit.center, orbit.radius, orbit.height, orbit.speed, 1.4)
+	# 结算庆祝(规格 2026-10-09):胜者跳舞、其他人鼓掌、礼炮彩纸,开场小号与掌声由庆祝发出(代替原来的 win 铃声)
+	world.celebrate([winner], hash(["liars", winner, screen.get("_round_now")]))
+	# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),给一点补光看清表情;胜者让到画面左边,右边放结算面板。
+	# 胜者不在桌上时整桌环绕
+	_orbit(world.celebration_orbit([winner]))
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
 	await _wait(2.2)
 	screen.show_settlement(winner)
@@ -263,8 +263,26 @@ func _match_over(ev: Dictionary) -> void:
 
 # —— 工具 ——
 
+func _orbit(focus: Dictionary) -> void:
+	rig.set_fill(focus.get("fill", 0.0), 1.0)
+	rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus.get("start", NAN), focus.get("frame", 0.0))
+
+
+func _startle_all(except_pid) -> void:
+	# 桌上其他人吓一跳(Q 版搞笑表演);死了的不动
+	for pid in world.patrons:
+		if pid != except_pid and is_instance_valid(world.patrons[pid]):
+			world.patrons[pid].startle()
+
+
+func toggle_camera_mode() -> void:
+	# V:越肩 ⇄ 第一人称(存进设置)。镜头在座位上就马上切过去,拍特写或观战时等回座再生效
+	var on := seat_camera.toggle()
+	app.toast(SeatCamera.toast_text(on, seat_camera.is_seated()), UiTheme.PARCHMENT)
+
+
 func is_at_seat() -> bool:
-	# 镜头在自己座位的越肩机位(不是特写、不是观战)
+	# 镜头在自己座位的常驻机位(越肩或第一人称;不是特写、不是观战)
 	return _at_seat and not spectator
 
 
@@ -279,8 +297,7 @@ func back_to_seat(duration: float) -> void:
 		await rig.move_to(world.overview_view(), duration * SPECTATOR_SEAT_FACTOR).finished
 		hud.set_away_from_seat(false)
 		return
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT, duration)
-	await rig.move_to(world.third_person_view(screen.my_pid), duration).finished
+	await seat_camera.enter(duration).finished
 	# 镜头回到座位后再露出按钮行,免得特写还没切走就挡住角色
 	hud.set_away_from_seat(false)
 	rig.parallax_enabled = true
@@ -292,7 +309,7 @@ func _leave_seat() -> void:
 	hud.clear_my_bubble()
 	hud.set_away_from_seat(true)
 	rig.parallax_enabled = false
-	rig.set_fill(0.0, 0.5)
+	seat_camera.leave(0.5)
 
 
 func _bubble(pid: int, text: String, color := UiTheme.INK) -> void:

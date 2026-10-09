@@ -1,5 +1,5 @@
 class_name Settings
-# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音、上次开房选的玩法。
+# 本机玩家设置(user://settings.cfg 的 [player] 段):名号、上次直连地址、静音、上次开房选的玩法、形象、牌桌视角。
 # 启动流程与主菜单共用这组键。设置文件是外部数据:读不出或类型不对时回退默认值并告警。
 
 
@@ -9,6 +9,10 @@ const KEY_NAME := "name"
 const KEY_LAST_IP := "last_ip"
 const KEY_MUTED := "muted"
 const KEY_LAST_MODE := "last_mode"
+const KEY_SPECIES := "species"   # 存物种 id 字符串(不存下标):以后调整内部顺序也不会选错
+const KEY_CAMERA_MODE := "camera_mode"   # 牌桌视角:CAMERA_THIRD(越肩,默认)或 CAMERA_FIRST(第一人称)
+const CAMERA_THIRD := "third"
+const CAMERA_FIRST := "first"
 
 
 static func get_string(key: String, fallback := "", path := PATH) -> String:
@@ -35,6 +39,42 @@ static func last_mode(path := PATH) -> String:
 		return mode
 	push_warning("设置 %s 的值「%s」不是已知玩法(来自 %s),改用默认玩法" % [KEY_LAST_MODE, mode, path])
 	return GameMode.DEFAULT
+
+
+static func get_species(path := PATH) -> int:
+	# 本机想要的形象(物种下标);没设置过返回 UNASSIGNED,id 不认识或类型不对时告警并返回 UNASSIGNED
+	var value: Variant = _read(KEY_SPECIES, null, path)
+	if value == null:
+		return Species.UNASSIGNED
+	var index := Species.index_of(value) if value is String else Species.UNASSIGNED
+	if index == Species.UNASSIGNED:
+		push_warning("设置 %s 的值「%s」不是已知形象(来自 %s),重新挑一个" % [KEY_SPECIES, str(value), path])
+	return index
+
+
+static func ensure_species(path := PATH, rng: RandomNumberGenerator = null) -> int:
+	# 首次启动(或存的值坏了):随机挑一个并立刻保存,让新物种也常出现;之后启动沿用
+	var index := get_species(path)
+	if index != Species.UNASSIGNED:
+		return index
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	index = rng.randi_range(0, Species.count() - 1)
+	set_value(KEY_SPECIES, Species.IDS[index], path)
+	return index
+
+
+static func first_person(path := PATH) -> bool:
+	# 牌桌是不是第一人称视角;没设置过是越肩。不认识的值告警后按越肩(类型不对已由 get_string 告警)
+	var mode := get_string(KEY_CAMERA_MODE, CAMERA_THIRD, path)
+	if mode != CAMERA_THIRD and mode != CAMERA_FIRST:
+		push_warning("设置 %s 的值「%s」不是已知视角(来自 %s),改用越肩" % [KEY_CAMERA_MODE, mode, path])
+	return mode == CAMERA_FIRST
+
+
+static func set_first_person(on: bool, path := PATH) -> Error:
+	return set_value(KEY_CAMERA_MODE, CAMERA_FIRST if on else CAMERA_THIRD, path)
 
 
 static func set_value(key: String, value: Variant, path := PATH) -> Error:

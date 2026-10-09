@@ -38,6 +38,7 @@ var hud: PokerHud
 var _mode := ""          # 当前机位:MODE_SEAT / MODE_OVERVIEW / MODE_ORBIT;空 = 还没运镜
 var _settled := false    # 镜头已停在常驻机位
 var _camera_serial := 0  # 每次运镜加一:后发的运镜让先前的不再宣布「已停稳」
+var seat_camera: SeatCamera   # 座位上的镜头:越肩 / 第一人称(V 切换,和骗子酒馆共用)
 
 
 func _init(p_screen: Node, p_app: Node, p_hud: PokerHud) -> void:
@@ -48,6 +49,9 @@ func _init(p_screen: Node, p_app: Node, p_hud: PokerHud) -> void:
 	chips = p_screen.chips
 	cards = p_screen.cards
 	rig = app.tavern.camera_rig
+	var path = app.get("settings_path")
+	seat_camera = SeatCamera.new(rig, world, screen.my_pid, path if path is String else Settings.PATH)
+	add_child(seat_camera)
 
 
 # —— 纯逻辑 ——
@@ -367,14 +371,33 @@ func _ending(ev: Dictionary) -> void:
 func _session_over(ev: Dictionary) -> void:
 	screen.set_current(null)
 	_leave_rest(MODE_ORBIT)
-	Sfx.play("win")
 	hud.announce("散局", UiTheme.BRASS_BRIGHT, "牌局结束,结算中", 1.8)
 	hud.log_event("散局结算", UiTheme.BRASS_BRIGHT)
-	rig.set_fill(0.0, 1.0)
-	var orbit := world.table_orbit()
-	rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4)
+	# 结算庆祝(规格 2026-10-09):盈亏第一的人跳舞(并列第一都跳)、其他人鼓掌、礼炮彩纸;开场小号与掌声由庆祝发出。
+	# 镜头绕着跳舞的人转(让到画面左边,右边放结算面板);并列的人散得开时整桌环绕
+	var results: Array = ev["results"] if ev.get("results") is Array else []
+	var winners := top_ranked(results)
+	world.celebrate(winners, hash(["poker", winners, results.size()]))
+	var orbit := world.celebration_orbit(winners)
+	rig.set_fill(orbit.get("fill", 0.0), 1.0)
+	rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4, orbit.get("start", NAN), orbit.get("frame", 0.0))
 	await _wait(SESSION_OVER_HOLD)
-	screen.show_settlement(ev["results"] if ev.get("results") is Array else [])
+	screen.show_settlement(results)
+
+
+static func top_ranked(results: Array) -> Array:
+	# 散局的胜者:盈亏最高的人(并列时都算),按结算行的顺序;坏行跳过
+	var best = null
+	var out := []
+	for row in results:
+		if not row is Dictionary or not row.get("pid") is int or not row.get("net") is int:
+			continue
+		if best == null or row["net"] > best:
+			best = row["net"]
+			out = [row["pid"]]
+		elif row["net"] == best:
+			out.append(row["pid"])
+	return out
 
 
 # —— 机位 ——
@@ -404,10 +427,11 @@ func settle_camera(duration := CAMERA_MOVE) -> void:
 		return
 	_leave_rest(wanted)
 	var serial := _camera_serial
-	var state: PokerScreenState = screen.state
-	var view := world.rest_view(screen.my_pid, state.seats.has(screen.my_pid), state.status_of(screen.my_pid))
-	rig.set_fill(TableWorld.SEAT_FILL_LIGHT if wanted == MODE_SEAT else 0.0, duration)
-	rig.move_to(view, duration)
+	if wanted == MODE_SEAT:
+		seat_camera.enter(duration)   # 越肩或第一人称(按 V 选的),补光、视角一并调好
+	else:
+		rig.set_fill(0.0, duration)
+		rig.move_to(world.overview_view(), duration)
 	await _wait(duration)
 	if serial == _camera_serial:
 		_settled = true
@@ -419,6 +443,13 @@ func _leave_rest(mode: String) -> void:
 	_settled = false
 	_camera_serial += 1
 	rig.parallax_enabled = false
+	seat_camera.leave()
+
+
+func toggle_camera_mode() -> void:
+	# V:越肩 ⇄ 第一人称(存进设置)。镜头在座位上就马上切过去,观战或结算时等回座再生效
+	var on := seat_camera.toggle()
+	app.toast(SeatCamera.toast_text(on, seat_camera.is_seated()), UiTheme.PARCHMENT)
 
 
 # —— 酒客与工具 ——

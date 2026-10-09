@@ -1,5 +1,6 @@
 class_name LobbyModel
-# 等待厅名单(仅房主持有):加入校验、准备状态、开局条件。座位顺序 = 加入顺序。
+# 等待厅名单(仅房主持有):加入校验、准备状态、形象分配、开局条件。座位顺序 = 加入顺序。
+# 形象(物种下标)先到先得、同桌不撞脸:想要的空着就给,被占时没有形象的分第一个空着的、已有的保持不变。
 
 
 const HOST_ID := 1
@@ -8,13 +9,15 @@ const IN_GAME_REASON := "游戏已开始,请等这一局结束"
 const WINDING_DOWN_REASON := "牌局正在散局,请稍后再来"
 
 var _order: Array = []
-var _members := {}  # peer_id -> {"name": String, "ready": bool}
+var _members := {}  # peer_id -> {"name": String, "ready": bool, "species": int}
 
 
-func add_host(host_name: String) -> void:
+func add_host(host_name: String, species := Species.UNASSIGNED) -> void:
+	# 房主的首选当场生效;非法值(没有偏好)回退第一个物种
 	_order = []
 	_members = {}
 	_insert(HOST_ID, host_name, true)
+	request_species(HOST_ID, species)
 
 
 func check_join(version: int, in_game: bool, mode: String, accepting_late: bool) -> String:
@@ -37,6 +40,7 @@ func add_member(id: int, raw_name: String) -> void:
 
 
 func remove(id: int) -> bool:
+	# 只释放离开者的形象,别人的都不变(撞车拿到候补形象的人不会自动换回首选)
 	if id == HOST_ID or not _members.has(id):
 		return false
 	_members.erase(id)
@@ -60,6 +64,7 @@ func set_ready(id: int, ready: bool) -> bool:
 
 
 func reset_ready() -> void:
+	# 不碰形象:再来一局时形象不变
 	for id in _members:
 		_members[id]["ready"] = id == HOST_ID
 
@@ -71,6 +76,37 @@ func can_start() -> bool:
 		if not _members[id]["ready"]:
 			return false
 	return true
+
+
+func request_species(id: int, wanted: int) -> bool:
+	# 先到先得:想要的形象空着就给;被别人占了(或下标非法)时,
+	# 还没有形象的分第一个空着的,已经有形象的保持不变。返回名单是否变了(变了才广播)
+	if not _members.has(id):
+		return false
+	var current: int = _members[id]["species"]
+	var taken := _taken_except(id)
+	var next := current
+	if Species.is_valid(wanted) and not taken.has(wanted):
+		next = wanted
+	elif current == Species.UNASSIGNED:
+		next = Species.first_free(taken)
+	if next == current:
+		return false
+	_members[id]["species"] = next
+	return true
+
+
+func assign_unassigned() -> bool:
+	# 开局前兜底:还是 -1 的(形象请求没到或被丢弃)按加入顺序分第一个空着的。返回名单是否变了
+	var changed := false
+	for id in _order:
+		if _members[id]["species"] == Species.UNASSIGNED:
+			changed = request_species(id, Species.UNASSIGNED) or changed
+	return changed
+
+
+func species_of(id: int) -> int:
+	return _members[id]["species"] if _members.has(id) else Species.UNASSIGNED
 
 
 func seat_order() -> Array:
@@ -92,13 +128,23 @@ func view() -> Array:
 			"name": _members[id]["name"],
 			"ready": _members[id]["ready"],
 			"is_host": id == HOST_ID,
+			"species": _members[id]["species"],
 		})
 	return out
 
 
 func _insert(id: int, raw_name: String, ready: bool) -> void:
-	_members[id] = {"name": _unique_name(raw_name), "ready": ready}
+	_members[id] = {"name": _unique_name(raw_name), "ready": ready, "species": Species.UNASSIGNED}
 	_order.append(id)
+
+
+func _taken_except(id: int) -> Array:
+	var taken := []
+	for other in _members:
+		var s: int = _members[other]["species"]
+		if other != id and s != Species.UNASSIGNED:
+			taken.append(s)
+	return taken
 
 
 func _unique_name(raw_name: String) -> String:

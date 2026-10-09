@@ -47,6 +47,7 @@ func _init(p_world: TableWorld) -> void:
 	name = "PokerCards"
 	_board.resize(PokerRules.BOARD_CARDS)
 	add_child(BoardRack.new())
+	world.first_person_changed.connect(_on_first_person_changed)
 
 
 # —— 查询 ——
@@ -357,12 +358,21 @@ func _settle(card: Card3D, parent: Node3D, xform: Transform3D) -> void:
 	card.visible = true
 
 
+func _on_first_person_changed(_on: bool) -> void:
+	_present_my_fan()   # 本机换视角(V):自己的底牌重摆
+
+
 func _present_my_fan() -> void:
-	# 规格 §5.3:德州时自己的牌扇抬到座位坐标 HIP + (0.30, 0.74, −0.30),牌面正对越肩镜头
+	# 规格 §5.3:德州时自己的牌扇抬到座位坐标 HIP + FAN_OFFSET,牌面正对越肩镜头;第一人称时拿在镜头右下方
 	if not world.patrons.has(my_pid) or not world.seat_angles.has(my_pid):
 		return
 	var seat := world.seat_transform(world.seat_angles[my_pid])
-	world.patrons[my_pid].fan.transform = PokerLayout.fan_transform(seat, world.third_person_view(my_pid).origin)
+	var me: Patron = world.patrons[my_pid]
+	if world.first_person:
+		# 第一人称:拿在镜头右下方,跟着探头走
+		me.present_hand_first_person(seat, world.first_person_rest_view(my_pid), PokerLayout.FP_FAN_CAM, PokerLayout.FP_FAN_SCALE)
+	else:
+		me.hold_fan(PokerLayout.fan_transform(seat, world.third_person_view(my_pid).origin))
 
 
 # —— 工具 ——

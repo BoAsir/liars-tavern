@@ -164,7 +164,7 @@ func _build_top_right() -> void:
 	end_button.pressed.connect(func(): end_pressed.emit())
 	row.add_child(end_button)
 	row.add_child(_top_button("记录 · %s" % OS.get_keycode_string(HandHistoryPanel.HOTKEY), history_pressed))
-	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(Quips.HOTKEY), quip_pressed))
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(Quips.TOGGLE_KEY), quip_pressed))
 	rules_button = UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
 	rules_button.add_theme_font_size_override("font_size", 15)
 	rules_button.focus_mode = Control.FOCUS_NONE

@@ -112,6 +112,7 @@ func _exit_tree() -> void:
 		app.labels.untrack(PLATE_KEY % pid)
 		app.labels.untrack(QuipController.KEY_PREFIX % pid)
 	world.set_patron_visible(my_pid, true)
+	world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
 	world.clear_poker()
 
 
@@ -496,6 +497,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 输光提示打开时 Esc 选观战(规格 §6.4),其余情况确认离开
 		if not hud.handle_cancel():
 			_confirm_leave()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and not app.is_modal_open():
+		# V 切换越肩 / 第一人称:观战时也能改设置(下次回座生效);快捷语面板或九宫格开着时不切
+		get_viewport().set_input_as_handled()
+		var banter = app.get("banter_view")
+		if (banter == null or not banter.is_panel_open()) and not quips.menu.is_open():
+			director.toggle_camera_mode()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and not app.is_modal_open():
 		if event.keycode == HandHistoryPanel.HOTKEY:
