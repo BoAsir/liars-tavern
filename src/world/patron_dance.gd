@@ -4,7 +4,7 @@ extends Node3D
 # 挂在 Patron 下(座位坐标,原点 = 座位地面),由 Patron.dance / clap / twitch 建、stop_dance 收;Patron 的待机先跑,
 # 本节点在同一帧里随后把身体、头、手臂(帽子、腿、耳朵)按舞步覆盖掉,开头 BLEND_IN 秒从当时的姿势平滑接过来。
 # 坐着跳:腿是坐姿的一整块网格,站起来会露出弯着的腿悬在半空,所以只做上半身的大动作 + 屁股离座的小蹦(腿跟着抬),
-# 转圈时腿绕髋部跟着身体一起转。手臂是一节直臂,舞步只给方向(座位里胸前的手不低于桌面、不伸进桌沿)。
+# 转圈时身体和腿绕髋部前面一点的竖直轴一起转(膝盖、鞋不扫进椅背)。手臂是一节直臂,舞步只给方向(座位里胸前的手不低于桌面、不伸进桌沿)。
 # 跳舞的人加 3 个飘起来的音符(一个 MultiMesh,只在跳舞时存在,不投影);鼓掌、抽手不加任何网格。
 # 走 _process 的 delta:跟随 Engine.time_scale,场景树暂停(截图 --freeze)时停住。
 
@@ -24,6 +24,7 @@ const CLAP_BURST := Vector2i(6, 11)
 const CLAP_REST := Vector2(1.2, 2.6)
 const TWITCH_EVERY := Vector2(1.6, 3.8)  # 出局的人隔这么久抽一下手
 const TWITCH_TIME := 0.32
+const SPIN_PIVOT := Vector3(0.0, 0.0, 0.0)   # 转圈的竖直轴(座位坐标;髋部在 z = 0.12):膝盖转到背后时离椅背(z 0.34)还远
 const CLAP_TOUCH := 0.058       # 两只爪子合拢时手心离中线(≈ 爪子半径):刚好碰上
 
 static var _cache := {}         # 音符网格与材质(main.gd 退出时 clear_cache)
@@ -225,7 +226,7 @@ func _spin(b: float) -> Dictionary:
 	elif c < 6.0:
 		var air := clampf((c - 4.5) / 1.5, 0.0, 1.0)
 		var crouch := clampf((c - 4.0) / 0.5, 0.0, 1.0)
-		pose["lift"] = -0.025 * sin(PI * crouch) * (1.0 - air) + 0.2 * sin(PI * air)
+		pose["lift"] = -0.025 * sin(PI * crouch) * (1.0 - air) + 0.26 * sin(PI * air)
 		pose["spin"] = TAU * turn * smoothstep(0.0, 1.0, air)
 		var arms := Vector3(1.0, 0.25 + 0.15 * sin(PI * air), -0.05)
 		pose["r"] = arms
@@ -346,13 +347,14 @@ func _apply(pose: Dictionary, w: float) -> void:
 	var p := _p
 	var body := p.body
 	var spin: float = pose.get("spin", 0.0)
-	body.position = Patron.HIP + Vector3(0.0, pose.get("lift", 0.0) * w, 0.0)
+	# 转圈:身体和腿一起绕 SPIN_PIVOT(髋部往前一点、座位坐标的竖直轴)转——绕髋部转的话膝盖、鞋会扫进椅背
+	var turn := Basis(Vector3.UP, spin * w)
+	var lift := Vector3(0.0, pose.get("lift", 0.0) * w, 0.0)
+	body.position = SPIN_PIVOT + turn * (Patron.HIP - SPIN_PIVOT) + lift
 	var rot := Vector3(-Patron.SITTING_UP_LEAN + pose.get("pitch", 0.0), pose.get("yaw", 0.0) + spin, pose.get("roll", 0.0))
 	body.rotation = body.rotation.lerp(rot, w)
-	# 腿跟着屁股抬起,转圈时绕髋部(座位坐标的竖直轴)跟着转
-	var hip := Vector3(Patron.HIP.x, 0.0, Patron.HIP.z)
-	var legs_basis := Basis(Vector3.UP, spin * w)
-	p._legs.transform = Transform3D(legs_basis, hip - legs_basis * hip + Vector3(0.0, maxf(pose.get("lift", 0.0), 0.0) * w, 0.0))
+	# 腿跟着屁股抬起(不往下沉进座面),转圈时跟身体绕同一根轴
+	p._legs.transform = Transform3D(turn, SPIN_PIVOT - turn * SPIN_PIVOT + Vector3(0.0, maxf(lift.y, 0.0), 0.0))
 	if pose.has("head"):
 		p.head.rotation = p.head.rotation.lerp(pose["head"], w)
 	if pose.has("neck"):
