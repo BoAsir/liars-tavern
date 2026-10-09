@@ -37,8 +37,8 @@ const PROMPT_TARGET := "target"
 const PROMPT_NAMED := "named"
 const PROMPT_REINSERT := "reinsert"
 const PROMPT_GIVE := "give"
-const HINT_IDLE := "点手牌或按 1–9 选牌 · Enter 出牌 · 空格 摸牌 · N 不行! · WASD 探头 · V 视角 · T 番茄 · Q 快捷语 · %s 规则 · Esc 离开"
-const HINT_SPECTATE := "观战中:鼠标看人 · V 视角 · T 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开"
+const HINT_IDLE := "点手牌或按 1–9 选牌 · Enter 出牌 · 空格 摸牌 · N 不行! · WASD 探头 · V 视角 · G 番茄 · Q 快捷语 · %s 规则 · Esc 离开"
+const HINT_SPECTATE := "观战中:鼠标看人 · V 视角 · G 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开"
 
 var strip: BombCatHandStrip
 var play_button: Button

@@ -88,7 +88,7 @@ static func phrase_text(phrase_id: int) -> String:
 
 
 func in_room() -> bool:
-	# 在等待厅或牌局里(握手完成):对局中入座者握手期间也不能丢;界面据此显示 T / Q 小圆牌
+	# 在等待厅或牌局里(握手完成):对局中入座者握手期间也不能丢;界面据此显示 G / Q 小圆牌
 	return _net != null and _net.get("_session_active") == true and _net.get("_joining") == false \
 		and (_net.is_host or not _net.lobby_players.is_empty() or _net.in_game)
 

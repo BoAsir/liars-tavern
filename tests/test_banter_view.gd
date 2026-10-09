@@ -1,6 +1,6 @@
 extends GutTest
 # 丢番茄与快捷语的界面(规格 §2、§5、§7,无头):Q 面板开着时数字键只给面板(牌桌的选牌、下注预设收不到),
-# Q / Esc 关面板且不漏到牌桌;T 选目标按屏幕投影(≤140 像素、不含自己);冷却期间不发消息;
+# Q / Esc 关面板且不漏到牌桌;G 选目标按屏幕投影(≤140 像素、不含自己);T 留给九宫格快捷对话,两个面板互斥;冷却期间不发消息;
 # 气泡挂在说话人铭牌之上、同一个人新说一句顶掉旧的、逐字出现、说完停 2.5 秒后自毁。
 
 
@@ -40,12 +40,22 @@ class FakeApp:
 	var tavern: Node
 	var toasts: Array = []
 	var modal := false
+	var screen: Node = null
+	var banter_view: BanterView = null
 
 	func toast(text: String, _color := Color.WHITE) -> void:
 		toasts.append(text)
 
 	func is_modal_open() -> bool:
 		return modal
+
+	func current_screen() -> Node:
+		return screen
+
+
+class FakeScreen:
+	extends Control
+	var quips: QuipController
 
 
 class KeyProbe:
@@ -155,12 +165,68 @@ func test_clicking_a_phrase_button_says_it():
 	assert_eq(banter.spoken, [5])
 
 
-func test_modal_blocks_q_and_t():
+func test_modal_blocks_q_and_g():
 	app.modal = true
 	get_viewport().push_input(_key(KEY_Q))
 	assert_false(view.is_panel_open())
-	get_viewport().push_input(_key(KEY_T))
+	get_viewport().push_input(_key(KEY_G))
 	assert_eq(banter.thrown, [])
+
+
+func test_g_throws_and_t_is_left_for_the_quip_menu():
+	_seat_patrons()
+	app.tavern = _rig_holder()
+	assert_eq(view.tomato_chip.key_text, "G", "小圆牌写 G")
+	get_viewport().push_input(_key(KEY_T))
+	assert_eq(probe.keys, [KEY_T], "T 归九宫格快捷对话,界面不拦")
+	assert_eq(banter.thrown, [])
+	assert_eq(app.toasts, [])
+	get_viewport().push_input(_key(KEY_G))
+	assert_eq(probe.keys, [KEY_T], "G 被界面用掉,不漏到牌桌")
+	assert_eq(banter.thrown.size() + app.toasts.size(), 1, "G 丢番茄(光标下没人就提示)")
+
+
+func _quip_screen() -> FakeScreen:
+	var screen := FakeScreen.new()
+	add_child_autofree(screen)
+	screen.quips = QuipController.new(app, 1)
+	screen.add_child(screen.quips)
+	app.screen = screen
+	app.banter_view = view
+	return screen
+
+
+func test_q_panel_and_quip_menu_are_mutually_exclusive():
+	var quips := _quip_screen().quips
+	quips.toggle()
+	assert_true(quips.menu.is_open())
+	view.toggle_panel()
+	assert_true(view.is_panel_open())
+	assert_false(quips.menu.is_open(), "开 Q 面板就收起九宫格")
+	quips.toggle()
+	assert_true(quips.menu.is_open())
+	assert_false(view.is_panel_open(), "开九宫格就收起 Q 面板")
+
+
+func test_quip_menu_digits_do_not_reach_the_q_panel():
+	var quips := _quip_screen().quips
+	quips.toggle()
+	get_viewport().push_input(_key(KEY_2))
+	assert_eq(banter.spoken, [], "九宫格开着:数字键归九宫格")
+	assert_false(quips.menu.is_open(), "选了一句就收起")
+	assert_eq(probe.keys, [], "也没漏到牌桌")
+
+
+func test_quip_menu_closes_and_ignores_keys_under_a_modal():
+	var quips := _quip_screen().quips
+	quips.toggle()
+	app.modal = true
+	await wait_process_frames(2)
+	assert_false(quips.menu.is_open(), "说明书 / 确认框盖上来时九宫格收起")
+	quips.toggle()
+	assert_false(quips.menu.is_open(), "盖着时打不开")
+	get_viewport().push_input(_key(KEY_T))
+	assert_false(quips.menu.is_open(), "盖着时 T 也不开")
 
 
 func test_typing_in_a_line_edit_does_not_trigger():
@@ -202,7 +268,7 @@ func test_hidden_or_behind_camera_patrons_are_skipped():
 	assert_eq(BanterView.pick_target(camera, head2, patrons, 1), -1, "在镜头背后不算")
 
 
-func test_t_throws_at_the_head_under_the_cursor():
+func test_g_throws_at_the_head_under_the_cursor():
 	_seat_patrons()
 	var head4 := camera.unproject_position(app.world.patrons[4].head_position())
 	app.tavern = _rig_holder()
@@ -252,6 +318,23 @@ func test_bubble_sits_above_the_speakers_nameplate_and_replaces_the_old_one():
 	var second := view.show_bubble(2, Banter.PHRASES[1], AnimalVoice.layout(1, Banter.PHRASES[1], 2))
 	assert_eq(app.labels.get_node_for(BanterView.BUBBLE_KEY % 2), second, "新说一句顶掉旧的")
 	assert_true(first.is_queued_for_deletion())
+
+
+func test_bubble_stacks_above_a_quip_bubble_of_the_same_speaker():
+	# 九宫格快捷对话的气泡(固定高度,在声称气泡那一层之上)也在时,快捷语气泡叠在它上面,两个不重叠
+	_seat_patrons()
+	app.tavern = _rig_holder()
+	var anchor: Callable = app.world.patrons[2].nameplate_anchor
+	var plate := Nameplate.new("阿熊")
+	app.labels.track("plate:2", plate, anchor)
+	var quip := SpeechBubble.new(Quips.LINES[0], UiTheme.INK, 30.0)
+	app.labels.track(QuipController.KEY_PREFIX % 2, quip, anchor, Vector2(0, TableDirector.BUBBLE_ABOVE_PLATE - 56.0))
+	await wait_process_frames(2)
+	var bubble := view.show_bubble(2, Banter.PHRASES[0], AnimalVoice.layout(1, Banter.PHRASES[0], 2))
+	await wait_process_frames(3)
+	assert_true(quip.visible and bubble.visible)
+	var mine := Rect2(bubble.position, bubble.size + Vector2(0, BanterBubble.TAIL_LENGTH))
+	assert_false(mine.intersects(Rect2(quip.position, quip.size)), "快捷语气泡 %s 与九宫格气泡 %s 不重叠" % [mine, Rect2(quip.position, quip.size)])
 
 
 func test_bubble_moves_beside_the_plate_when_there_is_no_room_above():

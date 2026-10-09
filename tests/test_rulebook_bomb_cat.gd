@@ -66,7 +66,7 @@ func test_controls_list_the_bomb_cat_keys_and_the_shared_ones():
 		if block["type"] == "keys":
 			for item in block["items"]:
 				keys.append_array(item["keys"])
-	for key in ["1–9", "Enter", "空格", "N", "V", "T", "Q", "W", OS.get_keycode_string(RulebookContent.HOTKEY), "Esc"]:
+	for key in ["1–9", "Enter", "空格", "N", "V", "G", "Q", "W", OS.get_keycode_string(RulebookContent.HOTKEY), "Esc"]:
 		assert_has(keys, key)
 
 

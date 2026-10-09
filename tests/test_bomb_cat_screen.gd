@@ -80,7 +80,7 @@ func test_key_mapping():
 	assert_eq(ScreenScript.key_action(KEY_KP_ENTER), ScreenScript.ACTION_PLAY)
 	assert_eq(ScreenScript.key_action(KEY_SPACE), ScreenScript.ACTION_DRAW)
 	assert_eq(ScreenScript.key_action(KEY_N), ScreenScript.ACTION_NOPE)
-	for taken in [KEY_T, KEY_Q, KEY_V, KEY_W, KEY_A, KEY_S, KEY_D, KEY_ESCAPE, KEY_F1]:
+	for taken in [KEY_T, KEY_G, KEY_Q, KEY_V, KEY_W, KEY_A, KEY_S, KEY_D, KEY_ESCAPE, KEY_F1]:
 		assert_eq(ScreenScript.key_action(taken), "", "%s 已被占用,不能挪作炸弹猫的动作" % OS.get_keycode_string(taken))
 		assert_eq(ScreenScript.card_key_index(taken), -1)
 	for i in 9:

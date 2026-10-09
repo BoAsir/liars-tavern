@@ -325,7 +325,7 @@ func _bomb_bot_tick(screen: Node, delta: float) -> void:
 
 
 func _bot_banter(seats: Array) -> void:
-	# 走真实界面:光标移到下家的头上按 T(界面按屏幕投影选目标),再按 Q 打开快捷语面板、按数字说出
+	# 走真实界面:光标移到下家的头上丢番茄(同 G / 右键的入口,界面按屏幕投影选目标),再按 Q 打开快捷语面板、按数字说出
 	await get_tree().create_timer(BOT_BANTER_DELAY + randf() * 0.5).timeout
 	var order := seats.map(func(s): return s["pid"])
 	var me := order.find(Net.my_pid())

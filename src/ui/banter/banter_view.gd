@@ -1,17 +1,22 @@
 class_name BanterView
 extends Control
 # 丢番茄与快捷语的界面(规格 2026-10-08 丢番茄与快捷语 §2、§5),main 常驻一层,等待厅和两种牌桌共用:
-# - T 或鼠标右键:丢番茄,目标是屏幕上离光标最近的酒客头(投影距离 ≤ PICK_RADIUS,不含自己);
+# - G 或鼠标右键:丢番茄,目标是屏幕上离光标最近的酒客头(投影距离 ≤ PICK_RADIUS,不含自己);
+#   (原来是 T;上游的九宫格快捷对话 QuipController 用 T,两套都留,番茄让到 G)
 # - Q:打开 / 关上快捷语面板;面板开着时 1–8 或点击说出,Q / Esc 关上,数字键只给面板(不再选牌、不选下注预设),说完自动关上;
-# - 左侧两枚小圆牌显示 T / Q 与冷却;
+#   和九宫格互斥:打开一个就收起另一个,数字键不会两边都收到;
+# - 左侧两枚小圆牌显示 G / Q 与冷却;
 # - 收到 Net.banter 的广播:番茄交给 TableWorld.banter 演;快捷语让说话人的酒客念出来,头顶冒气泡(挂在他铭牌之上)。
 # 说明书、确认框开着或输入框有焦点时不响应。
 
 
 const PICK_RADIUS := 140.0      # 像素:光标离酒客头的屏幕距离上限
+const TOMATO_KEY := KEY_G       # 丢番茄(T 归九宫格快捷对话)
+const SAY_KEY := KEY_Q
 const BUBBLE_KEY := "banter:%d" # WorldLabels 里快捷语气泡的键
 const PLATE_KEYS := ["plate:%d", "lobby:%d"]   # 牌桌 / 等待厅的铭牌键:气泡挂在它们之上
 const CLAIM_KEY := "bubble:%d"  # 牌桌上声称 /「骗子!」的气泡(TableDirector.BUBBLE_KEY):快捷语气泡再叠在它上面
+const QUIP_KEY := QuipController.KEY_PREFIX   # 九宫格快捷对话的气泡:同时在时快捷语气泡叠在它上面
 const GAP := 6.0
 const PHRASE_KEYS := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8]
 const PHRASE_KP_KEYS := [KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4, KEY_KP_5, KEY_KP_6, KEY_KP_7, KEY_KP_8]
@@ -48,7 +53,7 @@ func _ready() -> void:
 # —— 布局 ——
 
 func _build() -> void:
-	# 左侧居中两枚小圆牌(T 丢番茄、Q 快捷语),快捷语面板在它右边弹出
+	# 左侧居中两枚小圆牌(G 丢番茄、Q 快捷语),快捷语面板在它右边弹出
 	_bar = VBoxContainer.new()
 	_bar.name = "BanterBar"
 	_bar.anchor_top = 0.5
@@ -58,7 +63,8 @@ func _build() -> void:
 	_bar.add_theme_constant_override("separation", 10)
 	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bar)
-	tomato_chip = BanterChip.new(BanterChip.TOMATO, "T", "丢番茄:把光标移到某人身上,按 T 或鼠标右键")
+	var tomato_key := OS.get_keycode_string(TOMATO_KEY)
+	tomato_chip = BanterChip.new(BanterChip.TOMATO, tomato_key, "丢番茄:把光标移到某人身上,按 %s 或鼠标右键" % tomato_key)
 	_bar.add_child(tomato_chip)
 	say_chip = BanterChip.new(BanterChip.SPEECH, "Q", "快捷语:按 Q 打开")
 	say_chip.pressed.connect(toggle_panel)
@@ -136,7 +142,7 @@ func _input(event: InputEvent) -> void:
 	if index >= 0:
 		get_viewport().set_input_as_handled()
 		say_phrase(index)
-	elif _is_key(event, KEY_Q) or event.is_action_pressed("ui_cancel"):
+	elif _is_key(event, SAY_KEY) or event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		close_panel()
 
@@ -144,13 +150,13 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible or _blocked():
 		return
-	if _is_key(event, KEY_T):
+	if _is_key(event, TOMATO_KEY):
 		get_viewport().set_input_as_handled()
 		throw_at_cursor(get_viewport().get_mouse_position())
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		get_viewport().set_input_as_handled()
 		throw_at_cursor(event.position)
-	elif _is_key(event, KEY_Q):
+	elif _is_key(event, SAY_KEY):
 		get_viewport().set_input_as_handled()
 		toggle_panel()
 
@@ -213,6 +219,7 @@ func toggle_panel() -> void:
 	if panel.visible:
 		close_panel()
 	elif visible and not _blocked():
+		_close_quip_menu()
 		panel.visible = true
 
 
@@ -222,6 +229,16 @@ func close_panel() -> void:
 
 func is_panel_open() -> bool:
 	return panel.visible
+
+
+func _close_quip_menu() -> void:
+	# 和九宫格快捷对话互斥:牌桌屏幕上的 QuipController(screen.quips)开着就收起
+	if app == null or not app.has_method("current_screen"):
+		return
+	var screen: Node = app.current_screen()
+	var quips: Variant = screen.get("quips") if screen != null else null
+	if quips is QuipController and is_instance_valid(quips):
+		quips.close_menu()
 
 
 func say_phrase(index: int) -> void:
@@ -293,10 +310,18 @@ func bubble_offset(pid: int, anchor: Callable = Callable()) -> Vector2:
 	if claim != null and claim.visible:
 		y -= claim.size.y + SpeechBubble.TAIL_LENGTH + GAP
 		top = claim
-	if top == null or not anchor.is_valid():
+	var at := _screen_point(anchor.call()) if anchor.is_valid() else Vector2(INF, INF)
+	var quip := labels.get_node_for(QUIP_KEY % pid)
+	if quip != null and quip.visible:
+		# 九宫格的气泡挂在自己的固定高度(骗子酒馆在声称气泡之上、德州贴着铭牌):它在哪就叠在它上面
+		var above_quip := (quip.position.y - at.y) if at.x != INF else y - quip.size.y
+		above_quip -= BanterBubble.TAIL_LENGTH + GAP
+		if above_quip < y:
+			y = above_quip
+			top = quip
+	if top == null or at.x == INF:
 		return Vector2(0, y)
-	var at := _screen_point(anchor.call())
-	if at.x == INF or at.y + y - size.y >= WorldLabels.EDGE_MARGIN:
+	if at.y + y - size.y >= WorldLabels.EDGE_MARGIN:
 		return Vector2(0, y)
 	var side := 1.0 if at.x < labels.size.x * 0.5 else -1.0
 	var x := (top.position.x + top.size.x / 2.0 - at.x) + side * (top.size.x / 2.0 + GAP + size.x / 2.0)

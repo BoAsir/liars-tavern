@@ -4,6 +4,7 @@ extends Control
 # 房主转发回来(Net.quip_shown)才显示——说话人头顶冒气泡(自己的由牌桌 HUD 显示在自己那一角)、记一行日志、响一声。
 # 本地冷却 Quips.COOLDOWN,冷却中按钮变灰;房主另有限速。作为牌桌屏幕的子节点,先于屏幕收到按键:
 # 九宫格打开时 1–9 选句、Esc 收起,不会落到选牌 / 下注预设 / 离开确认上。
+# 和 BanterView 的 Q 快捷语面板(动物叫声那套)互斥:打开九宫格就收起它,反之亦然;说明书 / 确认框开着时收起、不响应。
 # 牌桌提供:name_of(pid) -> String、anchor_for(pid) -> Callable(没有酒客时返回空 Callable)、
 # show_mine(text)、log_line(text, color)。
 
@@ -39,6 +40,9 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if menu.is_open():
+		if _modal_open():
+			menu.close()
+			return
 		menu.set_cooldown(cooldown_left())
 
 
@@ -47,9 +51,28 @@ func cooldown_left() -> float:
 
 
 func toggle() -> void:
+	if not menu.is_open() and _modal_open():
+		return
 	menu.set_cooldown(cooldown_left())
 	menu.toggle()
+	if menu.is_open():
+		_close_banter_panel()
 	Sfx.play("ui_click")
+
+
+func close_menu() -> void:
+	menu.close()
+
+
+func _modal_open() -> bool:
+	return app != null and app.has_method("is_modal_open") and app.is_modal_open()
+
+
+func _close_banter_panel() -> void:
+	# 和 Q 快捷语面板互斥:数字键不能两边都收到
+	var banter: Variant = app.get("banter_view") if app != null else null
+	if banter is BanterView and is_instance_valid(banter):
+		banter.close_panel()
 
 
 func choose(index: int) -> bool:
@@ -63,13 +86,13 @@ func choose(index: int) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed or event.echo:
+	if not event is InputEventKey or not event.pressed or event.echo or _modal_open():
 		return
 	if menu.is_open() and event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		menu.close()
 		return
-	if event.keycode == TOGGLE_KEY and not app.is_modal_open():
+	if event.keycode == TOGGLE_KEY:
 		get_viewport().set_input_as_handled()
 		toggle()
 		return

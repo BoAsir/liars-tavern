@@ -459,10 +459,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_confirm_leave()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and not app.is_modal_open():
-		# V 切换越肩 / 第一人称:观战时也能改设置(下次回座生效);快捷语面板开着时不切
+		# V 切换越肩 / 第一人称:观战时也能改设置(下次回座生效);快捷语面板或九宫格开着时不切
 		get_viewport().set_input_as_handled()
 		var banter = app.get("banter_view")
-		if banter == null or not banter.is_panel_open():
+		if (banter == null or not banter.is_panel_open()) and not quips.menu.is_open():
 			director.toggle_camera_mode()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and not app.is_modal_open():

@@ -19,7 +19,7 @@ const STEP_TOTALS := {
 }
 const CARD_KEYS := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9]
 const CARD_KP_KEYS := [KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4, KEY_KP_5, KEY_KP_6, KEY_KP_7, KEY_KP_8, KEY_KP_9]
-# 快捷键 → 动作(规格 §3.2):不占 T / Q / V / WASD / Esc / F1;D 是探头键,摸牌只用空格
+# 快捷键 → 动作(规格 §3.2):不占 T / G / Q / V / WASD / Esc / F1(T 九宫格对话、G 丢番茄、Q 快捷语);D 是探头键,摸牌只用空格
 const ACTION_PLAY := "play"
 const ACTION_DRAW := "draw"
 const ACTION_NOPE := "nope"
