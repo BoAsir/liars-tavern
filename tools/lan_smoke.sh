@@ -33,7 +33,8 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT"; do
 	pid="${pair##*:}"
 	if wait "$pid"; then code=0; else code=$?; fi
 	log="$LOG_DIR/$name.log"
-	errors=$(grep -c "SCRIPT ERROR" "$log" || true)
+	# 脚本错误与 push_error 打出的引擎错误行都算失败
+	errors=$(grep -c "SCRIPT ERROR\|^ERROR:" "$log" || true)
 	# 每个进程都应收到另外两人的视线与伸出的脖子(房主直收,客户端经房主转发)
 	if [ "$code" -ne 0 ] || ! grep -q "MATCH_OVER" "$log" || [ "$errors" -ne 0 ] || ! grep -q "GAZE peers=2 necks=2" "$log"; then
 		echo "FAIL $name (exit=$code, script_errors=$errors) — 日志:$log"

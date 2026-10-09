@@ -355,7 +355,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 ### 5.2 牌面(`PokerFaces`)
 
 - 自己的缓存、`build()`、`is_built()`、`clear()`、`built` 信号;`CardFaces.texture(kind)` 只在 `PokerCard.is_card(kind)` 时转给它;`CardFaces.is_built()` 的含义不变(只管骗子酒馆的 5 张)。
-- 尺寸 256×372(52 张含 mipmap 约 25 MiB)。生成时每帧最多 13 个 SubViewport,分批完成,不卡顿;生成完调用 `Card3D.refresh_materials()`,并让 2D 小牌重新取纹理。
+- 尺寸 256×372(52 张含 mipmap 约 25 MiB)。生成时每帧最多 7 个 SubViewport(13 个时实测一帧 23 ms),分批完成,不卡顿;生成完调用 `Card3D.refresh_materials()`,并让 2D 小牌重新取纹理。
 - 触发:进入德州等待厅、迟到者进入牌桌、说明书翻到德州那本,哪个先到就在后台开始;导演在第一次发牌前等它完成。`main._exit_tree` 里与 `CardFaces.clear()` 一起 `PokerFaces.clear()`。
 - 牌面:超大角标——点数约占牌高 38%,左上与右下(倒置)各一个,花色在点数下方;中央一个大花色,J/Q/K 加冠饰。纸底与金边沿用 `CardFaces` 风格,牌背沿用现有牌背。
   四色花色在暖光与牌面着色器(会压暗)下要分得清:♠ 墨黑、♥ 红、♦ 亮蓝(约 0.2, 0.45, 0.95)、♣ 亮绿(约 0.15, 0.6, 0.25)。花色用多边形与圆绘制,不依赖字体。
@@ -438,7 +438,7 @@ HAND_STARTED 1.4、BLIND 0.5、HOLE 0.45 + 0.07/张、ACTION 0.7 / 全下 1.2、
 - 默认打开哪本:在房间里用 `Net.game_mode`;主菜单用 `Settings.KEY_LAST_MODE`。
 - 骗子酒馆那本内容不变;其中人数改为取 `GameMode.max_players(GameMode.LIARS)`(`Protocol.MAX_PLAYERS` 已改为 8)。
 - 德州那本(数字全部取自 `PokerRules`、`Protocol.TURN_TIMEOUT`):怎么玩(现金局、2–8 人、2000、10/20、再领与观战、中途入座、散局结算)、牌型、下注(动作、最小加注、不完整加注、边池、未跟注退回、超时)、操作(快捷键)。
-- 新块类型 `hands`:单列 9 行,从大到小,每行:牌型名、5 张 ≤ 40×58 的示例小牌、长牌名次与短牌名次两列,短牌与长牌不同的那一处(同花/葫芦)高亮;注明 A-2-3-4-5 与 A-6-7-8-9。块等 `PokerFaces` 生成完再画牌。
+- 新块类型 `hands`:单列 9 行,从大到小,每行:牌型名、5 张 ≤ 40×58 的示例小牌、长牌名次与短牌名次两列,短牌与长牌不同的那一处(同花/葫芦)高亮;注明 A-2-3-4-5 与 A-6-7-8-9。块先画素纸占位,`PokerFaces` 生成完(`built` 信号)再刷新成牌面。
 
 ### 6.7 音效(程序化)
 

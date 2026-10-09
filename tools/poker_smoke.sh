@@ -51,7 +51,8 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT" "late:$LATE"; do
 	pid="${pair##*:}"
 	if wait "$pid"; then code=0; else code=$?; fi
 	log="$LOG_DIR/$name.log"
-	errors=$(grep -c "SCRIPT ERROR" "$log" || true)
+	# 脚本错误与 push_error 打出的引擎错误行都算失败
+	errors=$(grep -c "SCRIPT ERROR\|^ERROR:" "$log" || true)
 	problems=""
 	[ "$code" -ne 0 ] && problems="$problems exit=$code"
 	[ "$errors" -ne 0 ] && problems="$problems script_errors=$errors"

@@ -87,6 +87,7 @@ func _exit_tree() -> void:
 	CardFaces.clear()
 	PokerFaces.clear()
 	WorldMaterials.clear_cache()
+	ChipStack3D.clear_cache()
 	Fx.clear_cache()
 	UiTheme.clear_cache()
 

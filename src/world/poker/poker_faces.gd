@@ -8,7 +8,7 @@ class_name PokerFaces
 
 
 const SIZE := PokerFaceArt.SIZE
-const BATCH_SIZE := 13                     # 每帧最多这么多个 SubViewport
+const BATCH_SIZE := 7                      # 每帧最多这么多个 SubViewport(13 个 8×MSAA 视口同帧时实测掉到 23 ms 一帧)
 const FALLBACK_SIZE := 8                   # 占位与退化纹理的边长
 const FALLBACK_TINT := 0.3                 # 退化纹理向花色偏的程度:无头调试时还分得出花色
 const VIEWPORT_MSAA := Viewport.MSAA_8X    # 多边形自己不抗锯齿,靠离屏视口的 2D MSAA
