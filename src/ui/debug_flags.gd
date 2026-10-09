@@ -9,7 +9,7 @@ extends Node
 #   --room=房名          房主的房间名
 #   --autojoin=IP[:端口] 自动直连
 #   --discover[=房名]    自动加入局域网发现的(指定名字的)房间
-#   --bot                自动准备/选牌/出牌/质疑;德州按合法动作下注、输光再领(走真实界面路径,见 PokerBot)
+#   --bot                自动准备/选牌/出牌/质疑;德州按合法动作下注、输光再领;对局中隔几秒说一句快捷对话(走真实界面路径)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
@@ -23,6 +23,7 @@ const BOT_FIDGET := 1.5    # bot 按住 W 探头、松开、按住 S 收回、�
 const BOT_FIDGET_KEYS := [KEY_W, KEY_S]
 const SHOT_SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛)
 const BOT_RETRY := 2.0         # 德州 bot 提交后(被拒或没生效)再试的间隔
+const BOT_QUIP_EVERY := Vector2(6.0, 12.0)   # bot 每隔这么久(游戏秒)说一句快捷对话;冒烟测试据此确认对话走通了网络
 const SPECTATE_HOLD := 5.0     # 截图模式下 bot 第一次输光先观战,看这么久再领筹码上桌(拍到观战机位)
 const MainMenuScreen := preload("res://src/ui/main_menu/main_menu.gd")
 
@@ -38,6 +39,8 @@ var _fidget_step := 0
 var _hands_limit := 0      # --hands:演到第几手开始时散局;0 = 不自动散局
 var _hands_dealt := 0      # 自己被发到牌的手数(冒烟测试据此确认迟到者真的上了桌)
 var _spectated := false    # 截图模式下已经观战过一次
+var _quip_timer := BOT_QUIP_EVERY.x
+var _quip_from := {}       # 收到过谁的快捷对话(不含自己)
 
 
 func _init(p_app: Node) -> void:
@@ -116,6 +119,10 @@ func _ready() -> void:
 		_gaze_from[pid] = true
 		if neck != Vector3.ZERO:
 			_neck_from[pid] = true)
+	Net.quip_shown.connect(func(pid: int, _index: int):
+		if pid != Net.my_pid():
+			_quip_from[pid] = true
+			_capture_once("quip", 0.8))
 	Net.join_failed.connect(_fail.bind("join_failed"))
 	Net.left_lobby.connect(_on_left)
 	if opts.has("shots"):
@@ -149,6 +156,7 @@ func _process(delta: float) -> void:
 		return
 	_fidget(delta)
 	var screen: Node = app.current_screen()
+	_bot_quip(screen, delta)
 	if screen != null and screen.has_method("choose_rebuy"):
 		_poker_tick(screen, delta)
 		return
@@ -160,6 +168,25 @@ func _process(delta: float) -> void:
 		return
 	_think_timer = 999.0
 	_bot_act(screen)
+
+
+func _bot_quip(screen: Node, delta: float) -> void:
+	# 与九宫格按钮同一入口(QuipController.choose)
+	_quip_timer -= delta
+	if _quip_timer > 0.0 or not Net.in_game or screen == null:
+		return
+	_quip_timer = randf_range(BOT_QUIP_EVERY.x, BOT_QUIP_EVERY.y)
+	var quips: Variant = screen.get("quips")
+	if not quips is QuipController:
+		return
+	if opts.has("shots") and not _shot_counts.has("quip_menu"):
+		# 截图模式第一次先把九宫格打开拍一张,再选
+		quips.menu.open()
+		_capture_once("quip_menu", 0.3)
+		await get_tree().create_timer(1.0).timeout
+		if not is_instance_valid(quips):
+			return
+	quips.choose(randi() % Quips.LINES.size())
 
 
 func _poker_tick(screen: Node, delta: float) -> void:
@@ -262,6 +289,7 @@ func _on_events(events: Array) -> void:
 		match ev["type"]:
 			"match_over":
 				print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
+				print("[debug] QUIPS heard=%d" % _quip_from.size())
 				print("[debug] MATCH_OVER winner=", ev["winner"])
 				_match_finished = true
 			"hand_started":
@@ -273,6 +301,7 @@ func _on_events(events: Array) -> void:
 			"session_over":
 				var results: Array = ev.get("results", [])
 				print("[debug] GAZE peers=%d necks=%d" % [_gaze_from.size(), _neck_from.size()])
+				print("[debug] QUIPS heard=%d" % _quip_from.size())
 				print("[debug] SESSION_OVER hands_dealt=%d net=%d" % [_hands_dealt, net_of(results, Net.my_pid())])
 				if Net.is_host:
 					print("[debug] net_sum=%d" % net_sum(results))

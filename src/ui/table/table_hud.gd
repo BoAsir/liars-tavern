@@ -8,6 +8,7 @@ extends Control
 signal play_pressed
 signal challenge_pressed
 signal rules_pressed
+signal quip_pressed
 
 const LOG_LINES := 6
 const MY_BUBBLE_GAP := 2.0   # 自己气泡的小三角尖与下方控件之间的留白
@@ -73,14 +74,24 @@ func _build_target_panel() -> void:
 
 
 func _build_rules_button() -> void:
-	var button := UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
+	# 右上:「对话 · T」「规则 · F1」
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(row)
+	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY), quip_pressed))
+	row.add_child(_top_button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY), rules_pressed))
+
+
+func _top_button(text: String, sig: Signal) -> Button:
+	var button := UiTheme.button(text)
 	button.add_theme_font_size_override("font_size", 15)
 	# 不抢焦点:否则点过之后空格/回车会再次触发它,而不是质疑/出牌
 	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(func(): rules_pressed.emit())
-	add_child(button)
-	button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.pressed.connect(func(): sig.emit())
+	return button
 
 
 func _build_turn_row() -> HBoxContainer:
@@ -253,7 +264,7 @@ func set_actions(can_play: bool, can_challenge: bool, selected: int, my_turn: bo
 	elif selected > 0:
 		_hint.text = "已预选 %d 张,轮到你时按 Enter 出牌" % selected
 	else:
-		_hint.text = "可以先点选手牌预选 · WASD 探头 · %s 规则 · Esc 离开" % OS.get_keycode_string(RulebookContent.HOTKEY)
+		_hint.text = "可以先点选手牌预选 · WASD 探头 · T 对话 · %s 规则 · Esc 离开" % OS.get_keycode_string(RulebookContent.HOTKEY)
 
 
 func set_actions_visible(visible_actions: bool) -> void:
@@ -334,10 +345,10 @@ func clear_my_bubble() -> void:
 		old.queue_free()
 
 
-func my_bubble(text: String, color := UiTheme.INK) -> void:
-	# 自己的声称 /「骗子!」:越肩镜头下自己头顶在画面外,改在出牌按钮行上方居中弹出;新的一句顶掉旧的
+func my_bubble(text: String, color := UiTheme.INK, duration := 1.6) -> void:
+	# 自己的声称 /「骗子!」/ 快捷对话:越肩镜头下自己头顶在画面外,改在出牌按钮行上方居中弹出;新的一句顶掉旧的
 	clear_my_bubble()
-	var bubble := SpeechBubble.new(text, color)
+	var bubble := SpeechBubble.new(text, color, duration)
 	_bubble_anchor.add_child(bubble)
 	# 底边中点贴住锚点底边(留出小三角),随文字宽度向两侧、向上长
 	bubble.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE,

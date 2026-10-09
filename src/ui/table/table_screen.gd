@@ -4,11 +4,13 @@ extends Control
 
 
 const PLATE_KEY := "plate:%d"   # WorldLabels 里对手铭牌的键
+const QUIP_ABOVE_CLAIM := -56.0  # 快捷对话气泡比出牌气泡再高这么多(屏幕像素)
 
 var app: Node
 var my_pid := 0
 var hud: TableHud
 var director: TableDirector
+var quips: QuipController
 var world: TableWorld
 var cards: CardTable
 
@@ -63,6 +65,9 @@ func _ready() -> void:
 	hud.challenge_pressed.connect(_submit_challenge)
 	hud.rules_pressed.connect(func(): app.show_rules())
 	hud.set_my_status(names.get(my_pid, ""), 0, true)
+	quips = _make_quips()
+	add_child(quips)
+	hud.quip_pressed.connect(quips.toggle)
 	director = TableDirector.new(self, app, hud)
 	add_child(director)
 	_build_nameplates()
@@ -88,6 +93,7 @@ func _exit_tree() -> void:
 	for pid in names:
 		app.labels.untrack(PLATE_KEY % pid)
 		app.labels.untrack(TableDirector.BUBBLE_KEY % pid)
+		app.labels.untrack(QuipController.KEY_PREFIX % pid)
 
 
 func _process(delta: float) -> void:
@@ -95,6 +101,21 @@ func _process(delta: float) -> void:
 	_clock.tick(delta)
 	var show_ring: bool = current_pid != null and not animating and not pub.is_empty()
 	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
+
+
+func _make_quips() -> QuipController:
+	# 快捷对话:他人的气泡挂在出牌气泡再往上一层(两句可以同时在),自己的在出牌按钮行上方
+	var quip := QuipController.new(app, my_pid)
+	quip.name_of = func(pid: int) -> String: return names.get(pid, "?")
+	quip.anchor_for = func(pid: int) -> Callable:
+		if not world.patrons.has(pid):
+			return Callable()
+		var patron: Patron = world.patrons[pid]
+		return func(): return patron.nameplate_anchor() if is_instance_valid(patron) else Vector3.ZERO
+	quip.show_mine = func(text: String) -> void: hud.my_bubble(text, UiTheme.INK, Quips.BUBBLE_SECONDS)
+	quip.log_line = hud.log_event
+	quip.bubble_offset = Vector2(0, TableDirector.BUBBLE_ABOVE_PLATE + QUIP_ABOVE_CLAIM)
+	return quip
 
 
 func _make_gaze() -> SeatGaze:

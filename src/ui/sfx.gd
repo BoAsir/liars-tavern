@@ -14,6 +14,7 @@ const VOLUMES := {
 	"ui_click": -14.0, "ui_hover": -22.0, "whoosh": -12.0, "sting_lie": -6.0, "sting_truth": -8.0,
 	"win": -6.0, "join": -10.0, "thud": -4.0,
 	"chips": -9.0, "chips_push": -7.0, "fold": -14.0,   # 德州:筹码碰撞 / 全下推筹码 / 轻推牌(规格 §6.7)
+	"quip": -11.0,                                      # 快捷对话:轻快的两声「啵」
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -160,6 +161,8 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_mix([_noise_burst(0.45, 0.1, 0.08), _offset(_chip_clatter(CHIP_PUSH_COUNT, 0.5), 0.05)]))
 		"fold":
 			return _wav(_noise_burst(0.11, 0.2, 0.02))
+		"quip":
+			return _wav(_mix([_thump(520.0, 0.05, 0.4), _offset(_bell(1175.0, 0.3), 0.04), _offset(_bell(1568.0, 0.25), 0.1)]))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)

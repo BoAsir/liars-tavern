@@ -3,8 +3,9 @@ class_name Protocol
 
 
 # v2:视线同步消息(rpc_look / rpc_look_relay);v3:消息里加上脖子偏移;v4:左轮改 5 膛(规则变了);
-# v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent)
-const VERSION := 5
+# v5:开房选玩法 + 德州扑克(发现报文与握手带玩法,新增 rpc_poker_intent);
+# v6:快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌)
+const VERSION := 6
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份
 const DISCOVERY_PORT := 47800
@@ -43,7 +44,7 @@ const NAME_BLACKLIST_CHARS := [
 ]
 # 拉丁字母黑名单:大小写不敏感,并拦截常见的 1/l→i、0→o 混写
 const NAME_BLACKLIST_LATIN := [
-	"xiao", "x1ao", "xia0", "x1a0", "xlao", "xla0", "chu"
+	"xiao", "x1ao", "xia0", "x1a0", "xlao", "xla0", "chu", "cx", "c","x"
 ]
 # 清洗文本时最多看原文开头 max_length 的这么多倍:耗时与原文长度无关
 const SANITIZE_SCAN_FACTOR := 4
