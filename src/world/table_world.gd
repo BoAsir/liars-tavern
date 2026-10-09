@@ -38,6 +38,11 @@ const LOBBY_POKER := [Vector3(1.65, 2.75, 3.35), Vector3(1.35, 0.75, 0.1)]
 # 结算环绕(CameraRig.orbit 的参数):德州的椅背在 2.11 米,环绕要更远更高,镜头高约 2 米
 const ORBIT_LIARS := {"center": Vector3(0, 0.95, 0), "radius": 2.4, "height": 0.9, "speed": 0.18}
 const ORBIT_POKER := {"center": Vector3(0, 0.95, 0), "radius": 3.1, "height": 1.05, "speed": 0.15}
+# 结算庆祝:环绕中心(胜者)在画面里的横向位置(-1 左边缘 … 1 右边缘),结算面板停在右边(UiTheme.SETTLEMENT_DOCK)
+const SETTLEMENT_FRAME := -0.42
+# 胜者特写环绕的半径:让到左边后要把整个人、两门礼炮都框进来(原来居中时 1.3)
+const WINNER_ORBIT_RADIUS := 1.75
+const GROUP_ORBIT_SPREAD := 1.0  # 几个胜者离中点都不超过这么远(米)时绕他们转,否则整桌环绕
 const SEAT_MOVE := 0.6           # 换座位、桌子放大时酒客沿圆弧滑到新座位的时长(秒)
 # 德州铭牌挂点(规格 §6.3):高过最高的头顶(动森式大头:羊驼耳尖 ≈1.70 m、礼帽 ≈1.69 m;Q 版统一挂 1.62,礼帽尖
 # 会被铭牌下沿盖住几厘米)。挂高之后相邻座位的铭牌在越肩、观战机位下容易叠在一起(离镜头近的那个投得低),
@@ -355,17 +360,49 @@ func is_celebrating() -> bool:
 
 
 func winner_orbit(pid: int) -> Dictionary:
-	# 胜者特写环绕(CameraRig.orbit 的参数):从胜者面朝牌桌的一侧开始,绕着胜者的头转
+	# 胜者特写环绕(CameraRig.orbit 的参数):从胜者面朝牌桌的一侧开始,绕着胜者的头转;胜者在画面左边(frame)
 	var toward_table := -SeatLayout.direction(seat_angles.get(pid, 0.0))
-	return {"center": head_position(pid) + Vector3(0, -0.2, 0), "radius": 1.3, "height": 0.35, "speed": 0.25,
-		"start": atan2(toward_table.x, toward_table.z)}
+	return {"center": head_position(pid) + Vector3(0, -0.25, 0), "radius": WINNER_ORBIT_RADIUS, "height": 0.45, "speed": 0.22,
+		"start": atan2(toward_table.x, toward_table.z), "frame": SETTLEMENT_FRAME, "fill": SEAT_FILL_LIGHT * 0.6}
 
 
-static func orbit_start(orbit: Dictionary) -> Transform3D:
-	# 环绕的起始机位(截图与性能探针用;同 CameraRig.orbit 的起点)
+func celebration_orbit(winners: Array) -> Dictionary:
+	# 结算庆祝的环绕(规格 2026-10-09-winner-celebration):结算面板停在右边,跳舞的人一直待在画面左边。
+	# 一个胜者:绕他的头转(winner_orbit);几个胜者挨得近:绕他们的中点转、按散开的距离拉远;
+	# 散得开(德州全员平局等)或胜者都不在桌上:整桌环绕,桌心也让到画面左边
+	var heads: Array[Vector3] = []
+	var first := -1
+	for pid in winners:
+		if patrons.has(pid):
+			heads.append(head_position(pid))
+			if first < 0:
+				first = pid
+	if heads.size() == 1:
+		return winner_orbit(first)
+	if heads.size() > 1:
+		var mid := Vector3.ZERO
+		for h in heads:
+			mid += h / heads.size()
+		var spread := 0.0
+		for h in heads:
+			spread = maxf(spread, Vector2(h.x - mid.x, h.z - mid.z).length())
+		if spread <= GROUP_ORBIT_SPREAD:
+			var toward := Vector3(-mid.x, 0.0, -mid.z) + to_global(Vector3.ZERO) * Vector3(1, 0, 1)
+			if toward.length_squared() < 0.0001:
+				toward = Vector3.BACK
+			return {"center": mid + Vector3(0, -0.2, 0), "radius": WINNER_ORBIT_RADIUS + spread * 1.2, "height": 0.45 + spread * 0.3,
+				"speed": 0.2, "start": atan2(toward.x, toward.z), "frame": SETTLEMENT_FRAME, "fill": SEAT_FILL_LIGHT * 0.6}
+	var orbit := table_orbit()
+	orbit["frame"] = SETTLEMENT_FRAME
+	orbit["fill"] = 0.0
+	return orbit
+
+
+static func orbit_start(orbit: Dictionary, view_aspect := 16.0 / 9.0) -> Transform3D:
+	# 环绕的起始机位(截图与性能探针用;同 CameraRig.orbit 的起点,含横向取景)
 	var a: float = orbit.get("start", 0.0)
 	var pos: Vector3 = orbit["center"] + Vector3(sin(a) * orbit["radius"], orbit["height"], cos(a) * orbit["radius"])
-	return _look(pos, orbit["center"])
+	return CameraRig.framed(_look(pos, orbit["center"]), orbit.get("frame", 0.0), CameraRig.DEFAULT_FOV, view_aspect)
 
 
 func _show_empty_chairs(shown: bool) -> void:

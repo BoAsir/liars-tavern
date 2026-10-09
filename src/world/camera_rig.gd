@@ -27,6 +27,7 @@ var _orbit_radius := 3.0
 var _orbit_height := 2.0
 var _orbit_speed := 0.08
 var _orbit_angle := 0.0
+var _orbit_frame := 0.0   # 环绕时看向的点在画面里的横向位置(-1 左边缘 … 0 正中 … 1 右边缘):结算时胜者让到左边,右边放结算面板
 var _follow: Callable = Callable()   # 跟随机位:每帧调用它取目标变换(第一人称跟着自己的头);空 = 不跟随
 var _follow_from := Transform3D.IDENTITY
 var _follow_weight := 1.0            # 从开始跟随时的机位过渡到跟随目标的进度(补间驱动)
@@ -59,8 +60,7 @@ func _process(delta: float) -> void:
 	_time += delta
 	if _orbit_active:
 		_orbit_angle += _orbit_speed * delta
-		var pos := _orbit_center + Vector3(sin(_orbit_angle) * _orbit_radius, _orbit_height, cos(_orbit_angle) * _orbit_radius)
-		global_transform = _look(pos, _orbit_center)
+		global_transform = _orbit_pose(_orbit_angle)
 	elif _follow.is_valid():
 		# 到位后直接贴着目标:第一人称的眼睛本身已经平滑(脖子是临界阻尼弹簧,前倾按插值),再加一层会拖影
 		var target: Transform3D = _follow.call()
@@ -112,17 +112,36 @@ func snap(pos: Vector3, target: Vector3) -> void:
 
 
 func orbit(center: Vector3, radius: float, height: float, speed: float, blend := 2.0,
-		start_angle := NAN) -> void:
-	# 先平滑移到环绕轨道上的起始角度(默认 = 镜头当前所在方位),再开始匀速环绕
+		start_angle := NAN, frame := 0.0) -> void:
+	# 先平滑移到环绕轨道上的起始角度(默认 = 镜头当前所在方位),再开始匀速环绕。
+	# frame ≠ 0 时环绕中心不在画面正中,而在横向 frame 处(见 framed)
 	_orbit_center = center
 	_orbit_radius = radius
 	_orbit_height = height
 	_orbit_speed = speed
+	_orbit_frame = frame
 	var rel := global_position - center
 	_orbit_angle = atan2(rel.x, rel.z) if is_nan(start_angle) else start_angle
-	var start := center + Vector3(sin(_orbit_angle) * radius, height, cos(_orbit_angle) * radius)
-	var tween := look_from(start, center, blend)
+	var tween := move_to(_orbit_pose(_orbit_angle), blend)
 	tween.finished.connect(func(): _orbit_active = true)
+
+
+func _orbit_pose(angle: float) -> Transform3D:
+	var pos := _orbit_center + Vector3(sin(angle) * _orbit_radius, _orbit_height, cos(angle) * _orbit_radius)
+	return framed(_look(pos, _orbit_center), _orbit_frame, camera.fov, aspect())
+
+
+func aspect() -> float:
+	var size := get_viewport().get_visible_rect().size if is_inside_tree() else Vector2.ZERO
+	return size.x / size.y if size.y > 0.0 else 16.0 / 9.0
+
+
+static func framed(xform: Transform3D, frame: float, vfov_deg: float, view_aspect: float) -> Transform3D:
+	# 看向正前方的机位绕竖直轴转一点,让原来在画面正中的点落到横向 frame 处(-1 左边缘 … 1 右边缘;竖直视角 + 宽高比算水平视角)
+	if is_zero_approx(frame):
+		return xform
+	var angle := atan(frame * tan(deg_to_rad(vfov_deg) * 0.5) * view_aspect)
+	return Transform3D(xform.basis.rotated(Vector3.UP, angle), xform.origin)
 
 
 func follow(source: Callable, duration: float, trans := Tween.TRANS_CUBIC, ease := Tween.EASE_IN_OUT) -> Tween:

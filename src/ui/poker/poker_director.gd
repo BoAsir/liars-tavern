@@ -366,13 +366,14 @@ func _session_over(ev: Dictionary) -> void:
 	_leave_rest(MODE_ORBIT)
 	hud.announce("散局", UiTheme.BRASS_BRIGHT, "牌局结束,结算中", 1.8)
 	hud.log_event("散局结算", UiTheme.BRASS_BRIGHT)
-	rig.set_fill(0.0, 1.0)
-	var orbit := world.table_orbit()
-	rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4)
-	# 结算庆祝(规格 2026-10-09):盈亏第一的人跳舞(并列第一都跳)、其他人鼓掌、礼炮彩纸;开场小号与掌声由庆祝发出
+	# 结算庆祝(规格 2026-10-09):盈亏第一的人跳舞(并列第一都跳)、其他人鼓掌、礼炮彩纸;开场小号与掌声由庆祝发出。
+	# 镜头绕着跳舞的人转(让到画面左边,右边放结算面板);并列的人散得开时整桌环绕
 	var results: Array = ev["results"] if ev.get("results") is Array else []
 	var winners := top_ranked(results)
 	world.celebrate(winners, hash(["poker", winners, results.size()]))
+	var orbit := world.celebration_orbit(winners)
+	rig.set_fill(orbit.get("fill", 0.0), 1.0)
+	rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4, orbit.get("start", NAN), orbit.get("frame", 0.0))
 	await _wait(SESSION_OVER_HOLD)
 	screen.show_settlement(results)
 

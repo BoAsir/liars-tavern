@@ -489,14 +489,12 @@ func _match_over(ev: Dictionary) -> void:
 	hud.announce(title, UiTheme.BRASS_BRIGHT, "最后一个没被炸飞的", 1.8, BombCatHud.ANNOUNCE_Y_LOW)
 	# 结算庆祝(规格 2026-10-09):胜者跳舞、活着的人鼓掌、炸飞的人倒着抽手、礼炮彩纸;开场小号与掌声由庆祝发出
 	world.celebrate([winner] if winner is int else [], hash(["bomb_cat", winner, ev.get("ranking")]))
+	# 胜者让到画面左边(右边放结算面板);胜者不在桌上时整桌环绕
+	var focus := world.celebration_orbit([winner] if winner is int else [])
+	rig.set_fill(focus.get("fill", 0.0), 1.0)
+	rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus.get("start", NAN), focus.get("frame", 0.0))
 	if winner is int and world.patrons.has(winner):
-		var focus := world.winner_orbit(winner)
-		rig.set_fill(TableWorld.SEAT_FILL_LIGHT * 0.6, 1.0)
-		rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus["start"])
 		_look_all(world.head_position(winner))
-	else:
-		var orbit := world.table_orbit()
-		rig.orbit(orbit["center"], orbit["radius"], orbit["height"], orbit["speed"], 1.4)
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
 	await _wait(MATCH_HOLD)
 	screen.show_settlement()

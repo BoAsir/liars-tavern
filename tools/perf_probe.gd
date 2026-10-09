@@ -344,11 +344,11 @@ func _measure() -> Dictionary:
 
 func _place_camera(view: String) -> bool:
 	if CelebrateStage.VIEWS.has(view) and _celebrate_world != null:
-		var xform := CelebrateStage.view(_celebrate_world, _kind, view)
+		var xform := CelebrateStage.view(_celebrate_world, _kind, view, float(_viewport.size.x) / _viewport.size.y)
 		_tavern.camera_rig.stop_follow()
 		_tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
 		_tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
-		_tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(view)
+		_tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(_celebrate_world, _kind, view)
 		return true
 	if _bomb != null and view.begins_with("bomb_"):
 		var bomb_world: TableWorld = _bomb.world

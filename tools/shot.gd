@@ -20,7 +20,7 @@ extends SceneTree
 # --celebrate[=秒] 在已摆好的展台(--showcase / --poker-showcase / --bomb-cat-showcase)上开演结算庆祝(tools/celebrate_stage.gd:
 # 胜者跳舞、旁人鼓掌、出局的倒着、桌沿礼炮放彩纸),等这么多秒(默认 2.6)再拍;机位 celebrate(胜者特写环绕的起点)、
 # celebrate_table(整桌环绕的起点)。例:--showcase --celebrate --views=celebrate,celebrate_table;--celebrate=5 拍第二炮;
-# 再加 --celebrate-hud 叠上该玩法的结算面板(文件名带 _settlement)。
+# 再加 --celebrate-hud 叠上该玩法的结算面板(文件名带 _settlement);--celebrate-winners=1,2,… 换胜者(德州全员平局:1,2,3,4,5,6,7,8)。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
 
@@ -127,10 +127,10 @@ func _run() -> void:
 		elif hud_state == "" and _poker != null:
 			hud_state = PokerShowcase.SPECTATE_STATE if view == "poker_overview" else PokerShowcase.BET_STATE
 		if CelebrateStage.VIEWS.has(view) and _celebrate_world != null:
-			var xform := CelebrateStage.view(_celebrate_world, _celebrate_kind, view)
+			var xform := CelebrateStage.view(_celebrate_world, _celebrate_kind, view, tavern.camera_rig.aspect())
 			tavern.camera_rig.stop_follow()
 			tavern.camera_rig.camera.fov = CameraRig.DEFAULT_FOV
-			tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(view)
+			tavern.camera_rig.fill_light.light_energy = CelebrateStage.fill(_celebrate_world, _celebrate_kind, view)
 			tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
 			if hud_state != "":
 				_stage_settlement(tavern)
@@ -187,6 +187,8 @@ func _stage_celebration() -> void:
 	else:
 		push_warning("--celebrate 需要 --showcase / --poker-showcase / --bomb-cat-showcase")
 		return
+	if opts.has("celebrate-winners"):
+		CelebrateStage.winners_override = Array(opts["celebrate-winners"].split(",")).map(func(pid: String) -> int: return int(pid))
 	CelebrateStage.stage(_celebrate_world, _celebrate_kind)
 	var wait: String = opts["celebrate"]
 	await create_timer(float(wait) if wait.is_valid_float() else CelebrateStage.SETTLE).timeout

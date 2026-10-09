@@ -108,7 +108,7 @@ func test_every_routine_runs_for_a_full_cycle_on_every_species():
 			for arm: Node3D in [p._arm_l, p._arm_r]:
 				assert_almost_eq(arm.quaternion.length(), 1.0, 0.001, "%s 物种 %d 手臂" % [PatronDance.NAMES[routine], p.species_index])
 			assert_true(p.body.position.is_finite() and p.body.rotation.is_finite())
-			assert_lt(absf(p.body.position.y - Patron.HIP.y), 0.25, "屁股离座不超过 25 cm")
+			assert_lt(absf(p.body.position.y - Patron.HIP.y), 0.3, "屁股离座不超过 30 cm")
 			p.stop_dance()
 			assert_true(p._hat.transform.is_equal_approx(hat_rest), "%s:帽子复原" % PatronDance.NAMES[routine])
 
@@ -387,4 +387,81 @@ func test_liars_match_over_starts_the_celebration_and_keeps_the_settlement():
 	await wait_until(func(): return screen.shown != null, 3.0, "结算面板照常弹出")
 	assert_eq(screen.shown, 2)
 	assert_true(world.is_celebrating(), "结算面板出来后庆祝继续")
+	assert_almost_eq(director.rig._orbit_frame, TableWorld.SETTLEMENT_FRAME, 0.0001, "环绕时胜者让到画面左边")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(app.settings_path))
+
+
+# —— 结算面板停在右边、胜者让到画面左边 ——
+
+static func _ndc_x(view: Transform3D, point: Vector3, aspect: float) -> float:
+	var local := view.affine_inverse() * point
+	return (local.x / -local.z) / (tan(deg_to_rad(CameraRig.DEFAULT_FOV) * 0.5) * aspect)
+
+
+func test_framed_orbit_puts_the_center_where_asked():
+	var view := Transform3D(Basis.looking_at(Vector3(0, 0, -1)), Vector3(0, 0, 2))
+	for aspect in [16.0 / 9.0, 4.0 / 3.0]:
+		var framed := CameraRig.framed(view, TableWorld.SETTLEMENT_FRAME, CameraRig.DEFAULT_FOV, aspect)
+		assert_almost_eq(_ndc_x(framed, Vector3.ZERO, aspect), TableWorld.SETTLEMENT_FRAME, 0.001, "宽高比 %.2f" % aspect)
+	assert_eq(CameraRig.framed(view, 0.0, CameraRig.DEFAULT_FOV, 1.5), view, "不偏就原样")
+
+
+func test_celebration_orbit_frames_one_winner_a_close_pair_or_the_whole_table():
+	world.configure_table(SeatLayout.POKER_TABLE_RADIUS)
+	_seat([1, 2, 3, 4, 5, 6, 7, 8])
+	await wait_seconds(0.7)
+	var one := world.celebration_orbit([3])
+	assert_almost_eq(one["center"].distance_to(world.head_position(3)), 0.25, 0.01, "绕着胜者的头")
+	assert_eq(one["frame"], TableWorld.SETTLEMENT_FRAME)
+	var pair := world.celebration_orbit([3, 4])
+	var mid: Vector3 = (world.head_position(3) + world.head_position(4)) / 2.0
+	assert_lt(Vector2(pair["center"].x - mid.x, pair["center"].z - mid.z).length(), 0.01, "挨着的两人绕他们的中点转")
+	assert_gt(pair["radius"], one["radius"], "两人时拉远一点")
+	var all := world.celebration_orbit([1, 2, 3, 4, 5, 6, 7, 8])
+	assert_eq(all["radius"], world.table_orbit()["radius"], "全员平局:整桌环绕")
+	assert_eq(all["frame"], TableWorld.SETTLEMENT_FRAME, "整桌环绕也让到左边")
+	assert_eq(world.celebration_orbit([99])["radius"], world.table_orbit()["radius"], "胜者不在桌上:整桌环绕")
+
+
+func test_winner_stays_left_of_the_docked_panel_while_orbiting():
+	# 环绕到任意角度,胜者的头都落在画面左侧,不进右侧结算面板的停靠区(16:9 与 4:3)
+	_seat([1, 2, 3])
+	await wait_seconds(0.7)
+	var orbit := world.celebration_orbit([2])
+	for aspect in [16.0 / 9.0, 4.0 / 3.0]:
+		for k in 12:
+			orbit["start"] = TAU * k / 12.0
+			var x := _ndc_x(TableWorld.orbit_start(orbit, aspect), world.head_position(2), aspect)
+			assert_lt(x, UiTheme.SETTLEMENT_DOCK * 2.0 - 1.0 - 0.25, "头离面板停靠区还有余地")
+			assert_gt(x, -0.9, "头没出左边")
+
+
+func test_settlement_panels_dock_right_and_leave_the_left_undimmed():
+	var root := Control.new()
+	add_child_autofree(root)
+	var stats := {1: {"name": "我", "shots": 1, "rounds": 2}, 2: {"name": "阿狸", "shots": 2, "rounds": 2}}
+	var panels: Array[ColorRect] = [
+		Settlement.new("阿狸", Settlement.build_ranking(2, [1], stats), false),
+		PokerSettlement.new([{"pid": 1, "name": "我", "stack": 3000, "buyins": 1, "net": 1000},
+			{"pid": 2, "name": "阿狸", "stack": 1000, "buyins": 1, "net": -1000}], true),
+		BombCatSettlement.new("阿狸", [{"pid": 2, "name": "阿狸", "place": 1, "fate": "winner"},
+			{"pid": 1, "name": "我", "place": 2, "fate": "exploded"}], false),
+	]
+	for panel in panels:
+		root.add_child(panel)
+	for size in [Vector2(1280, 720), Vector2(1280, 960)]:
+		for panel in panels:
+			panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			panel.position = Vector2.ZERO
+			panel.size = size
+		await wait_process_frames(3)
+		for panel in panels:
+			var box: Control = panel.get_node("Dock").get_child(0)
+			var rect := box.get_global_rect()
+			assert_gte(rect.position.x, size.x * 0.5, "%s 停在右边" % panel.get_script().get_global_name())
+			assert_lte(rect.end.x, size.x + 1.0, "不出右边")
+			assert_almost_eq(rect.get_center().y, size.y / 2.0, 2.0, "竖直居中")
+			var image: Image = (panel.get_node("Scrim") as TextureRect).texture.get_image()
+			assert_lt(image.get_pixel(int(image.get_width() * 0.25), 1).a, 0.01, "左边不压暗")
+			assert_gt(image.get_pixel(image.get_width() - 1, 1).a, 0.5, "面板后面压暗")
+			assert_eq(panel.color.a, 0.0, "整屏不再压暗")

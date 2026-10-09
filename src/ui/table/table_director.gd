@@ -253,20 +253,20 @@ func _match_over(ev: Dictionary) -> void:
 	hud.announce(title, UiTheme.BRASS_BRIGHT, "活到了最后", 1.8, TableHud.ANNOUNCE_Y_LOW)
 	# 结算庆祝(规格 2026-10-09):胜者跳舞、其他人鼓掌、礼炮彩纸,开场小号与掌声由庆祝发出(代替原来的 win 铃声)
 	world.celebrate([winner], hash(["liars", winner, screen.get("_round_now")]))
-	if world.patrons.has(winner):
-		# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),并给一点补光看清表情
-		var focus := world.winner_orbit(winner)
-		rig.set_fill(TableWorld.SEAT_FILL_LIGHT * 0.6, 1.0)
-		rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus["start"])
-	else:
-		var orbit := world.table_orbit()
-		rig.orbit(orbit.center, orbit.radius, orbit.height, orbit.speed, 1.4)
+	# 从胜者面朝牌桌的一侧开始环绕(自己赢时镜头原本在背后),给一点补光看清表情;胜者让到画面左边,右边放结算面板。
+	# 胜者不在桌上时整桌环绕
+	_orbit(world.celebration_orbit([winner]))
 	hud.log_event("胜者:%s" % screen.name_of(winner), UiTheme.BRASS_BRIGHT)
 	await _wait(2.2)
 	screen.show_settlement(winner)
 
 
 # —— 工具 ——
+
+func _orbit(focus: Dictionary) -> void:
+	rig.set_fill(focus.get("fill", 0.0), 1.0)
+	rig.orbit(focus["center"], focus["radius"], focus["height"], focus["speed"], 1.4, focus.get("start", NAN), focus.get("frame", 0.0))
+
 
 func _startle_all(except_pid) -> void:
 	# 桌上其他人吓一跳(Q 版搞笑表演);死了的不动
