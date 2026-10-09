@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-08 15:40,已暂停;任务 6/7a 审查修复与 7b 开发都已合并到 feature/texas-holdem 与 main)
+## 状态(2026-10-09:7b 审查修复、任务 8 完成;任务 9 联调进行中)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -26,8 +26,8 @@
 | 合并第一批 | ✅ 102f73a | 6 个分支 + 上游 eadc745/51a8431 都已合进 feature/texas-holdem;协议 v5;德州越肩机位用 TableWorld.POKER_THIRD_PERSON;710 测试全过 |
 | 6 网络会话 | ✅ 已写完、已独立审查修复(th/net-fix,已合并) | GameSession 接口 + LiarsSession(骗子酒馆零变化)+ PokerSession + PokerViews;NetworkManager 游戏部分改走会话(规格 §4.2 计时、`_hand_timer`、`rpc_poker_intent` 校验、中途加入顺序、视线成员 = 等待厅名单);`PokerPacing.BUST_DECISION`;`request_sit_in()`。审查修复见下节「任务 6 审查修复」 |
 | 7a HUD 控件 | ✅ 已写完、已审查修复(th/hud-fix),展台截图收尾完成 | BetControls(预设/夹取/文案/禁用原因/快捷键/F 免费过牌保护;新回合按 hand/street/current_pid 或合法动作变化判定,牌桌要对每个公共视图都调 `update`)、PokerHud、CardStrip、PokerNameplate(两行各自按文字宽度给足)、PokerPrompts、ShowdownStrip、PokerSettlement、ChipText、音效 chips/chips_push/fold,各有单测;主题给 HSlider 铜色轨道。`tools/poker_showcase.gd` + `tools/shot.gd` 已能摆出全部 8 种底部状态(bet/wait/showdown/bust/spectate/waiting/away/settlement)与观战机位,1280×720 与 1280×960 都核对过规格 §6.1 预算、铭牌不相撞 |
-| 7b 控制器与演出 | ✅ 已写完并合并(th/screen),**独立审查没做完** | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。暂停时审查阶段刚开始,审查员只来得及加流程测试;接手时按计划任务 7 的审查要点(规格 §4.3–4.6、§5.5、§6.2–6.5、§7)再过一遍 |
-| 8 bot 与冒烟 | ⬜ 未开始 | |
+| 7b 控制器与演出 | ✅ 已写完、已独立审查修复(a9618e1) | PokerScreen(445 行)+ PokerDirector(446 行)+ PokerScreenState(337 行);main.gd 选屏与拆台接线、说明书牌面刷新、SeatGaze 接法、迟到者第一帧、机位规则、底部区域状态、结算;bot/快捷键入口与按钮同路径(`is_my_turn / legal / submit / my_status / choose_rebuy / choose_spectate / choose_sit_in`)。测试:test_poker_screen_state、test_poker_screen、test_poker_director_pacing(实际时长 ≤ PokerPacing 预算)、test_poker_screen_flow(无头整局:发牌→行动→全下亮牌→输光→观战→再领→中途加入/离开→散局→结算→拆台,91 断言)。2026-10-09 两路独立审查(规格符合性、运行时健壮性)修掉:迟到者第一帧不重排、同一手里离场者座位被提前收走、旁人事件重置加注额、结算面板下露出输光提示与机位被拉回、最大牌型剧透、观战者看不到摊牌条、再领回执、散局按钮、过期的弃牌确认、节奏余量 4 帧;新增 `tests/poker_screen_harness.gd`(流程测试公共装置)与 `test_poker_screen_edges.gd`;规格 §4.2、§4.7、§6.1 补写了对应规则 |
+| 8 bot 与冒烟 | ✅ fd37f43 | DebugFlags `--mode` / `--hands` / 日志标记 / 德州截图标记;`PokerBot`(概率表纯函数 + 经 `PokerScreen.submit`);`tools/poker_smoke.sh`(holdem、short_deck 都通过);README 两种玩法、德州规则与操作键、新开关、冒烟与截图命令 |
 | 9 联调与截图验收 | ⬜ 未开始 | |
 | 10 审查 | ⬜ 未开始 | |
 

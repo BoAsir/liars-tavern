@@ -289,6 +289,24 @@ func test_bottom_centre_fits_its_budget_in_every_mode():
 		assert_true(box.position.y + box.size.y <= SCREEN.y, "%s 底边" % mode)
 
 
+func test_showdown_text_column_widens_when_few_players_show():
+	assert_eq(ShowdownStrip.text_width(2), ShowdownStrip.WIDE_NAME_WIDTH, "单挑:牌型名不被省略")
+	assert_gt(ShowdownStrip.text_width(3), ShowdownStrip.text_width(4))
+	assert_gte(ShowdownStrip.text_width(8), ShowdownStrip.NAME_WIDTH)
+	assert_eq(ShowdownStrip.text_width(0), ShowdownStrip.WIDE_NAME_WIDTH)
+
+
+func test_showdown_strip_stays_in_budget_for_every_player_count():
+	for count in range(1, ShowdownStrip.MAX_ENTRIES + 1):
+		var entries := []
+		for i in count:
+			entries.append({"name": "第 %d 位名字很长的客人" % i, "cards": [_card(14, 0), _card(13, 1)], "hand_name": "葫芦 · Q 带 7"})
+		hud.set_showdown(entries)
+		hud.set_bottom_mode(PokerHud.BOTTOM_SHOWDOWN)
+		await wait_process_frames(3)
+		assert_true(hud.bottom_box.size.x <= PokerHud.BOTTOM_MAX.x, "%d 人宽 %s" % [count, hud.bottom_box.size])
+
+
 func test_showdown_strip_shows_at_most_two_rows_of_four():
 	var entries := []
 	for i in 9:
