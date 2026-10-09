@@ -1,5 +1,6 @@
 class_name TavernSconces
-# 壁灯:四面墙上的黄铜壁灯,玻璃灯罩里一簇火苗,补亮房间四周,避免只有牌桌一圈亮。
+# 壁灯:四面墙上的木牌黄铜壁灯,玻璃罩里一截蜡烛,补亮房间四周,避免只有牌桌一圈亮。
+# 造型见 SconceModel:所有壁灯的木、铜、蜡、玻璃拼成两个网格(不投影);火苗与灯光每盏一份。
 
 
 # [墙内表面上的位置, 朝向房间的偏航角]
@@ -9,26 +10,36 @@ const SCONCES := [
 	[Vector3(-4.4, Tavern.SCONCE_HEIGHT, 2.0), -PI / 2.0], [Vector3(-4.4, Tavern.SCONCE_HEIGHT, -3.1), -PI / 2.0],
 	[Vector3(4.4, Tavern.SCONCE_HEIGHT, 1.7), PI / 2.0],
 ]
+const FLAME_SIZE := Vector2(0.035, 0.07)
+const FLAME_INTENSITY := 3.5
 
 
 static func build(tavern: Tavern) -> void:
 	var sconces := MeshKit.pivot(tavern, Vector3.ZERO, "Sconces")
-	for i in SCONCES.size():
-		_sconce(tavern, sconces, SCONCES[i][0], SCONCES[i][1], 60.0 + i)
+	var xforms := placements()
+	MeshBatch.instance(sconces, SconceModel.fittings_mesh(xforms), {}, "Fittings", false)
+	MeshBatch.instance(sconces, SconceModel.glass_mesh(xforms), {}, "Glass", false)
+	for i in xforms.size():
+		_sconce(tavern, sconces, i, xforms[i], 60.0 + i)
 
 
-static func _sconce(tavern: Tavern, parent: Node3D, wall_point: Vector3, yaw: float, seed: float) -> void:
-	# 本地 -Z 指向房间内:黄铜底板 + 弯臂 + 玻璃灯罩里的一簇火苗。
-	# 灯光挂在名为 Sconce 的节点下(tools/perf_probe.gd 按父节点名前缀找壁灯的灯光)
-	var root := MeshKit.pivot(parent, wall_point, "Sconce")
-	root.rotation.y = yaw
-	MeshKit.add(root, MeshKit.box(Vector3(0.1, 0.22, 0.02)), WorldMaterials.brass(), Vector3(0, 0, -0.01))
-	MeshKit.add(root, MeshKit.cylinder(0.008, 0.008, 0.14, 8), WorldMaterials.brass(), Vector3(0, -0.04, -0.08),
-		Vector3(90, 0, 0))
-	MeshKit.add(root, MeshKit.cylinder(0.04, 0.022, 0.035, 16), WorldMaterials.brass(), Vector3(0, -0.03, -0.15))
-	MeshKit.add(root, MeshKit.cylinder(0.032, 0.036, 0.12, 16), WorldMaterials.glass(Color(1.0, 0.92, 0.8)),
-		Vector3(0, 0.045, -0.15))
-	MeshKit.add(root, MeshKit.quad(Vector2(0.035, 0.07)), WorldMaterials.flame(3.5, seed), Vector3(0, 0.03, -0.15))
+static func placements() -> Array:
+	# 每盏壁灯的变换:本地 -Z 指向房间
+	var out := []
+	for spec in SCONCES:
+		out.append(Transform3D(Basis(Vector3.UP, spec[1]), spec[0]))
+	return out
+
+
+static func _sconce(tavern: Tavern, parent: Node3D, index: int, xform: Transform3D, seed: float) -> void:
+	# 火苗与灯光挂在 Sconce<n> 节点下(名字各不相同,重名会被引擎改成 @Node3D@N;
+	# tools/perf_probe.gd 按父节点名前缀 Sconce 找壁灯的灯光)
+	var root := MeshKit.pivot(parent, xform.origin, "Sconce%d" % (index + 1))
+	root.basis = xform.basis
+	var flame := MeshKit.add(root, MeshKit.quad(FLAME_SIZE), WorldMaterials.flame(FLAME_INTENSITY, seed),
+		SconceModel.FLAME_POS)
+	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# 灯光参数与位置保持原样(灯光调校在别处)
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 0.05, -0.2)
 	light.light_color = Color(1.0, 0.74, 0.48)
