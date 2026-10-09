@@ -183,3 +183,16 @@ func test_settlement_rows_and_buttons():
 	var guest := BombCatSettlement.new("乙", rows, true, false)
 	add_child_autofree(guest)
 	assert_eq(guest.default_button().text, "离开房间")
+
+
+func test_top_right_has_the_quip_button_and_hints_list_the_chat_keys():
+	# 右上「对话 · T」在「规则 · F1」左边(同骗子酒馆);提示行写 T 对话 / G 丢番茄 / Q 快捷语
+	var buttons := hud.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.text.begins_with("对话"))
+	assert_eq(buttons.size(), 1)
+	watch_signals(hud)
+	buttons[0].pressed.emit()
+	assert_signal_emitted(hud, "quip_pressed")
+	for hint in [BombCatHud.HINT_IDLE, BombCatHud.HINT_SPECTATE]:
+		assert_string_contains(hint, "T 对话")
+		assert_string_contains(hint, "G ")
+		assert_string_contains(hint, "Q 快捷语")

@@ -14,6 +14,7 @@ signal play_pressed
 signal draw_pressed
 signal nope_pressed
 signal rules_pressed
+signal quip_pressed
 signal card_clicked(index: int)
 signal card_hovered(index: int)
 signal target_chosen(pid: int)
@@ -37,8 +38,8 @@ const PROMPT_TARGET := "target"
 const PROMPT_NAMED := "named"
 const PROMPT_REINSERT := "reinsert"
 const PROMPT_GIVE := "give"
-const HINT_IDLE := "点手牌或按 1–9 选牌 · Enter 出牌 · 空格 摸牌 · N 不行! · WASD 探头 · V 视角 · G 番茄 · Q 快捷语 · %s 规则 · Esc 离开"
-const HINT_SPECTATE := "观战中:鼠标看人 · V 视角 · G 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开"
+const HINT_IDLE := "点手牌或按 1–9 选牌 · Enter 出牌 · 空格 摸牌 · N 不行! · WASD 探头 · V 视角 · T 对话 · G 番茄 · Q 快捷语 · %s 规则 · Esc 离开"
+const HINT_SPECTATE := "观战中:鼠标看人 · V 视角 · T 对话 · G 丢番茄 · Q 快捷语 · %s 规则 · Esc 离开"
 
 var strip: BombCatHandStrip
 var play_button: Button
@@ -178,13 +179,23 @@ func _build_info() -> void:
 
 
 func _build_rules_button() -> void:
-	var button := UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
+	# 右上:「对话 · T」「规则 · F1」(同骗子酒馆的牌桌)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(row)
+	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	row.add_child(_top_button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY), quip_pressed))
+	row.add_child(_top_button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY), rules_pressed))
+
+
+func _top_button(text: String, sig: Signal) -> Button:
+	var button := UiTheme.button(text)
 	button.add_theme_font_size_override("font_size", 15)
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(func(): rules_pressed.emit())
-	add_child(button)
-	button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.focus_mode = Control.FOCUS_NONE   # 不抢焦点:空格 / 回车照样给牌桌
+	button.pressed.connect(func(): sig.emit())
+	return button
 
 
 func _build_bottom() -> void:
@@ -716,9 +727,10 @@ func clear_my_bubble() -> void:
 		old.queue_free()
 
 
-func my_bubble(text: String, color := UiTheme.INK) -> void:
+func my_bubble(text: String, color := UiTheme.INK, duration := 1.6) -> void:
+	# 自己的出牌声明 / 九宫格快捷对话:弹在出牌按钮行上方居中;新的一句顶掉旧的
 	clear_my_bubble()
-	var bubble := SpeechBubble.new(text, color)
+	var bubble := SpeechBubble.new(text, color, duration)
 	_bubble_anchor.add_child(bubble)
 	bubble.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE,
 		int(SpeechBubble.TAIL_LENGTH + MY_BUBBLE_GAP))

@@ -8,6 +8,7 @@ extends Control
 
 
 const PLATE_KEY := "plate:%d"   # WorldLabels 里对手铭牌的键
+const QUIP_ABOVE_CLAIM := -56.0  # 九宫格快捷对话的气泡比出牌气泡再高这么多(屏幕像素,同骗子酒馆)
 const TARGET_PICK_RADIUS := 140.0   # 选目标时在 3D 里点酒客:光标离他头的屏幕距离上限(像素)
 const LEAVE_CONFIRM := "离开牌桌会被判出局,确定吗?"
 const HOST_LEAVE_CONFIRM := "你是房主,离开会解散整桌,确定吗?"
@@ -28,6 +29,7 @@ var app: Node
 var my_pid := 0
 var hud: BombCatHud
 var director: BombCatDirector
+var quips: QuipController
 var world: TableWorld
 var cards: BombCatCards
 var state := BombCatScreenState.new()
@@ -74,6 +76,9 @@ func _ready() -> void:
 	hud = BombCatHud.new()
 	add_child(hud)
 	_connect_hud()
+	quips = _make_quips()
+	add_child(quips)
+	hud.quip_pressed.connect(quips.toggle)
 	director = BombCatDirector.new(self, app, hud)
 	add_child(director)
 	_build_nameplates()
@@ -100,6 +105,7 @@ func _exit_tree() -> void:
 	for pid in state.names:
 		app.labels.untrack(PLATE_KEY % pid)
 		app.labels.untrack(BombCatDirector.BUBBLE_KEY % pid)
+		app.labels.untrack(QuipController.KEY_PREFIX % pid)
 	if cards != null:
 		cards.clear_peek()
 	world.stop_celebration()   # 结算庆祝(舞步、礼炮、彩纸)随牌桌退场收起
@@ -666,8 +672,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_confirm_leave()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and not app.is_modal_open():
+		# 快捷语面板或九宫格开着时不切
 		get_viewport().set_input_as_handled()
-		if not _banter_panel_open():
+		if not _banter_panel_open() and not quips.menu.is_open():
 			director.toggle_camera_mode()
 		return
 	if not state.am_alive() or app.is_modal_open():
@@ -683,6 +690,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and not animating:
 		var index := _pick_card(event.position)
 		cards.set_selection(_selected, index)
+
+
+func _make_quips() -> QuipController:
+	# 九宫格快捷对话(同骗子酒馆):他人的气泡挂在出牌气泡再往上一层,自己的在出牌按钮行上方;没有酒客的人只记日志
+	var quip := QuipController.new(app, my_pid)
+	quip.name_of = name_of
+	quip.anchor_for = func(pid: int) -> Callable:
+		if not world.patrons.has(pid):
+			return Callable()
+		if world.is_poker_table():
+			return world.nameplate_anchor.bind(pid)
+		var patron: Patron = world.patrons[pid]
+		return func(): return patron.nameplate_anchor() if is_instance_valid(patron) else Vector3.ZERO
+	quip.show_mine = func(text: String) -> void: hud.my_bubble(text, UiTheme.INK, Quips.BUBBLE_SECONDS)
+	quip.log_line = hud.log_event
+	quip.bubble_offset = Vector2(0, BombCatDirector.BUBBLE_ABOVE_PLATE + QUIP_ABOVE_CLAIM)
+	return quip
 
 
 func _banter_panel_open() -> bool:

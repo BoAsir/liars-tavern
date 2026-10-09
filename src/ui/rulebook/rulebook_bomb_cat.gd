@@ -187,6 +187,7 @@ static func _controls() -> Dictionary:
 				{"action": "切换视角(越肩 / 第一人称)", "mouse": "", "keys": ["V"]},
 				RulebookContent.BANTER_KEYS[0],
 				RulebookContent.BANTER_KEYS[1],
+				RulebookContent.BANTER_KEYS[2],
 				{"action": "翻开说明书", "mouse": "「规则」按钮", "keys": [OS.get_keycode_string(RulebookContent.HOTKEY)]},
 				{"action": "说明书翻页", "mouse": "左侧目录", "keys": ["←", "→"]},
 				{"action": "取消选目标 / 离开牌桌", "mouse": "", "keys": ["Esc"]},

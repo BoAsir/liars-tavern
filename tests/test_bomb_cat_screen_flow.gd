@@ -294,6 +294,39 @@ func test_quick_chat_panel_takes_number_keys_at_the_table():
 	assert_eq(screen.selected_indices(), [1], "面板关着:2 选第 2 张牌")
 
 
+func test_quip_menu_works_at_the_bomb_cat_table():
+	# 九宫格快捷对话(T / 右上「对话」,同骗子酒馆):开着时数字键选一句、不选牌,Esc 只收起九宫格;
+	# 对手说的冒在他头顶,自己说的弹在出牌按钮行上方;都记一行日志
+	_open([1, 2], 9)
+	await wait_until(_idle, MAX_WAIT, "开局发牌")
+	assert_true(screen.quips is QuipController)
+	screen.hud.quip_pressed.emit()
+	assert_true(screen.quips.menu.is_open(), "右上「对话」按钮打开九宫格")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	get_viewport().push_input(esc)
+	assert_false(screen.quips.menu.is_open(), "Esc 收起九宫格(没有落到「离开牌桌」)")
+	var t := InputEventKey.new()
+	t.keycode = KEY_T
+	t.pressed = true
+	get_viewport().push_input(t)
+	assert_true(screen.quips.menu.is_open(), "T 打开九宫格")
+	var key := InputEventKey.new()
+	key.keycode = KEY_2
+	key.pressed = true
+	get_viewport().push_input(key)
+	assert_eq(screen.selected_indices(), [], "九宫格开着:2 不选牌")
+	assert_false(screen.quips.menu.is_open(), "选了一句就收起")
+	Net.quip_shown.emit(2, 1)
+	assert_not_null(app.labels.get_node_for(QuipController.KEY_PREFIX % 2), "对手头顶冒气泡")
+	Net.quip_shown.emit(ME, 0)
+	assert_eq(screen.hud._bubble_anchor.get_child_count(), 1, "自己说的弹在出牌按钮行上方")
+	var lines: Array = screen.hud._log_box.get_children().map(func(l: Label) -> String: return l.text)
+	assert_has(lines, "P2:" + Quips.LINES[1])
+	assert_has(lines, "P1:" + Quips.LINES[0])
+
+
 static func _reversed(items: Array) -> Array:
 	var out := items.duplicate()
 	out.reverse()
