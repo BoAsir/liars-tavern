@@ -12,7 +12,7 @@
 - 相关的其他分支:`feature/liars-tavern-mvp`(上游主线;`eadc745` 左轮改 5 膛 + 协议 v4 + 越肩镜头拉远 + 版本 0.6.0)、
   `feature/model-detail`(另一会话的 3D 模型重做,见规格 §9 的接口约定)。
 
-## 状态(2026-10-09:任务 0–10 全部完成,待发布 0.7.0)
+## 状态(2026-10-09:任务 0–10 全部完成,已发布 0.7.0)
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
@@ -51,9 +51,9 @@
 
 1. 当前状态(2026-10-09):任务 0–10 全部完成。900 个测试全过;`tools/lan_smoke.sh`、`MODE=holdem|short_deck tools/poker_smoke.sh` 都通过;
    浸泡 `-gtest=res://tests/soak_poker_simulation.gd` 通过。2026-10-09 已快进合入 main(`origin/main` = 5bfe433)。
-2. 剩下的是发布:用户决定**先等另一个会话把 3D 模型重做(`feature/model-detail`)做完、合进 main,再打包**。
-   合并时按规格 §9 的接口约定(`tavern.gd` 的 `set_table_radius` / `set_table_decor_visible` 以对方实现为准);
-   之后按 release-update 流程发 0.7.0(规格 §11;`build.json` 的 build = 那时 main 的 build + 1,base_build 不变)。
+2. **已发布 0.7.0**(2026-10-09,build 5,提交 ca27c5a,base_build 1,不用重装):更新源 `updates` 分支已是 build 5,
+   GitHub Release https://github.com/Murphycx94/liars-tavern/releases/tag/v0.7.0。3D 模型重做(`feature/model-detail`)在另一会话继续,
+   合并时按规格 §9 的接口约定(`tavern.gd` 的 `set_table_radius` / `set_table_decor_visible` 以对方实现为准),下一版 build 6。
 3. 真机截图命令见 README「开发」;有窗口的房主加 `--disable-vsync`,bot 晚 10 秒再起,否则窗口在后台时房主帧率太低、bot 8 秒握手超时。
 4. 已知债务:`network_manager.gd` 761 行(上限 800);德州牌面生成每帧最坏约 21 ms(一次性 0.27 秒,主要是读回图像与生成 mipmap 的 CPU 时间);
    被恶意对端刷「加入→断开」时结算里仍会多出若干「已离开」行(盈亏 0)。
