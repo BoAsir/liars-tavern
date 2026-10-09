@@ -5,6 +5,8 @@ extends Node3D
 # 等待厅与对局共用:都显示全部玩家(含自己);对局中镜头在自己角色身后越肩(第三人称)。
 
 
+# 左轮侧躺时握把(原点)离桌面的高度:枪靠最宽的转轮贴着桌布,不陷进桌面
+const REVOLVER_REST_LIFT := Revolver3D.LYING_HEIGHT
 # 左轮放在座位右前方、翻牌行之外(翻牌行在本机座位前 CardTable.REVEAL_Z 处)
 const REVOLVER_RADIUS := 0.78
 const REVOLVER_SIDE := 0.32
@@ -261,7 +263,7 @@ func revolver_rest(pid: int) -> Transform3D:
 	# 平放在座位右前方桌面上,枪管斜指桌心
 	var angle: float = seat_angles.get(pid, 0.0)
 	var dir := SeatLayout.direction(angle)
-	var pos := dir * REVOLVER_RADIUS + seat_right(pid) * REVOLVER_SIDE + Vector3(0, SeatLayout.TABLE_TOP + 0.013, 0)
+	var pos := dir * REVOLVER_RADIUS + seat_right(pid) * REVOLVER_SIDE + Vector3(0, SeatLayout.TABLE_TOP + REVOLVER_REST_LIFT, 0)
 	var aim := (-dir + seat_right(pid) * -0.35).normalized()
 	var basis := Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.BACK, PI / 2.0)
 	return Transform3D(basis, pos)
