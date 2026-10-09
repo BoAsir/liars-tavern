@@ -11,7 +11,7 @@ const V5_RPCS := [
 	"rpc_game_events", "rpc_game_started", "rpc_intent_challenge", "rpc_intent_play",
 	"rpc_intent_rejected", "rpc_join_accepted", "rpc_join_denied", "rpc_join_request",
 	"rpc_kicked", "rpc_lobby_ready", "rpc_lobby_species", "rpc_lobby_state", "rpc_look", "rpc_look_relay",
-	"rpc_poker_intent", "rpc_returned_to_lobby", "rpc_session_intent", "rpc_state_private", "rpc_state_public",
+	"rpc_poker_intent", "rpc_quip", "rpc_quip_shown", "rpc_returned_to_lobby", "rpc_session_intent", "rpc_state_private", "rpc_state_public",
 ]
 # v1 起的握手前缀(v4 的 eadc745 也是这 8 个排在最前)
 const HANDSHAKE_PREFIX := [

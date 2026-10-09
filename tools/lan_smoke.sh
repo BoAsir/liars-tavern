@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 无头联机冒烟:1 个房主 + 2 个 bot 客户端(一个走局域网发现,一个直连 127.0.0.1)跑完整局。
-# 通过条件:三个进程都以 0 退出、都收到 MATCH_OVER、都收到另外两人的视线与脖子同步、
+# 通过条件:三个进程都以 0 退出、都收到 MATCH_OVER、都收到另外两人的视线与脖子同步和快捷对话(QUIPS heard=2)、
 # 都收到三个人各丢的一个番茄和各说的一句快捷语(BANTER tomatoes=3 said=3)、日志里没有脚本错误;
 # 三人都要鳄鱼(--species=crocodile):三个日志最后一条 [debug] species 完全一致,房主是 crocodile,
 # 另外两人各不相同且不是 crocodile(先到先得,被占时房主给空着的)。
@@ -42,12 +42,12 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT"; do
 	errors=$(grep -c "SCRIPT ERROR\|^ERROR:" "$log" || true)
 	# 每个进程都应收到另外两人的视线与伸出的脖子(房主直收,客户端经房主转发)
 	if [ "$code" -ne 0 ] || ! grep -q "MATCH_OVER" "$log" || [ "$errors" -ne 0 ] || ! grep -q "GAZE peers=2 necks=2" "$log" \
-		|| ! grep -q "BANTER tomatoes=3 said=3" "$log"; then
+		|| ! grep -q "BANTER tomatoes=3 said=3" "$log" || ! grep -q "QUIPS heard=2" "$log"; then
 		echo "FAIL $name (exit=$code, script_errors=$errors) — 日志:$log"
 		grep -A3 "SCRIPT ERROR\|FAIL" "$log" | head -20
 		status=1
 	else
-		echo "ok   $name — $(grep -m1 MATCH_OVER "$log") · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log") · $(grep -m1 -o "BANTER tomatoes=[0-9]* said=[0-9]*" "$log")"
+		echo "ok   $name — $(grep -m1 MATCH_OVER "$log") · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log") · $(grep -m1 -o "BANTER tomatoes=[0-9]* said=[0-9]*" "$log") · $(grep -m1 -o "QUIPS heard=[0-9]*" "$log")"
 	fi
 done
 # 形象:三端最后一条形象表(开局时的座位表)必须完全一致

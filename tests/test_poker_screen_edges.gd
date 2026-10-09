@@ -109,3 +109,20 @@ func test_a_stale_fold_confirm_is_dropped_when_the_turn_moves_on():
 	await _feed([_bet(ME, PokerRules.CALL, 20), {"type": "turn", "pid": 2}], _pub(2))
 	await wait_process_frames(2)
 	assert_false(is_instance_valid(overlay), "换了行动者,旧的弃牌确认作废")
+
+
+func test_quips_pop_a_bubble_over_the_speaker_and_log_a_line():
+	_open_table([1, 2, 3], false)
+	await _hand1()
+	Net.quip_shown.emit(2, 1)
+	assert_not_null(app.labels.get_node_for(QuipController.KEY_PREFIX % 2), "乙头顶冒气泡")
+	Net.quip_shown.emit(ME, 6)
+	assert_true(is_instance_valid(screen.hud._my_bubble), "自己说的弹在左下自己那一栏上方")
+	await wait_process_frames(3)
+	assert_true(screen.hud._my_bubble.position.x >= PokerHud.MARGIN.x - 0.5, "长句不出左边画面")
+	Net.quip_shown.emit(9, 0)
+	assert_null(app.labels.get_node_for(QuipController.KEY_PREFIX % 9), "没有酒客的人只记日志")
+	var lines: Array = screen.hud.log_box.get_children().map(func(l: Label) -> String: return l.text)
+	assert_has(lines, "乙:打得不错")
+	assert_has(lines, "我:快点吧,我等到花儿都谢了")
+

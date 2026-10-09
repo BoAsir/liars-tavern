@@ -7,6 +7,7 @@ class_name Protocol
 #     (德州扑克单独随 0.7.0 发布,用的就是 v5)
 # v6:等待厅自选形象(新增 rpc_lobby_species 意图;lobby_state、game_started 每位玩家带 species 下标);
 #     丢番茄与快捷语(Banter 子节点的 RPC);炸弹猫(玩法 id bomb_cat,新增字典意图 rpc_session_intent)。随 0.8.0 发布
+# v6(上游):快捷对话(新增 rpc_quip / rpc_quip_shown,排序在后的 RPC 编号跟着变,不能和 v5 同桌)
 const VERSION := 6
 
 # 发现端口段:同机多开时每个实例各绑定其中一个空闲端口,房主对每个端口都广播一份

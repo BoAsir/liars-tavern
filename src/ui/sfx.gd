@@ -19,6 +19,7 @@ const VOLUMES := {
 	"fuse": -9.0, "boom": 0.0, "snip": -4.0, "nope_slap": -3.0, "riffle": -9.0,
 	# 结算庆祝:礼炮「砰」+ 纸屑沙沙 / 开场的小号「哒哒哒—哒!」/ 一阵掌声
 	"cannon_pop": -5.0, "fanfare": -8.0, "applause": -15.0,
+	"quip": -11.0,                                      # 快捷对话:轻快的两声「啵」
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -185,6 +186,8 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_fanfare())
 		"applause":
 			return _wav(_applause(2.8))
+		"quip":
+			return _wav(_mix([_thump(520.0, 0.05, 0.4), _offset(_bell(1175.0, 0.3), 0.04), _offset(_bell(1568.0, 0.25), 0.1)]))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)

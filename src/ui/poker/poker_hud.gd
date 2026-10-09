@@ -8,6 +8,7 @@ extends Control
 
 
 signal rules_pressed
+signal quip_pressed
 signal end_pressed
 signal rebuy_pressed
 signal spectate_pressed
@@ -34,6 +35,7 @@ const ANNOUNCE_Y := -90.0
 const ENDING_TEXT := "本手结束后散局"
 const END_TEXT := "散局"
 const WAITING_TEXT := "等待开局"
+const MY_BUBBLE_GAP := 4.0           # 自己气泡的小三角尖与左下栏之间的留白
 
 const BOTTOM_NONE := "none"
 const BOTTOM_BET := "bet"
@@ -70,6 +72,7 @@ var _announce_box: VBoxContainer
 var _announce: Label
 var _announce_sub: Label
 var _announce_tween: Tween = null
+var _my_bubble: SpeechBubble = null
 
 
 # —— 纯逻辑 ——
@@ -152,6 +155,11 @@ func _build_top_right() -> void:
 	end_button.visible = false
 	end_button.pressed.connect(func(): end_pressed.emit())
 	row.add_child(end_button)
+	var quip_button := UiTheme.button("对话 · %s" % OS.get_keycode_string(QuipController.TOGGLE_KEY))
+	quip_button.add_theme_font_size_override("font_size", 15)
+	quip_button.focus_mode = Control.FOCUS_NONE
+	quip_button.pressed.connect(func(): quip_pressed.emit())
+	row.add_child(quip_button)
 	rules_button = UiTheme.button("规则 · %s" % OS.get_keycode_string(RulebookContent.HOTKEY))
 	rules_button.add_theme_font_size_override("font_size", 15)
 	rules_button.focus_mode = Control.FOCUS_NONE
@@ -319,6 +327,22 @@ func set_my_hole(cards: Variant) -> void:
 
 func set_my_best(detail: String) -> void:
 	_best_label.text = detail
+
+
+func my_bubble(text: String, duration := Quips.BUBBLE_SECONDS) -> void:
+	# 自己说的快捷对话:越肩镜头下自己头顶在画面外,弹在左下自己那一栏的正上方;新的一句顶掉旧的
+	if is_instance_valid(_my_bubble):
+		_my_bubble.queue_free()
+	_my_bubble = SpeechBubble.new(text, UiTheme.INK, duration)
+	add_child(_my_bubble)
+	var bubble := _my_bubble
+	var place := func() -> void:
+		if is_instance_valid(bubble):
+			# 长句比左下栏宽:居中后左边出画,所以贴住左边距
+			bubble.position = Vector2(maxf(MARGIN.x, my_panel.position.x + (my_panel.size.x - bubble.size.x) / 2.0),
+				my_panel.position.y - bubble.size.y - SpeechBubble.TAIL_LENGTH - MY_BUBBLE_GAP)
+	_my_bubble.resized.connect(place)
+	place.call()
 
 
 func handle_cancel() -> bool:

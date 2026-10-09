@@ -17,6 +17,7 @@ signal game_events(events: Array)
 signal intent_rejected(code: String)
 signal returned_to_lobby
 signal gaze_updated(pid: int, point: Vector3, neck: Vector3, active: bool)   # 他人视线落点(发送者座位坐标系)与脖子偏移
+signal quip_shown(pid: int, index: int)   # 有人说了一句快捷对话(含自己;房主转发之后才到)
 
 const HOST_ID := LobbyModel.HOST_ID
 const DISCONNECT_GRACE := 1.0
@@ -39,6 +40,7 @@ var _session_active := false
 var _joining := false
 var _awaiting_game := false        # 仅客户端:对局中入座已获准,等房主发来牌局信息(rpc_game_started)
 var _lobby: LobbyModel = null      # 仅房主
+var _quip_gate := QuipGate.new()   # 仅房主:快捷对话限速
 var _session: GameSession = null   # 仅房主:本局的玩法逻辑
 var _room_id := ""
 var _room_name := ""
@@ -278,6 +280,7 @@ func _on_peer_disconnected(id: int) -> void:
 		if not events.is_empty():
 			_after_action(events)
 	_species_asked_at.erase(id)
+	_quip_gate.forget(id)
 	if _lobby.remove(id):
 		_broadcast_lobby()
 
@@ -865,6 +868,37 @@ func _relay_gaze(from_pid: int, point: Vector3, neck: Vector3, active: bool) -> 
 func rpc_look_relay(pid: int, point: Vector3, neck: Vector3, active: bool) -> void:
 	if in_game and GazeSync.is_valid(point, neck):
 		gaze_updated.emit(pid, point, neck, active)
+
+
+# —— 快捷对话:客户端 → 房主校验(对局中的成员、编号合法、限速)→ 发给所有成员(含说话人)。参数不加类型,函数体里校验 ——
+
+func send_quip(index: int) -> void:
+	if not in_game or multiplayer.multiplayer_peer == null:
+		return
+	if is_host:
+		_handle_quip(HOST_ID, index)
+	else:
+		_send_to(HOST_ID, "rpc_quip", [index])
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func rpc_quip(index) -> void:
+	_handle_quip(multiplayer.get_remote_sender_id(), index)
+
+
+func _handle_quip(pid: int, index: Variant) -> void:
+	if not is_host or not in_game or _lobby == null or not _lobby.has(pid) or not Quips.is_valid(index):
+		return
+	if not _quip_gate.accept(pid, Time.get_ticks_msec()):
+		return
+	quip_shown.emit(pid, index)
+	_send_to_members("rpc_quip_shown", [pid, index])
+
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_quip_shown(pid, index) -> void:
+	if in_game and pid is int and Quips.is_valid(index):
+		quip_shown.emit(pid, index)
 
 
 # —— 回合限时(仅房主):超时代打由会话决定(骗子酒馆出手牌第一张;德州能过牌就过牌,否则弃牌;
