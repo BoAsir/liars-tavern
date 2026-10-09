@@ -234,8 +234,13 @@ crocodile,只覆盖本次运行、不写设置)、`--autohost[=人数]`、`--mod
 需要 [导出模板](https://godotengine.org/download)(与引擎版本一致) 和更新签名私钥
 (`~/.config/liarstavern/update_signing_key.pem`,不在仓库里;第一次用 `tools/make_update_key.gd` 生成，务必备份)。
 
+**自动发布**:`main` 上 `build.json` 的 `version` 一变 (远端还没有 tag `v<version>`),GitHub Actions
+(`.github/workflows/release.yml`) 就依次跑测试、导出签名、推 `updates` 分支、建 GitHub Release。
+要先在仓库 secret `LIARS_UPDATE_SIGNING_KEY` 里放签名私钥全文;给玩家看的一句更新说明写在 `build.json` 的 `notes` 里,
+Release 正文可选写在 `docs/releases/v<version>.md`。下面是本机手动发布的步骤 (CI 用不了时兜底):
+
 1. 把 `build.json` 的 `build` 加一、改好 `version`;改过 `project.godot` 时把 `base_build` 也设成同一个数 (必须重装)。
-2. 提交并推送到 `main`,然后 `tools/release.sh "这次更新了什么"`:在当前提交的临时干净副本里导出两个平台的安装包、
+2. 提交并推送到 `main`(会触发自动发布;要手动发就先停用工作流),然后 `tools/release.sh "这次更新了什么"`:在当前提交的临时干净副本里导出两个平台的安装包、
    签好更新包，产物放在主仓库的 `build/`(工作区里没提交的改动不会进包;全部成功才替换旧产物)。
 3. `tools/publish_update.sh`:核对无误后把更新包推到 `updates` 分支，已安装的游戏约 5 分钟后启动就能更新。推出去撤不回。
 4. `tools/publish_release.sh [发布说明.md]`:把安装包发成 GitHub Release(需要 `gh auth login`),给新玩家下载;
