@@ -380,6 +380,8 @@ func _present_my_fan() -> void:
 func _new_card(kind: int, xform: Transform3D) -> Card3D:
 	var card := Card3D.new()
 	card.set_kind(kind)
+	if kind == CardFaces.BACK:
+		card.show_poker_back()   # 德州有自己的牌背
 	add_child(card)
 	card.transform = xform
 	return card

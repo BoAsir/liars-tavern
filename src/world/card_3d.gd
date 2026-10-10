@@ -14,6 +14,7 @@ const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 
 static var _shared: ShaderMaterial = null   # 骗子酒馆的 5 种牌共用
 static var _poker := {}                     # 德州牌:牌值 -> 材质(正面是单张贴图)
+static var _poker_back: ShaderMaterial = null   # 德州的背面朝上的牌:两面都是德州牌背
 
 var kind := CardFaces.BACK     # 正面牌型;BACK 表示未知(他人的牌)
 var _mesh: MeshInstance3D
@@ -27,6 +28,7 @@ static func material_for(face_kind: int) -> ShaderMaterial:
 			var mat := _new_material()
 			mat.set_shader_parameter("single_face", true)
 			mat.set_shader_parameter("card_texture", CardFaces.texture(face_kind))
+			mat.set_shader_parameter("back_texture", PokerFaces.back_texture())
 			_poker[face_kind] = mat
 		return _poker[face_kind]
 	if _shared == null:
@@ -42,18 +44,33 @@ static func _new_material() -> ShaderMaterial:
 	return mat
 
 
+static func poker_back_material() -> ShaderMaterial:
+	if _poker_back == null:
+		_poker_back = _new_material()
+		_poker_back.set_shader_parameter("single_face", true)
+		_poker_back.set_shader_parameter("card_texture", PokerFaces.back_texture())
+		_poker_back.set_shader_parameter("back_texture", PokerFaces.back_texture())
+	return _poker_back
+
+
 static func clear_materials() -> void:
 	_shared = null
 	_poker = {}
+	_poker_back = null
 
 
 static func refresh_materials() -> void:
 	# 牌面纹理异步生成完毕后重绑数组纹理(与德州的单张牌面)
-	for mat: ShaderMaterial in ([_shared] if _shared != null else []) + _poker.values():
+	if _poker_back != null:
+		_poker_back.set_shader_parameter("card_texture", PokerFaces.back_texture())
+		_poker_back.set_shader_parameter("back_texture", PokerFaces.back_texture())
+	for mat: ShaderMaterial in ([_shared] if _shared != null else []) + ([_poker_back] if _poker_back != null else []) \
+			+ _poker.values():
 		mat.set_shader_parameter("faces", CardFaces.face_array())
 		mat.set_shader_parameter("foil", CardFaces.foil_array())
 	for face_kind in _poker:
 		_poker[face_kind].set_shader_parameter("card_texture", CardFaces.texture(face_kind))
+		_poker[face_kind].set_shader_parameter("back_texture", PokerFaces.back_texture())
 
 
 static func slab_mesh() -> ArrayMesh:
@@ -127,6 +144,12 @@ func set_kind(face_kind: int) -> void:
 	kind = face_kind
 	_mesh.material_override = material_for(face_kind)
 	_mesh.set_instance_shader_parameter("face", CardFaces.layer(face_kind))
+
+
+func show_poker_back() -> void:
+	# 德州里背面朝上的牌(别人的底牌、弃牌堆):牌型仍记作 BACK,外观换成德州牌背
+	kind = CardFaces.BACK
+	_mesh.material_override = poker_back_material()
 
 
 func set_both_faces(face_kind: int) -> void:

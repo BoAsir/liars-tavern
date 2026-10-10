@@ -1,6 +1,6 @@
 // 卡牌 v2:所有骗子酒馆的牌共用一份网格(圆角薄片,带厚度)与这一份材质,牌型差异全在实例参数里。
 // 牌面与牌背在 faces 数组纹理里(层序见 CardFaces.LAYERS,0 = 牌背);烫金遮罩在 foil 里,驱动金属度与高光;
-// 侧边是奶油纸芯色(哑光,不再是烫金),正反面贴着牌边有一圈 1 mm 的软压暗:牌看起来有厚度,不像一张平纸。德州牌(52 张)每张一份材质:single_face 时正面取 card_texture,背面仍取牌背层。
+// 德州牌背面取 back_texture(德州自己的牌背)。侧边是奶油纸芯色(哑光,不再是烫金),正反面贴着牌边有一圈 1 mm 的软压暗:牌看起来有厚度,不像一张平纸。德州牌(52 张)每张一份材质:single_face 时正面取 card_texture,背面取 back_texture。
 // 实例参数:face(正面层)、both_faces(桌心立牌两面都显示正面)、glow / glow_color(高亮光晕)。
 shader_type spatial;
 render_mode diffuse_burley, cull_back;
@@ -8,6 +8,7 @@ render_mode diffuse_burley, cull_back;
 uniform sampler2DArray faces : source_color, filter_linear_mipmap_anisotropic;
 uniform sampler2DArray foil : hint_default_black, filter_linear_mipmap;
 uniform sampler2D card_texture : source_color, filter_linear_mipmap_anisotropic;
+uniform sampler2D back_texture : source_color, filter_linear_mipmap_anisotropic;
 uniform bool single_face = false;
 uniform float self_illum = 0.03;
 // 牌面纸色压暗、哑光:平放在吊灯光圈下时不至于过曝成一片白,点数仍清楚
@@ -44,6 +45,9 @@ void fragment() {
 			tex = texture(faces, vec3(UV, float(face))).rgb;
 			gold = texture(foil, vec3(UV, float(face))).r;
 		}
+	} else if (single_face) {
+		tex = texture(back_texture, UV).rgb;
+		gold = 0.0;
 	} else {
 		tex = texture(faces, vec3(UV, 0.0)).rgb;
 		gold = texture(foil, vec3(UV, 0.0)).r;
