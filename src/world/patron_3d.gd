@@ -24,7 +24,9 @@ const NECK_DAMPING := 15.5
 const NECK_MIN_THICKNESS := 0.55   # 拉长时脖子变细,最细到原粗细的这个比例
 const NECK_MAX_STEP := 1.0 / 60.0  # 弹簧积分的最大步长(秒):掉帧时分步积分,不会弹飞
 # 探头的软碰撞(穿模修复 2026-10-10):有牌桌(guard)时,头每个积分小步都被推出别人的头与身体、立牌等「挡」形状,
-# 从牌扇、烛台等「抬」形状上面拱过去(见 ClipGuard);同步的仍是原始探头偏移,各端按自己的场景各自推、各自抬
+# 从牌扇、烛台等「抬」形状上面拱过去(见 ClipGuard);同步的仍是原始探头偏移,各端按自己的场景各自推、各自抬。
+# 截短后的目标限速 NECK_GOAL_SPEED 米/秒(按 WASD 探头是 0.9 米/秒,照常跟手;绕过障碍物时目标跳开的那一下变成滑过去)
+const NECK_GOAL_SPEED := 2.0
 const HIP := Vector3(0, 0.5, 0.12)
 # 前倾角(弧度,绕髋部):坐着时趴向牌桌,单节手臂才够得着桌面;轮到自己时再多倾一点
 const SEATED_LEAN := 0.18
@@ -176,6 +178,7 @@ var guard: ClipGuard = null        # 牌桌的穿模防护(TableWorld 落座时�
 var guard_id := -1                 # 在牌桌上的 pid:查询形状时跳过自己的头和身体
 var _blockers: Array = []          # 这一帧要躲的「挡」形状(_guard_target 取)
 var _guard_fwd := Vector2(0, -1)   # 座位朝向(牌桌坐标的水平方向)
+var _neck_goal := Vector3.ZERO     # 软碰撞时弹簧追的目标(截短后的探头目标,限速 NECK_GOAL_SPEED 滑过去)
 static var _metrics := {}          # 物种 -> 头的解析尺寸(head_metrics)
 
 
@@ -394,7 +397,12 @@ func _update_neck(delta: float) -> void:
 	var guarded := guard != null and alive and is_inside_tree() \
 		and (target.length_squared() > 0.000001 or _neck_offset.length_squared() > 0.000001)
 	if guarded:
-		target = _guard_target(target)
+		# 截短后的目标在绕过障碍物的一瞬可能一下跳开很远:目标点本身限速滑过去,头不会猛甩
+		var want := _guard_target(target)
+		_neck_goal += (want - _neck_goal).limit_length(NECK_GOAL_SPEED * delta)
+		target = _neck_goal
+	else:
+		_neck_goal = target
 	var left := delta
 	while left > 0.0:
 		var step := minf(left, NECK_MAX_STEP)

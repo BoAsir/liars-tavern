@@ -12,7 +12,8 @@ extends RefCounted
 # - 顶:吊灯罩口。抬头不顶到灯(在灯下按罩口高度封顶)
 # 网络:同步的仍是玩家按 WASD 的原始探头偏移(GazeSync 不变),每台机器用自己场景里的形状各自推、各自抬;
 # 形状只取决于座位、牌扇与道具的摆法和各人此刻的头位,同样的输入各端结果一致(自己越肩举牌的位置只在本机,差别只在这一处)。
-# 给新玩法(吹牛骰子、斗地主……)的接口:world.clip_guard.set_prop(id, shape) 登记桌上的道具(shape 用 circle / rect / box_of 造),
+# 给新玩法(吹牛骰子、斗地主……)的接口:world.clip_guard.set_prop(id, shape) 登记桌上的道具(shape 用 circle / rect / box_of 造,
+# 会动的用 follow),
 # remove_prop(id) 收走;节点不可见或已释放时自动忽略。酒客的牌扇挂在 Patron.fan 下就会自动参与,不用登记。
 
 enum { BLOCK, LIFT }
@@ -27,8 +28,8 @@ const LAMP_Y := Tavern.ROOM_HEIGHT + LampProp.MOUTH_Y - LampProp.BEAD   # 吊灯
 const LAMP_RADIUS := LampProp.MOUTH_RADIUS + LampProp.BEAD
 const CEILING_MARGIN := 0.04    # 帽顶离罩口至少这么多
 # 别人的身体连椅子:座位坐标里的竖直长方体(躯干横向半宽 ≈0.25 加手臂根、椅背柱在 z 0.34),顶面取椅背顶(ChairBuilder.TOP)
-const BODY_CENTER := Vector3(0, 0, 0.07)
-const BODY_HALF := Vector2(0.3, 0.33)
+const BODY_CENTER := Vector3(0, 0, 0.04)
+const BODY_HALF := Vector2(0.32, 0.37)
 const BODY_TOP := ChairBuilder.TOP
 const STAND_RADIUS := 0.075     # 目标牌立牌:转着的牌半宽 0.06 + 夹子
 const FAN_PAD := 0.01           # 牌扇的占地比牌角外扩这么多
@@ -58,6 +59,13 @@ func remove_prop(id: StringName) -> void:
 
 func has_prop(id: StringName) -> bool:
 	return _props.has(id)
+
+
+static func follow(node: Node3D, radius: float, points: PackedVector3Array, mode := LIFT) -> Dictionary:
+	# 跟着节点走的竖直圆柱:每帧按节点此刻的位置取水平中心,顶面取 points(节点局部)变换后的最高点。
+	# 会动的道具用它(吹牛骰子的骰盅:扣着、捧起来摇、翻开都跟着走);节点释放或隐藏后自动忽略
+	return {"kind": "circle", "c": Vector2.ZERO, "r": radius, "top": 0.0, "mode": mode, "node": node, "owner": -1,
+		"follow": points}
 
 
 static func circle(center: Vector3, radius: float, top: float, mode := BLOCK, node: Node3D = null) -> Dictionary:
@@ -128,6 +136,8 @@ func shapes() -> Array:
 		var node = shape.get("node")
 		if node != null and (not is_instance_valid(node) or not node.is_visible_in_tree()):
 			continue
+		if shape.has("follow"):
+			shape = _followed(shape)
 		_shapes.append(shape)
 	var patrons: Dictionary = world.get("patrons") if world.get("patrons") != null else {}
 	for pid in patrons:
@@ -156,6 +166,18 @@ func shapes() -> Array:
 				fan["fan"] = true
 				_shapes.append(fan)
 	return _shapes
+
+
+func _followed(shape: Dictionary) -> Dictionary:
+	var node: Node3D = shape["node"]
+	var xf := world.global_transform.affine_inverse() * node.global_transform
+	var top := -INF
+	for p in shape["follow"]:
+		top = maxf(top, (xf * p).y)
+	var out := shape.duplicate()
+	out["c"] = Vector2(xf.origin.x, xf.origin.z)
+	out["top"] = top
+	return out
 
 
 # —— 解析几何(纯函数) ——

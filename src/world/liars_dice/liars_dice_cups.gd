@@ -113,6 +113,9 @@ func setup(order: Array, species: Dictionary) -> void:
 		mesh.name = "Mesh"
 		holder.transform = rest_of(pid)
 		cups[pid] = holder
+		# 穿模防护:探头的头从骰盅上面拱过去(扣着、捧着摇、翻开都跟着盅走;盅收走后自动忽略)
+		world.clip_guard.set_prop(StringName("liars_dice_cup_%d" % pid), ClipGuard.follow(holder, LiarsDiceLayout.CUP_RADIUS,
+			PackedVector3Array([Vector3.ZERO, Vector3(0, LiarsDiceLayout.CUP_HEIGHT, 0)])))
 		cup_state[pid] = STATE_DOWN
 		dice[pid] = []
 		values[pid] = []
