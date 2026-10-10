@@ -44,6 +44,7 @@ func test_untrusted_intent_structures_are_rejected():
 	]
 	for case in cases:
 		assert_eq(DouDizhuSession.check_intent(case[0]), case[1], str(case[0]))
+		assert_eq(session.validate_intent(case[0]), case[1], "NetworkManager 通用入口走 validate_intent")
 	for ok in [{"kind": "bid", "score": 0}, {"kind": "bid", "score": 3}, {"kind": "play", "cards": [0, 1]}, {"kind": "pass"},
 			{"kind": "trustee", "on": false}]:
 		assert_eq(DouDizhuSession.check_intent(ok), "", str(ok))

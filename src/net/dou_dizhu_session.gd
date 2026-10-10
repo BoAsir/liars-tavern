@@ -61,6 +61,11 @@ static func check_intent(intent: Variant) -> String:
 	return ""
 
 
+func validate_intent(intent: Variant) -> String:
+	# rpc_session_intent 的结构校验(NetworkManager 通用入口调用)
+	return check_intent(intent)
+
+
 func handle_intent(pid: int, intent: Dictionary) -> Dictionary:
 	if _state == null:
 		return rejected(DdzState.ERR_SESSION_OVER)
