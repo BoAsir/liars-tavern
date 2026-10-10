@@ -174,17 +174,45 @@ func test_poker_start_schedules_the_first_turn_after_the_intro():
 	_assert_live()
 
 
-func test_hand_gap_is_scheduled_after_a_hand_and_opens_the_next_one():
+func _confirm(pids: Array) -> void:
+	# 这些人点「开始下一手」
+	for pid in pids:
+		_act(pid, R.NEXT)
+		_assert_live()
+
+
+func test_next_hand_waits_for_everyone_to_press_start_or_thirty_seconds():
 	_start()
 	_fold_out()
 	assert_true(net._turn_timer.is_stopped())
-	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "演完上一手再停顿 HAND_GAP")
+	var deadline: float = net._hand_timer.time_left
+	assert_almost_eq(deadline, net._anim_left + PokerPacing.NEXT_HAND_TIMEOUT, EPS, "演完后最多等 15 秒")
 	assert_eq(net.last_public["phase"], "idle")
+	_confirm([HOST, GUESTS[0]])
+	assert_almost_eq(net._hand_timer.time_left, deadline, EPS, "还有人没点:照旧等")
+	assert_true(_events.back()["type"] == "next_ready")
+	_confirm([GUESTS[1]])
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "都点了:演完稍停就开")
 	var started := _next_hand()
 	assert_eq(started["hand"], 2)
 	assert_eq(net.last_public["hand"], 2)
 	assert_true(net._hand_timer.is_stopped())
 	assert_almost_eq(net._turn_timer.time_left, net._anim_left + Protocol.TURN_TIMEOUT, EPS)
+
+
+func test_nobody_pressing_start_still_deals_after_the_timeout():
+	_start()
+	_fold_out()
+	var started := _next_hand()
+	assert_eq(started["hand"], 2, "15 秒到了自动开(等于替大家点了开始)")
+	assert_eq(_sorted(started["dealt"]), _sorted([HOST] + GUESTS))
+
+
+func test_start_is_rejected_during_a_hand():
+	_start()
+	net.sent = []
+	_act(GUESTS[0], R.NEXT)
+	assert_eq(_methods_sent_to(GUESTS[0]), ["rpc_intent_rejected"])
 
 
 func test_hand_timer_does_nothing_without_a_table_to_deal():
@@ -198,16 +226,17 @@ func test_hand_timer_does_nothing_without_a_table_to_deal():
 
 # —— 输光的选择时间 ——
 
-func test_bust_leaves_decision_time_and_a_rebuy_brings_the_next_hand_forward():
+func test_a_bust_player_rebuying_counts_as_pressing_start():
 	_start()
 	_fold_out()
 	_bust_host()
 	var before: float = net._hand_timer.time_left
-	assert_almost_eq(before, net._anim_left + PokerPacing.BUST_DECISION, EPS, "有人输光:下一手晚一点开")
+	assert_almost_eq(before, net._anim_left + PokerPacing.NEXT_HAND_TIMEOUT, EPS)
+	_confirm(GUESTS)
+	assert_almost_eq(net._hand_timer.time_left, before, EPS, "还在等输光的人选")
 	net.request_rebuy()
 	assert_eq(_status(HOST), R.STATUS_WAITING)
-	assert_lte(net._hand_timer.time_left, before, "做了选择只会提前,不会推迟")
-	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS)
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "再领就是开始")
 	assert_has(_next_hand()["dealt"], HOST, "再领后下一手发牌")
 
 
@@ -220,41 +249,39 @@ func test_undecided_bust_does_not_block_the_next_hand():
 	assert_eq(_status(HOST), R.STATUS_BUSTED, "没选就不发牌,牌局照常")
 
 
-func test_last_undecided_player_choosing_to_spectate_restores_the_plain_gap():
+func test_choosing_to_spectate_means_nobody_waits_for_you():
 	_start()
 	_fold_out()
 	_bust_host()
+	_confirm(GUESTS)
 	var before: float = net._hand_timer.time_left
 	net.request_spectate()
 	assert_eq(_status(HOST), R.STATUS_SPECTATING)
-	assert_lte(net._hand_timer.time_left, before)
+	assert_lte(net._hand_timer.time_left, before, "只会提前")
 	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS)
 	assert_eq(_sorted(_next_hand()["dealt"]), GUESTS)
 
 
-func test_rebuy_three_seconds_into_the_decision_time_keeps_the_shorter_remaining_gap():
-	# 规格 §8:三人局一人输光后 3 秒再领 → 他在下一手的 dealt 里,下一手按演完后 HAND_GAP 开
+func test_pressing_start_late_keeps_the_shorter_remaining_wait():
 	_start()
 	_fold_out()
-	_bust_host()
 	var before: float = net._hand_timer.time_left
 	net._process(3.0)
-	assert_almost_eq(net._anim_left, before - PokerPacing.BUST_DECISION - 3.0, EPS, "演出预算已过 3 秒")
-	net.request_rebuy()
-	assert_lt(net._hand_timer.time_left, before - 3.0, "剩下的间隔比原计划短")
+	_confirm([HOST] + GUESTS)
+	assert_lt(net._hand_timer.time_left, before - 3.0, "剩下的等待比原计划短")
 	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS)
-	assert_has(_next_hand()["dealt"], HOST)
 
 
-func test_busted_player_disconnecting_during_the_decision_gap_brings_the_hand_forward():
+func test_a_player_leaving_while_others_wait_brings_the_hand_forward():
 	_start()
 	_fold_out()
 	_bust(10)
-	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.BUST_DECISION, EPS)
+	_confirm([HOST, 11])
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.NEXT_HAND_TIMEOUT, EPS)
 	net._on_peer_disconnected(10)
 	assert_false(net._lobby.has(10))
 	assert_eq(_events.back()["type"], "player_left")
-	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "输光者走了就不用再等他选")
+	assert_almost_eq(net._hand_timer.time_left, net._anim_left + PokerPacing.HAND_GAP, EPS, "没确认的人走了就不用再等")
 	_assert_live()
 	assert_eq(_sorted(_next_hand()["dealt"]), [HOST, 11])
 
@@ -475,7 +502,7 @@ func test_ending_mid_hand_finishes_the_hand_first():
 	_assert_live()
 	net.sent = []
 	_fold_out()
-	assert_eq(H.types(_events_sent_to(10)).slice(-2), ["hand_over", "session_over"])
+	assert_eq(H.types(_events_sent_to(10)).slice(-3), ["hand_over", "hand_record", "session_over"])
 	assert_true(net._hand_timer.is_stopped())
 	assert_true(net._turn_timer.is_stopped())
 

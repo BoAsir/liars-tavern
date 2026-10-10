@@ -504,10 +504,18 @@ func first_person_rest_view(pid: int) -> Transform3D:
 
 
 func first_person_view(pid: int) -> Transform3D:
-	# 第一人称的实时机位:朝向同静止机位,位置跟着自己的眼睛(前倾、WASD 探头都会挪);不跟转头(光标看哪儿镜头不跟着转)
+	# 第一人称的实时机位:位置跟着自己的眼睛(前倾、WASD 探头都会挪),朝向跟着转头(像 CS:头转到哪镜头跟到哪,
+	# 2026-10-09 用户要求)。转头角度取 Patron.view_angles(不含待机晃动),加在静止机位的水平 / 俯仰角上,不横滚
 	var rest := first_person_rest_view(pid)
-	if patrons.has(pid):
-		rest.origin = patrons[pid].eye_position()
+	if not patrons.has(pid):
+		return rest
+	var me: Patron = patrons[pid]
+	rest.origin = me.eye_position()
+	var turn: Vector2 = me.view_angles()
+	var forward := -rest.basis.z
+	var rest_yaw := atan2(-forward.x, -forward.z)
+	var rest_pitch := asin(clampf(forward.y, -1.0, 1.0))
+	rest.basis = Basis.from_euler(Vector3(rest_pitch + turn.y, rest_yaw + turn.x, 0.0))
 	return rest
 
 

@@ -203,7 +203,7 @@ func test_everyone_folds_to_the_big_blind_who_gets_the_extra_ten_back_without_sh
 	start_with_button(t, 1)
 	play_as(t, 1, R.FOLD)
 	var events := play_as(t, 2, R.FOLD)
-	assert_eq(H.types(events), ["action", "bets_collected", "pot_won", "hand_over"])
+	assert_eq(H.types(events), ["action", "bets_collected", "pot_won", "hand_over", "hand_record"])
 	assert_eq(H.find(events, "bets_collected")["refund"], {"pid": 3, "amount": 10})
 	assert_eq(H.find(events, "pot_won"), {
 		"type": "pot_won", "index": 0, "amount": 20, "winners": [3], "shares": {3: 20},

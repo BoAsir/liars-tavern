@@ -70,7 +70,7 @@ func test_a_whole_session_from_deal_to_settlement():
 		_pub(null, {"street": PokerRules.SHOWDOWN, "board": board, "current_bet": 0}), {"hand": 1, "hole": hole, "best": {}})
 	assert_eq(screen.my_status(), PokerRules.STATUS_BUSTED)
 	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_BUST, "输光提示")
-	assert_gt(screen._bust_left, 0.0, "带倒计时")
+	assert_gt(screen._next_left, 0.0, "带倒计时")
 	assert_eq(screen.chips.stack_amount(3), 4010)
 	assert_eq(screen.chips.pot_amounts(), [])
 	assert_eq(screen.cards.shown_cards(3).size(), 2, "亮出的牌摊在座位前")
@@ -92,9 +92,10 @@ func test_a_whole_session_from_deal_to_settlement():
 	statuses[9] = PokerRules.STATUS_WAITING
 	bets[9] = 0
 	shown[9] = []
+	confirmed[ME] = true
 	await _feed([{"type": "player_joined", "pid": 9, "name": "迟到"}, {"type": "rebuy", "pid": ME, "amount": 2000, "buyins": 2, "stack": 2000}],
 		_pub(null, {"street": PokerRules.SHOWDOWN, "board": board, "current_bet": 0}))
-	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_WAITING)
+	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NEXT_WAIT, "两手之间再领就算点了开始,等别人")
 	assert_true(app.world.patrons[ME].visible)
 	assert_eq(screen.chips.stack_amount(ME), 2000)
 	assert_false(_live_patrons().has(9), "新人下一手才登场")

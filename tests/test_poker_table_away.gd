@@ -27,7 +27,7 @@ func _send_four_away(t: PokerTable) -> Array:
 func test_two_timeouts_in_a_row_send_the_player_away_at_the_end_of_the_hand():
 	var t := make_table([1, 2, 3, 4])
 	var events := _send_four_away(t)
-	assert_eq(H.types(events).slice(-2), ["hand_over", "away"])
+	assert_eq(H.types(events).slice(-3), ["hand_over", "hand_record", "away"])
 	assert_eq(events.back(), {"type": "away", "pid": 4})
 	assert_eq([t.player(4)["status"], t.player(4)["stack"]], [R.STATUS_AWAY, 1980], "保留筹码:只下过一次大盲")
 	assert_eq(t.seats_with_patrons(), [1, 2, 3, 4], "离座的人留在座位上")
@@ -115,5 +115,5 @@ func test_no_one_is_sent_away_when_the_session_is_ending():
 	play_as(t, 2, R.RAISE, 60)
 	play_as(t, 3, R.FOLD)
 	var events := _timeout_as(t, 1)
-	assert_eq(H.types(events).slice(-2), ["hand_over", "session_over"])
+	assert_eq(H.types(events).slice(-3), ["hand_over", "hand_record", "session_over"])
 	assert_eq(t.results().size(), 3)

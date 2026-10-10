@@ -131,7 +131,7 @@ func test_sole_top_bettor_leaving_when_the_callers_are_all_in_gets_the_uncalled_
 	play_as(t, 3, R.RAISE, 500)
 	var events := t.remove_player(3)
 	assert_eq(H.types(events), [
-		"player_left", "bets_collected", "reveal", "street", "street", "pot_won", "hand_over",
+		"player_left", "bets_collected", "reveal", "street", "street", "pot_won", "hand_over", "hand_record",
 	], "1 不欠跟注、对手都全下:直接发完")
 	assert_eq(events[0]["folded"], true)
 	assert_eq(H.find(events, "bets_collected")["refund"], {"pid": 3, "amount": 300}, "离开的人照样退回没人跟的部分")
@@ -181,7 +181,7 @@ func test_request_end_during_a_hand_finishes_the_hand_first():
 	assert_eq(t.request_end(), [], "重复请求没有事件")
 	assert_eq(t.phase(), PokerTable.Phase.BETTING)
 	var events := fold_out(t)
-	assert_eq(H.types(events).slice(-2), ["hand_over", "session_over"])
+	assert_eq(H.types(events).slice(-3), ["hand_over", "hand_record", "session_over"])
 	assert_eq(t.phase(), PokerTable.Phase.OVER)
 	assert_false(t.can_start_hand())
 

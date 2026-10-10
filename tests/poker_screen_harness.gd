@@ -53,6 +53,7 @@ var stacks := {}      # pid -> 筹码(假视图按它生成)
 var statuses := {}    # pid -> status
 var bets := {}
 var shown := {}
+var confirmed := {}   # pid -> 两手之间点过「开始下一手」
 var seats: Array = []
 var names := {1: "我", 2: "乙", 3: "丙", 9: "迟到"}
 
@@ -96,6 +97,7 @@ func _reset_table(pids: Array) -> void:
 	statuses = {}
 	bets = {}
 	shown = {}
+	confirmed = {}
 	for pid in pids:
 		stacks[pid] = PokerRules.STARTING_STACK
 		statuses[pid] = PokerRules.STATUS_ACTIVE
@@ -105,7 +107,8 @@ func _reset_table(pids: Array) -> void:
 
 func _players() -> Array:
 	return stacks.keys().map(func(pid): return {"pid": pid, "name": names[pid], "stack": stacks[pid], "bet": bets[pid],
-		"committed": bets[pid], "status": statuses[pid], "left": false, "buyins": 1, "net": stacks[pid] - 2000, "shown": shown[pid]})
+		"committed": bets[pid], "status": statuses[pid], "left": false, "buyins": 1, "net": stacks[pid] - 2000, "shown": shown[pid],
+		"confirmed": confirmed.get(pid, false)})
 
 
 func _pub(actor: Variant, overrides := {}) -> Dictionary:

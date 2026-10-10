@@ -1,0 +1,158 @@
+# main 上 build.json 的 version 变了(远端还没有 tag v<version>)就自动发布:
+# 导出 macOS / Windows 安装包并签名(不跑单测:推送前在本机跑 ship.sh test) → 推 updates 分支(在线更新源)→ 建 GitHub Release。
+# 机械步骤全部复用 .claude/skills/release-update/scripts/ship.sh,与本机发布走同一套检查。
+#
+# 需要的仓库 secret:LIARS_UPDATE_SIGNING_KEY = ~/.config/liarstavern/update_signing_key.pem 的全文。
+# 更新说明(主菜单提示条上那一句)写在 build.json 的 "notes" 里;GitHub Release 正文可选 docs/releases/v<version>.md。
+# 推出去的更新所有玩家下次启动就会装上、撤不回:改 version 之前确认 main 上的内容可以发。
+# 中途失败:修好后在 Actions 页面对这次运行点 Re-run failed jobs(publish 会认出已经推过的更新源,只补 Release)。
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [build.json]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: 给玩家看的更新说明(不填就用 build.json 的 notes)
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.7.1   # 与玩家安装包里的引擎一致;换引擎时 build.json 的 base_build 要设成新的 build
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      build: ${{ steps.plan.outputs.build }}
+      notes: ${{ steps.plan.outputs.notes }}
+      release_notes: ${{ steps.plan.outputs.release_notes }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: plan
+        env:
+          NOTES_OVERRIDE: ${{ inputs.notes }}
+        run: bash tools/ci_release.sh plan
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: macos-15   # release.sh 用到 ditto / plutil / codesign
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # ship.sh 要核对提交在 origin/main 上,seed 要读上一版的 tag
+
+      - name: Godot path
+        run: echo "GODOT=$HOME/godot/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/godot
+            ~/Library/Application Support/Godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-stable-macos-templates-v1
+
+      - name: Install Godot and export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          dl="$RUNNER_TEMP/godot-dl"
+          mkdir -p "$dl" "$HOME/godot"
+          curl -fsSL --retry 3 -o "$dl/editor.zip" "$base/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
+          ditto -x -k "$dl/editor.zip" "$HOME/godot"
+          curl -fsSL --retry 3 -o "$dl/templates.tpz" "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          # 只留导出 macOS 与 Windows x86_64 用得到的模板(整包 1.2 GB)
+          unzip -q "$dl/templates.tpz" 'templates/macos.zip' 'templates/windows_*_x86_64*' \
+            'templates/version.txt' 'templates/icudt_godot.dat' -d "$dl"
+          dest="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$dest"
+          mv "$dl"/templates/* "$dest/"
+          rm -rf "$dl"
+
+      - name: Check Godot
+        run: |
+          "$GODOT" --version
+          ls "$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+
+      - name: Signing key
+        env:
+          LIARS_UPDATE_SIGNING_KEY: ${{ secrets.LIARS_UPDATE_SIGNING_KEY }}
+        run: bash tools/ci_release.sh key
+
+      - name: Previous release state
+        run: bash tools/ci_release.sh seed
+
+      - name: Check, export and sign
+        env:
+          NOTES: ${{ needs.plan.outputs.notes }}
+          SHIP_SKIP_TESTS: 1   # 全量单测在 CI 的 macOS 机器上要跑半小时以上;推送前在本机跑 ship.sh test
+        run: bash .claude/skills/release-update/scripts/ship.sh build "$NOTES"
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/update_signing_key.pem"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-build-${{ needs.plan.outputs.build }}
+          path: |
+            build/macos
+            build/windows
+            build/update
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # 推 updates 分支、建 tag 与 Release
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-build-${{ needs.plan.outputs.build }}
+          path: build
+
+      - name: Git identity and push credentials
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          # publish_update.sh 从一个临时仓库推 updates 分支,凭据要配在全局
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+
+      - name: Publish update feed
+        run: |
+          if bash tools/ci_release.sh published; then
+            echo "跳过推送"
+          else
+            bash .claude/skills/release-update/scripts/ship.sh publish
+          fi
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ needs.plan.outputs.release_notes }}
+        run: bash .claude/skills/release-update/scripts/ship.sh github ${RELEASE_NOTES:+"$RELEASE_NOTES"}

@@ -79,7 +79,7 @@ func test_settlement_keeps_the_orbit_and_hides_the_bust_prompt():
 	assert_not_null(screen._settlement)
 	assert_eq(screen.director.camera_mode(), PokerDirector.MODE_ORBIT, "结算时留在散局环绕镜头")
 	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NONE, "结算面板下不露出输光提示")
-	assert_lt(screen._bust_left, 0.0, "输光倒计时停了")
+	assert_lt(screen._next_left, 0.0, "倒计时停了")
 	assert_false(screen.choose_rebuy(), "散局后不能再领")
 
 
@@ -125,4 +125,67 @@ func test_quips_pop_a_bubble_over_the_speaker_and_log_a_line():
 	var lines: Array = screen.hud.log_box.get_children().map(func(l: Label) -> String: return l.text)
 	assert_has(lines, "乙:打得不错")
 	assert_has(lines, "我:快点吧,我等到花儿都谢了")
+
+
+func test_start_button_after_a_hand_then_waiting_for_others_and_auto_press():
+	_open_table([1, 2, 3], false)
+	await _hand1()
+	for pid in [2, 3]:
+		statuses[pid] = PokerRules.STATUS_FOLDED
+	await _feed([_bet(ME, PokerRules.CALL, 20), _bet(2, PokerRules.FOLD, 10), _bet(3, PokerRules.FOLD, 20),
+		{"type": "pot_won", "index": 0, "amount": 50, "winners": [ME], "shares": {ME: 50}, "hand_name": "", "best": {},
+			"uncontested": true},
+		{"type": "hand_over", "hand": 1, "stacks": {1: 2030, 2: 1990, 3: 1980}, "busted": []},
+		{"type": "hand_record", "hand": 1, "board": [], "players": [
+			{"pid": 2, "cards": H.cards("Ah Ad"), "hand_name": "", "folded": true, "left": false, "delta": -10},
+			{"pid": 3, "cards": H.cards("7s 2h"), "hand_name": "", "folded": true, "left": false, "delta": -20},
+			{"pid": 1, "cards": H.cards("Ah Kd"), "hand_name": "", "folded": false, "left": false, "delta": 30}]}],
+		_pub(null, {"phase": "idle"}))
+	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NEXT, "一手结束:开始下一手")
+	assert_gt(screen._next_left, PokerPacing.NEXT_HAND_TIMEOUT - 1.0, "15 秒倒计时")
+	assert_eq(screen.state.history.size(), 1, "牌局记录收下了")
+	screen.toggle_history()
+	assert_true(is_instance_valid(screen._history))
+	assert_eq(screen._history.row_count(), 3, "弃牌的乙、丙的手牌也能看到")
+	screen.toggle_history()
+	await wait_process_frames(2)
+	assert_false(is_instance_valid(screen._history))
+	assert_true(screen.choose_next())
+	assert_false(screen.choose_next(), "等回执期间不重复发")
+	confirmed[ME] = true
+	await _feed([{"type": "next_ready", "pid": ME}], _pub(null, {"phase": "idle"}))
+	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NEXT_WAIT)
+	assert_false(screen._seat_request_pending, "回执到了")
+	assert_true(screen.hud.prompts._message.text.contains("1/3"), screen.hud.prompts._message.text)
+
+
+func test_start_is_pressed_automatically_when_the_countdown_runs_out():
+	_open_table([1, 2, 3], false)
+	await _hand1()
+	await _feed([{"type": "hand_over", "hand": 1, "stacks": {}, "busted": []}], _pub(null, {"phase": "idle"}))
+	assert_eq(screen.hud.bottom_mode(), PokerHud.BOTTOM_NEXT)
+	screen._next_left = 0.01
+	await wait_process_frames(3)
+	assert_true(screen._seat_request_pending, "时间到自动点了开始")
+
+
+func test_patrons_use_the_species_the_host_assigned():
+	# Bug:德州牌桌排座时没带形象,各端按本地「第一个空着的」补,别人看到的不是自己选的那只
+	var saved_lobby: Array = Net.lobby_players
+	_reset_table([1, 2, 3])
+	Net.seats = [{"pid": 1, "name": "我", "species": 3}, {"pid": 2, "name": "乙", "species": 5}, {"pid": 3, "name": "丙", "species": 7}]
+	Net.lobby_players = [{"pid": 9, "name": "迟到", "species": 6}]
+	screen = PokerScreenScript.new(app)
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child_autofree(screen)
+	await _hand1()
+	for pid in [1, 2, 3]:
+		assert_eq(app.world.patrons[pid].species_index, {1: 3, 2: 5, 3: 7}[pid], "开局:%d 号用房主分配的形象" % pid)
+	_join_as_waiting(9)
+	seats = [1, 2, 3, 9]
+	await _feed([{"type": "hand_over", "hand": 1, "stacks": {}, "busted": []},
+		{"type": "hand_started", "hand": 2, "button": 2, "sb": 3, "bb": 9, "seats": [1, 2, 3, 9], "dealt": [3, 9, 1, 2]}],
+		_pub(null, {"hand": 2}))
+	assert_eq(app.world.patrons[9].species_index, 6, "中途入座的人也用房主分配的形象")
+	Net.lobby_players = saved_lobby
 

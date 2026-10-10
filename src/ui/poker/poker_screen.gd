@@ -22,7 +22,8 @@ const LEAVE_CONFIRM := "离开牌桌后这一手按弃牌处理,确定吗?"
 const HOST_LEAVE_CONFIRM := "你是房主,离开会解散整桌,确定吗?"
 const FOLD_CONFIRM := "现在可以免费过牌,确定要弃牌吗?"
 const QUIP_GAP := 6.0   # 他人快捷对话气泡的小三角尖与铭牌之间的留白
-const SEAT_EVENTS := ["rebuy", "spectate", "sit_in"]   # 再领 / 观战 / 回座请求的回执(事件里是自己的 pid)
+const SEAT_EVENTS := ["rebuy", "spectate", "sit_in", "next_ready"]   # 再领 / 观战 / 回座 / 开始下一手的回执(自己的 pid)
+const COUNTDOWN_MODES := [PokerHud.BOTTOM_BUST, PokerHud.BOTTOM_NEXT, PokerHud.BOTTOM_NEXT_WAIT]
 
 var app: Node
 var my_pid := 0
@@ -41,7 +42,8 @@ var _queue: Array = []
 var _intro_done := false
 var _awaiting_intent := false        # 已提交下注动作,等房主回执
 var _seat_request_pending := false   # 已提交再领 / 观战 / 回座,等房主回执
-var _bust_left := -1.0               # 输光后到下一手开始的本地倒计时(规格 §2.6);< 0 表示没在数
+var _next_left := -1.0               # 一手结束后到下一手自动开始的本地倒计时(15 秒,到点自动点「开始」);< 0 表示没在数
+var _history: HandHistoryPanel = null
 var _settlement: PokerSettlement = null
 var quips: QuipController
 var preview: CardPreview
@@ -122,9 +124,11 @@ func _process(delta: float) -> void:
 	_clock.tick(delta)
 	var show_ring: bool = state.current_pid != null and not animating and not state.pub.is_empty()
 	hud.set_countdown(_clock.remaining(), Protocol.TURN_TIMEOUT, show_ring)
-	if _bust_left >= 0.0 and my_status() == PokerRules.STATUS_BUSTED and _settlement == null:
-		_bust_left = maxf(_bust_left - delta, 0.0)
-		hud.set_bust_countdown(minf(_bust_left, PokerPacing.BUST_DECISION), PokerPacing.BUST_DECISION)
+	if _next_left >= 0.0 and _settlement == null and COUNTDOWN_MODES.has(hud.bottom_mode()):
+		_next_left = maxf(_next_left - delta, 0.0)
+		hud.set_bust_countdown(minf(_next_left, PokerPacing.NEXT_HAND_TIMEOUT), PokerPacing.NEXT_HAND_TIMEOUT)
+		if _next_left <= 0.0 and hud.bottom_mode() == PokerHud.BOTTOM_NEXT:
+			choose_next()   # 时间到自动点「开始下一手」(房主那边到点也会照常开)
 
 
 func _connect_hud() -> void:
@@ -134,6 +138,8 @@ func _connect_hud() -> void:
 	hud.rebuy_pressed.connect(choose_rebuy)
 	hud.spectate_pressed.connect(choose_spectate)
 	hud.sit_in_pressed.connect(choose_sit_in)
+	hud.next_pressed.connect(choose_next)
+	hud.history_pressed.connect(toggle_history)
 	hud.action_chosen.connect(submit)
 	hud.fold_confirm_requested.connect(_confirm_fold)
 
@@ -234,6 +240,8 @@ func _first_frame() -> void:
 	# 开场运镜期间可能已开了新的一手(他被排进座位)或有人离开:座位表变了就按视图重排
 	if state.sync_from_view():
 		_arrange()
+	if state.between_hands:
+		_next_left = PokerPacing.NEXT_HAND_TIMEOUT   # 中途进来正赶上两手之间:不知道房主还剩几秒,按整 15 秒数
 	_sync_table()
 	set_current(state.current_pid)
 
@@ -268,7 +276,12 @@ func _sync_table() -> void:
 func _arrange() -> void:
 	# 按座位表排座;迟到者按「座位表 + 自己」排、不建自己的酒客(规格 §5.5),入座时桌子不用转
 	var seated := state.seats.has(my_pid)
-	world.arrange(state.seat_entries(my_pid), my_pid, seated, false)
+	# 形象用房主分配的(Net.species_of 查本局座位表与等待厅名单):不带 species 时各端会按本地「第一个空着的」补,
+	# 别人看到的就不是自己选的那只
+	var entries := state.seat_entries(my_pid)
+	for entry in entries:
+		entry["species"] = Net.species_of(entry["pid"])
+	world.arrange(entries, my_pid, seated, false)
 	_update_visibility()
 	_sync_nameplates()
 
@@ -327,6 +340,9 @@ func refresh_actions() -> void:
 	hud.set_bottom_mode(mode)
 	if mode == PokerHud.BOTTOM_BET:
 		hud.controls.update(state.pub if is_my_turn() else {}, my_pid)
+	elif mode == PokerHud.BOTTOM_NEXT_WAIT:
+		var progress := state.confirm_progress()
+		hud.set_next_progress(progress[0], progress[1])
 
 
 # —— 导演回调 ——
@@ -369,7 +385,7 @@ func set_current(pid: Variant) -> void:
 func begin_hand(ev: Dictionary) -> void:
 	# 导演在收牌前调用:换到新座位表,所有酒客复位(清掉上一手的庆祝、表情),HUD 清掉上一手
 	state.apply_event(ev)
-	_bust_left = -1.0
+	_next_left = -1.0
 	set_current(null)
 	_arrange()
 	for pid in world.patrons:
@@ -399,10 +415,25 @@ func hole_for_hand(number: int) -> Array:
 
 
 func end_hand(_ev: Dictionary) -> void:
+	# 房主等「开始下一手」的 15 秒从这一手演完(含 hand_over 本身)才开始算
+	_next_left = PokerPacing.NEXT_HAND_TIMEOUT + PokerPacing.HAND_OVER
 	set_current(null)
-	if my_status() == PokerRules.STATUS_BUSTED:
-		# 房主的选择时间从这一手演完(含 hand_over 本身)才开始算
-		_bust_left = PokerPacing.BUST_DECISION + PokerPacing.HAND_OVER
+
+
+func add_record() -> void:
+	# 导演演到 hand_record:记录已进 state.history;记录面板开着就刷新(停在当前页)
+	if is_instance_valid(_history):
+		_history.set_records(state.history, false)
+
+
+func toggle_history() -> void:
+	if is_instance_valid(_history):
+		_history.close()
+		return
+	Sfx.play("ui_click")
+	_history = HandHistoryPanel.new()
+	_history.set_records(state.history)
+	add_child(_history)
 
 
 func drop_player(pid: Variant) -> void:
@@ -416,7 +447,7 @@ func drop_player(pid: Variant) -> void:
 
 func show_settlement(results: Array) -> void:
 	hud.set_bottom_mode(PokerHud.BOTTOM_NONE)
-	_bust_left = -1.0
+	_next_left = -1.0
 	_settlement = PokerSettlement.new(results, Net.is_host)
 	_settlement.lobby_pressed.connect(func(): Net.request_rematch_lobby())
 	_settlement.leave_pressed.connect(func(): Net.end_session())
@@ -458,6 +489,20 @@ func choose_spectate() -> bool:
 	return _request_seat([PokerRules.STATUS_BUSTED], Net.request_spectate)
 
 
+func choose_next() -> bool:
+	# 一手结束后点「开始下一手」(按钮、时间到与 bot 同一入口);等房主回执期间不重复发
+	if _seat_request_pending or _settlement != null or not wants_next():
+		return false
+	_seat_request_pending = true
+	Sfx.play("ui_click")
+	Net.submit_poker_action(PokerRules.NEXT)
+	return true
+
+
+func wants_next() -> bool:
+	return state.bottom_mode(my_pid) == PokerHud.BOTTOM_NEXT
+
+
 func choose_sit_in() -> bool:
 	return _request_seat([PokerRules.STATUS_AWAY], Net.request_sit_in)
 
@@ -490,7 +535,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			director.toggle_camera_mode()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and not app.is_modal_open():
-		if is_my_turn() and hud.controls.handle_key(event.keycode):
+		if event.keycode == HandHistoryPanel.HOTKEY:
+			get_viewport().set_input_as_handled()
+			toggle_history()
+		elif is_my_turn() and hud.controls.handle_key(event.keycode):
 			get_viewport().set_input_as_handled()
 
 

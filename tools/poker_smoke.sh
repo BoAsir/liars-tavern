@@ -73,5 +73,17 @@ for pair in "host:$HOST" "discover:$DISCOVER" "direct:$DIRECT" "late:$LATE"; do
 		echo "ok   $name — $(grep -m1 SESSION_OVER "$log" | sed 's/.*SESSION_OVER //') · $(grep -m1 -o "GAZE peers=[0-9]* necks=[0-9]*" "$log") · $(grep -m1 -o "QUIPS heard=[0-9]*" "$log")$(grep -m1 -o " net_sum=-*[0-9]*" "$log")"
 	fi
 done
+# 每端实际建出来的酒客形象必须一致(房主分配的形象要在每个人的画面上都对得上)
+patron_lines=()
+for name in host discover direct late; do
+	patron_lines+=("$(grep '\[debug\] patrons' "$LOG_DIR/$name.log" | tail -1)")
+done
+if [ -z "${patron_lines[0]}" ] || [ "$(printf '%s\n' "${patron_lines[@]}" | sort -u | wc -l | tr -d ' ')" -ne 1 ]; then
+	echo "FAIL patrons — 各端看到的酒客形象不一致:"
+	printf '  %s\n' "${patron_lines[@]}"
+	status=1
+else
+	echo "ok   patrons — ${patron_lines[0]}"
+fi
 [ "$status" -eq 0 ] && echo "德州联机冒烟($MODE)通过(日志:$LOG_DIR)"
 exit "$status"

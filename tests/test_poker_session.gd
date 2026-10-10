@@ -207,36 +207,37 @@ func test_viewers_are_everyone_who_has_not_left():
 
 # —— 一手间隔与散局 ——
 
-func test_hand_gap_waits_for_bust_decisions():
+func test_hand_gap_waits_for_start_from_everyone_who_will_play():
 	_start()
-	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001)
 	_fold_out()
 	assert_true(session.next_hand_ready())
-	_bust_one()
-	assert_almost_eq(session.hand_gap(), PokerPacing.BUST_DECISION, 0.001, "有输光者没做选择")
-	assert_true(session.next_hand_ready(), "两人仍能开下一手,只是晚一点")
-	_intent(1, R.SPECTATE)
-	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001, "选完就恢复")
+	assert_almost_eq(session.hand_gap(), PokerPacing.NEXT_HAND_TIMEOUT, 0.001, "等大家点开始")
+	for pid in [1, 2]:
+		assert_true(_intent(pid, R.NEXT)["ok"])
+	assert_almost_eq(session.hand_gap(), PokerPacing.NEXT_HAND_TIMEOUT, 0.001)
+	var confirm := _intent(3, R.NEXT)
+	assert_eq(confirm["events"], [{"type": "next_ready", "pid": 3}])
+	assert_false(confirm["turn_action"], "点开始不消耗回合")
+	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001, "都点了")
 
 
-func test_busted_player_who_left_does_not_hold_the_next_hand():
+func test_busted_player_is_waited_for_until_they_choose_or_leave():
 	_start()
 	_fold_out()
 	_bust_one()
+	_intent(2, R.NEXT)
+	_intent(3, R.NEXT)
+	assert_almost_eq(session.hand_gap(), PokerPacing.NEXT_HAND_TIMEOUT, 0.001, "输光的 1 还没选")
 	session.on_disconnect(1)
-	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001)
+	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001, "他走了就不等")
 
 
-func test_bust_wait_only_follows_the_hand_where_someone_busted():
-	# 规格 §2.6:「有人输光的那一手之后」才留 6 秒;一直不选的输光者不拖慢之后每一手
+func test_hand_records_carry_names():
 	_start()
-	_fold_out()
-	_bust_one()
-	assert_almost_eq(session.hand_gap(), PokerPacing.BUST_DECISION, 0.001)
-	session.start_next_hand()
-	_fold_out()
-	assert_eq(session.public_view(0.0)["players"][0]["status"], R.STATUS_BUSTED, "他还是没选")
-	assert_almost_eq(session.hand_gap(), PokerPacing.HAND_GAP, 0.001, "之后的手恢复 1.5 秒")
+	var record := H.find(_fold_out(), "hand_record")
+	assert_eq(record["players"].map(func(row): return row["name"]).filter(func(n): return n == "?").size(), 0)
+	for row in record["players"]:
+		assert_eq(row["name"], NAMES[row["pid"]])
 
 
 func test_a_newcomer_who_leaves_mid_hand_is_gone_at_once_and_costs_no_show_time():

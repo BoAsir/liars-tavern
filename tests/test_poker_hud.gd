@@ -261,7 +261,8 @@ func test_bottom_centre_fits_its_budget_in_every_mode():
 	hud.controls.update(pub, ME)
 	hud.set_turn("轮到你了", true)
 	hud.set_countdown(30.0, 30.0, true)
-	for mode in [PokerHud.BOTTOM_BET, PokerHud.BOTTOM_BUST, PokerHud.BOTTOM_SPECTATE,
+	hud.set_next_progress(7, 8)
+	for mode in [PokerHud.BOTTOM_BET, PokerHud.BOTTOM_BUST, PokerHud.BOTTOM_NEXT, PokerHud.BOTTOM_NEXT_WAIT, PokerHud.BOTTOM_SPECTATE,
 			PokerHud.BOTTOM_WAITING, PokerHud.BOTTOM_AWAY]:
 		hud.set_bottom_mode(mode)
 		await wait_process_frames(3)

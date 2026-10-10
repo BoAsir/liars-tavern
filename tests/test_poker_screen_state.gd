@@ -230,7 +230,11 @@ func test_bottom_mode_shows_bet_controls_only_while_someone_is_acting():
 	state.apply_event({"type": "spectate", "pid": ME})
 	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_SPECTATE)
 	state.apply_event({"type": "rebuy", "pid": ME, "amount": 2000, "buyins": 2, "stack": 2000})
-	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_WAITING)
+	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_NEXT_WAIT, "两手之间再领就算点了开始,等别人")
+	state.apply_event({"type": "hand_started", "hand": 4, "seats": [1, 2], "dealt": [2]})
+	state.apply_event({"type": "player_joined", "pid": ME, "name": "我"})
+	state.rows[ME]["status"] = PokerRules.STATUS_WAITING
+	assert_eq(state.bottom_mode(ME), PokerHud.BOTTOM_WAITING, "手牌进行中等着下一手发牌")
 	assert_eq(PokerScreenState.new().bottom_mode(ME), PokerHud.BOTTOM_NONE, "还没有视图")
 
 

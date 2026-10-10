@@ -27,6 +27,8 @@ var _phase := Phase.IDLE
 var _hand_number := 0
 var _ending := false
 var _hand: PokerHand = null # 进行中的一手;两手之间是刚结束的那一手(公共视图还显示它)
+var _confirmed := {}        # 两手之间点了「开始下一手」的人(新的一手开始时清空)
+var _start_stacks := {}     # 这一手发牌前各上桌者的筹码:牌局记录里算输赢
 
 
 func _init(short_deck: bool, rng: RandomNumberGenerator) -> void:
@@ -85,6 +87,7 @@ func rebuy(pid: int) -> Dictionary:
 	p["buyins"] += 1
 	p["status"] = PokerRules.STATUS_WAITING
 	p["timeouts"] = 0
+	_confirmed[pid] = true   # 再领就是要接着打
 	return _ok([{
 		"type": "rebuy", "pid": pid, "amount": PokerRules.STARTING_STACK, "buyins": p["buyins"], "stack": p["stack"],
 	}])
@@ -98,6 +101,35 @@ func spectate(pid: int) -> Dictionary:
 func sit_in(pid: int) -> Dictionary:
 	# 挂机离座的人回到牌桌(规格 §2.8):回到 waiting,下一手发牌
 	return _switch_status(pid, PokerRules.STATUS_AWAY, PokerRules.STATUS_WAITING, PokerRules.SIT_IN)
+
+
+func confirm_next(pid: int) -> Dictionary:
+	# 一手结束后点「开始下一手」:只在两手之间、而且他是要等的人时有效;重复点没有事件
+	var error := _seat_error(pid)
+	if error == "" and (_phase != Phase.IDLE or _hand == null or not needs_confirm(pid)):
+		error = "invalid_action"
+	if error != "":
+		return _fail(error)
+	if _confirmed.has(pid):
+		return _ok([])
+	_confirmed[pid] = true
+	return _ok([{"type": "next_ready", "pid": pid}])
+
+
+func needs_confirm(pid: int) -> bool:
+	# 要等他点「开始下一手」的人:没离开、不在观战 / 离座(输光还没选的也要等,他可能要再领)
+	return _is_seated(pid) and not [PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY].has(_players[pid]["status"])
+
+
+func is_confirmed(pid: int) -> bool:
+	return _confirmed.has(pid)
+
+
+func all_confirmed() -> bool:
+	for pid in _seat_order:
+		if needs_confirm(pid) and not _confirmed.has(pid):
+			return false
+	return true
 
 
 func request_end() -> Array:
@@ -127,7 +159,11 @@ func start_hand() -> Array:
 	var positions := _positions(_ready_players())
 	_hand_number += 1
 	button_pid = positions["button"]
+	_confirmed = {}
 	_reset_seats_for_hand(positions["dealt"])
+	_start_stacks = {}
+	for pid in positions["dealt"]:
+		_start_stacks[pid] = _players[pid]["stack"]
 	var board := _deal(rig, positions["dealt"])
 	_hand = PokerHand.new(_hand_number, _players, _short_deck, positions, _seat_order.duplicate(), board)
 	_phase = Phase.BETTING
@@ -200,6 +236,7 @@ func player(pid: int) -> Dictionary:
 	return {
 		"stack": p["stack"], "bet": p["bet"], "committed": p["committed"], "status": p["status"],
 		"left": p["left"], "buyins": p["buyins"], "net": _net(p["stack"], p["buyins"]), "shown": p["shown"].duplicate(),
+		"confirmed": _confirmed.has(pid),
 	}
 
 
@@ -397,6 +434,7 @@ func _end_hand(events: Array) -> void:
 			if not p["left"]:
 				busted.append(pid)
 	events.append({"type": "hand_over", "hand": _hand_number, "stacks": stacks, "busted": busted})
+	events.append(HandRecord.build(_hand_number, board(), _hand.dealt, _players, _start_stacks, _short_deck))
 	if not _ending:
 		_send_away(events)
 	for pid in _seat_order.filter(func(q): return _players[q]["left"]):

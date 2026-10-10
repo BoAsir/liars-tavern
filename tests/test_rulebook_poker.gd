@@ -114,7 +114,7 @@ func test_hands_note_names_both_lowest_straights_and_the_royal_flush():
 
 
 func test_controls_list_the_poker_hotkeys():
-	# 规格 §6.2:F 弃牌、C/空格 过牌跟注、R/回车 下注加注、↑↓ 一个大盲、1–5 预设;WASD 探头;F1 说明书
+	# 规格 §6.2:F 弃牌、C/空格/回车 过牌跟注、R 下注加注、↑↓ 一个大盲、1–5 预设;WASD 探头;F1 说明书
 	var keys := []
 	for block in RulebookContent.find("controls", POKER)["blocks"]:
 		if block["type"] == "keys":

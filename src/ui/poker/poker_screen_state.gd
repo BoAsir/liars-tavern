@@ -8,7 +8,10 @@ extends RefCounted
 
 const ROW_INTS := ["stack", "bet", "committed", "buyins", "net"]
 const DEFAULT_ROW := {"stack": 0, "bet": 0, "committed": 0, "status": PokerRules.STATUS_WAITING, "left": false,
-	"buyins": 1, "net": 0, "shown": []}
+	"buyins": 1, "net": 0, "shown": [], "confirmed": false}
+const ROW_BOOLS := ["left", "confirmed"]
+const HISTORY_MAX := 200      # 牌局记录最多留这么多手(一场牌局一般远少于此)
+const NO_CONFIRM_STATUSES := [PokerRules.STATUS_SPECTATING, PokerRules.STATUS_AWAY]   # 不用点「开始下一手」的人
 const UNKNOWN_NAME := "?"
 
 var pub := {}                 # 最新公共视图
@@ -28,6 +31,8 @@ var revealed := {}            # pid -> 两张牌(摊牌面板的条目)
 var winnings := {}            # pid -> 这一手分池赢到的总额(摊牌面板的结果列)
 var winnings_known := false   # 演到过这一手的分池;迟到者第一帧没看到分池,结果列留空
 var ending := false
+var between_hands := false    # 演到 hand_over 之后、下一手 hand_started 之前:底部是「开始下一手」
+var history: Array = []       # 看到过的每一手的牌局记录(hand_record),旧的在前
 
 
 # —— 视图 ——
@@ -78,6 +83,8 @@ func refresh_from_view(adopt_seats := false) -> bool:
 	for key in positions:
 		positions[key] = pub[key] if pub.get(key) is int else null
 	ending = pub.get("ending") is bool and pub["ending"]
+	if adopt_seats:
+		between_hands = pub.get("phase") == "idle" and hand > 0
 	return reseat
 
 
@@ -133,13 +140,18 @@ func apply_event(ev: Dictionary) -> void:
 		"hand_over":
 			_hand_over(ev)
 		"rebuy":
-			_set_fields(pid, {"stack": ev.get("stack"), "buyins": ev.get("buyins"), "status": PokerRules.STATUS_WAITING})
+			_set_fields(pid, {"stack": ev.get("stack"), "buyins": ev.get("buyins"), "status": PokerRules.STATUS_WAITING,
+				"confirmed": true})
 		"spectate":
 			_set_fields(pid, {"status": PokerRules.STATUS_SPECTATING})
 		"away":
 			_set_fields(pid, {"status": PokerRules.STATUS_AWAY})
 		"sit_in":
 			_set_fields(pid, {"status": PokerRules.STATUS_WAITING})
+		"next_ready":
+			_set_fields(pid, {"confirmed": true})
+		"hand_record":
+			_add_record(ev)
 		"player_joined":
 			_player_joined(pid, ev.get("name"))
 		"player_left":
@@ -159,6 +171,8 @@ func _hand_started(ev: Dictionary) -> void:
 		rows[pid]["bet"] = 0
 		rows[pid]["committed"] = 0
 		rows[pid]["shown"] = []
+		rows[pid]["confirmed"] = false
+	between_hands = false
 	for pid in _array(ev.get("dealt")):
 		_set_fields(pid, {"status": PokerRules.STATUS_ACTIVE})
 	board = []
@@ -207,6 +221,27 @@ func _hand_over(ev: Dictionary) -> void:
 	for pid in _array(ev.get("busted")):
 		_set_fields(pid, {"status": PokerRules.STATUS_BUSTED})
 	current_pid = null
+	between_hands = not ending
+
+
+func _add_record(ev: Dictionary) -> void:
+	# 牌局记录:只收类型对的字段;同一手只记一次(迟到者第一帧之后可能重放)
+	var number: Variant = ev.get("hand")
+	if not number is int or history.any(func(r: Dictionary) -> bool: return r["hand"] == number):
+		return
+	var players := []
+	for row in _array(ev.get("players")):
+		if not row is Dictionary or not row.get("pid") is int:
+			continue
+		players.append({
+			"pid": row["pid"], "name": row["name"] if row.get("name") is String else name_of(row["pid"]),
+			"cards": _cards(row.get("cards")), "hand_name": row["hand_name"] if row.get("hand_name") is String else "",
+			"folded": row.get("folded") is bool and row["folded"], "left": row.get("left") is bool and row["left"],
+			"delta": row["delta"] if row.get("delta") is int else 0,
+		})
+	history.append({"hand": number, "board": _cards(ev.get("board")), "players": players})
+	if history.size() > HISTORY_MAX:
+		history.pop_front()
 
 
 func _player_joined(pid: Variant, name: Variant) -> void:
@@ -289,9 +324,20 @@ func is_excluded(pid: Variant) -> bool:
 	return not rows.has(pid) or has_left(pid) or status_of(pid) == PokerRules.STATUS_SPECTATING
 
 
+func needs_confirm(pid: Variant) -> bool:
+	# 两手之间要点「开始下一手」的人(与引擎的 needs_confirm 同一规则)
+	return rows.has(pid) and not has_left(pid) and not NO_CONFIRM_STATUSES.has(status_of(pid))
+
+
+func confirm_progress() -> Array:
+	# [已点的人数, 要点的人数]:「已准备 · 等待其他人(2/5)」
+	var needed := rows.keys().filter(needs_confirm)
+	return [needed.filter(func(pid): return rows[pid]["confirmed"]).size(), needed.size()]
+
+
 func bottom_mode(my_pid: int) -> String:
-	# 底部中间放什么(规格 §6.1):座位状态的提示;下注控件(含旁人回合横幅)只在有人行动时
-	var bottom := PokerHud.bottom_mode_for(row(my_pid))
+	# 底部中间放什么(规格 §6.1):座位状态的提示;两手之间是「开始下一手」;下注控件(含旁人回合横幅)只在有人行动时
+	var bottom := PokerHud.bottom_mode_for(row(my_pid), between_hands)
 	if bottom == PokerHud.BOTTOM_BET and current_pid == null:
 		return PokerHud.BOTTOM_NONE
 	return bottom
@@ -345,7 +391,7 @@ func _set_fields(pid: Variant, fields: Dictionary) -> void:
 		return
 	for key in fields:
 		var value: Variant = fields[key]
-		if (key in ROW_INTS and value is int) or (key == "status" and value is String) or (key == "left" and value is bool):
+		if (key in ROW_INTS and value is int) or (key == "status" and value is String) or (key in ROW_BOOLS and value is bool):
 			rows[pid][key] = value
 
 
@@ -358,6 +404,7 @@ static func _clean_row(p: Dictionary) -> Dictionary:
 	if p.get("status") is String:
 		out["status"] = p["status"]
 	out["left"] = p.get("left") is bool and p["left"]
+	out["confirmed"] = p.get("confirmed") is bool and p["confirmed"]
 	out["shown"] = _cards(p.get("shown"))
 	if p.get("name") is String:
 		out["name"] = p["name"]

@@ -58,7 +58,11 @@ func error_of(result: Dictionary) -> String:
 
 
 func assert_no_card_leak(t: PokerTable, events: Array, pid: int) -> void:
-	# 没摊牌就赢的人:事件里不能有他的牌与牌型名(按字段查,牌值会和筹码数撞,不能按数值搜)
+	# 没摊牌就赢的人:事件里不能有他的牌与牌型名(按字段查,牌值会和筹码数撞,不能按数值搜)。
+	# 唯一例外是这一手结束后的牌局记录 hand_record(用户要求赛后能看每个人的手牌),它必须排在 hand_over 之后
+	var types: Array = events.map(func(e: Dictionary) -> String: return e["type"])
+	if types.has("hand_record"):
+		assert_gt(types.find("hand_record"), types.find("hand_over"), "记录只能在这一手结束之后")
 	for e in events:
 		if e["type"] == "reveal":
 			for hand in e["hands"]:

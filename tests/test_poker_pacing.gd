@@ -57,10 +57,14 @@ func test_bystander_batches_keep_the_running_turn_time():
 	assert_almost_eq(PokerPacing.turn_timer_after(events, 0.6, 12.0), 12.0 + PokerPacing.REBUY, 0.001)
 
 
-func test_bust_decision_gap_is_longer_than_the_plain_hand_gap():
-	# 有人输光的那一手之后,下一手晚一点开,留时间给他选再领/观战(规格 §2.6);选完就恢复普通间隔
-	assert_gt(PokerPacing.BUST_DECISION, PokerPacing.HAND_GAP)
-	assert_almost_eq(PokerPacing.BUST_DECISION, 6.0, 0.001)
+func test_next_hand_waits_at_most_thirty_seconds_for_start():
+	# 一手结束后等大家点「开始下一手」,最多 15 秒;都点了就演完稍停开下一手
+	assert_almost_eq(PokerPacing.NEXT_HAND_TIMEOUT, 15.0, 0.001, "用户要求从 30 秒改为 15 秒")
+	assert_lt(PokerPacing.HAND_GAP, 1.0)
+
+
+func test_start_and_records_take_no_show_time():
+	assert_almost_eq(PokerPacing.estimate([{"type": "next_ready", "pid": 1}, {"type": "hand_record", "players": []}]), 0.0, 0.001)
 
 
 func test_seat_status_events_take_no_show_time():

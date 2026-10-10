@@ -205,8 +205,8 @@ static func _controls() -> Dictionary:
 		"blocks": [
 			{"type": "keys", "items": [
 				{"action": "弃牌", "mouse": "「弃牌」按钮", "keys": ["F"]},
-				{"action": "过牌 / 跟注", "mouse": "「过牌」「跟注」按钮", "keys": ["C", "空格"]},
-				{"action": "按选好的金额下注 / 加注", "mouse": "「下注」「加注到」按钮", "keys": ["R", "Enter"]},
+				{"action": "过牌 / 跟注(默认动作)", "mouse": "「过牌」「跟注」按钮", "keys": ["C", "空格", "Enter"]},
+				{"action": "按选好的金额下注 / 加注", "mouse": "「下注」「加注到」按钮", "keys": ["R"]},
 				{"action": "金额加减一个大盲", "mouse": "拖动滑条", "keys": ["↑", "↓"]},
 				{"action": "选金额预设", "mouse": "预设按钮", "keys": ["1–5"]},
 				{"action": "全下", "mouse": "「全下」按钮", "keys": []},

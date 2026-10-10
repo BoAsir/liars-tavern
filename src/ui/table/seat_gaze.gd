@@ -65,7 +65,7 @@ func _follow_cursor_with_head(delta: float) -> void:
 	if excluded.call(my_pid):
 		_neck_input = Vector3.ZERO
 	elif active:
-		_neck_input = next_neck_input(_neck_input, _held_neck_direction(), delta, me.neck_reach())
+		_neck_input = next_neck_input(_neck_input, _held_neck_direction(), delta)
 	if active:
 		var ray := _cursor_ray()
 		target = cursor_look_target(ray["origin"], ray["direction"], world.table_radius)
@@ -80,10 +80,24 @@ func _follow_cursor_with_head(delta: float) -> void:
 
 
 func _cursor_ray() -> Dictionary:
-	# 光标在当前镜头里的射线 {"origin", "direction"}
+	# 光标在当前镜头里的射线 {"origin", "direction"}。第一人称时镜头跟着头转,所以改按「没转头时的画面」换算:
+	# 光标指着哪个方向,头就转过去、镜头跟过去;光标不动镜头就停(否则会一直追着转下去)
 	var camera: Camera3D = app.tavern.camera_rig.camera
 	var mouse := get_viewport().get_mouse_position()
+	if world.first_person and world.patrons.has(my_pid):
+		var view := world.first_person_rest_view(my_pid)
+		view.origin = world.patrons[my_pid].eye_position()
+		var size := get_viewport().get_visible_rect().size
+		return {"origin": view.origin, "direction": rest_ray(view, mouse, size, camera.fov)}
 	return {"origin": camera.project_ray_origin(mouse), "direction": camera.project_ray_normal(mouse)}
+
+
+static func rest_ray(view: Transform3D, mouse: Vector2, size: Vector2, fov_degrees: float) -> Vector3:
+	# 镜头在 view 上(竖直视角 fov,画面 size)时,光标 mouse 所指的方向(全局)
+	var half := tan(deg_to_rad(fov_degrees) / 2.0)
+	var ndc := (mouse / size) * 2.0 - Vector2.ONE
+	var local := Vector3(ndc.x * half * size.x / size.y, -ndc.y * half, -1.0)
+	return (view.basis * local).normalized()
 
 
 func _held_neck_direction() -> Vector3:
@@ -97,13 +111,13 @@ func _held_neck_direction() -> Vector3:
 	return dir
 
 
-static func next_neck_input(current: Vector3, held: Vector3, delta: float, reach := Patron.NECK_REACH) -> Vector3:
-	# 按住方向键时头朝那个方向持续移动(斜向不更快),不往后、最远到 reach(物种不同:长吻的鳄鱼伸得近一点);
+static func next_neck_input(current: Vector3, held: Vector3, delta: float) -> Vector3:
+	# 按住方向键时头朝那个方向持续移动(斜向不更快),不往后、最远到 NECK_REACH(所有物种一样);
 	# 松开就停在原处,按反方向收回到原位就停
 	if held == Vector3.ZERO:
 		return current
-	# 范围由 Patron.clamp_neck 统一限定(不往后):发给别人的探头偏移就是自己的头真正停住的位置
-	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta).limit_length(reach)
+	# 范围由 Patron.clamp_neck 统一限定(不往后、最远 NECK_REACH):发给别人的探头偏移就是自己的头真正停住的位置
+	return Patron.clamp_neck(current + held.normalized() * NECK_SPEED * delta)
 
 
 static func cursor_look_target(origin: Vector3, direction: Vector3, table_radius := SeatLayout.TABLE_RADIUS) -> Vector3:
