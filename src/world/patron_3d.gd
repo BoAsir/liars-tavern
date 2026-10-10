@@ -942,6 +942,26 @@ func peek_with_glass(hold := COVER_MOUTH_HOLD) -> void:
 		rest_arms()
 
 
+func hold_paws(left_seat: Vector3, right_seat: Vector3) -> void:
+	# 吹牛骰子「摇盅」:两只爪子立刻按到这两点(座位坐标,扶在盅身两侧),骰盅层每帧跟着盅调用;
+	# 期间手不搭桌、歇手补间不接管,直到 release_paws
+	if not alive:
+		return
+	_arms_locked = true
+	_resting = {}
+	_arm_serial += 1
+	_set_arm(_arm_l, _to_body(left_seat))
+	_set_arm(_arm_r, _to_body(right_seat))
+
+
+func release_paws() -> void:
+	# 摇完扣下:手搭回桌上
+	if not alive:
+		return
+	_arms_locked = false
+	rest_arms()
+
+
 func set_soot(amount: float, duration := 0.0) -> void:
 	# 炸弹猫「爆炸」:头上的部件(脸、耳、吻……)盖上一层斑驳的黑灰(patron.gdshader 的实例参数 soot);0 = 干净
 	var parts := _fade_targets.filter(func(t: GeometryInstance3D) -> bool: return is_instance_valid(t) and head.is_ancestor_of(t))

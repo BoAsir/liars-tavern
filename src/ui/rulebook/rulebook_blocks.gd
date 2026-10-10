@@ -11,6 +11,8 @@ const TONES := {"brass": UiTheme.BRASS_BRIGHT, "truth": UiTheme.TRUTH, "lie": Ui
 const CARD_META := &"rulebook_card"
 const BOMB_CARD_META := &"rulebook_bomb_card"   # 炸弹猫牌面小图记着牌 id(字符串)
 const BOMB_CARD_SIZE := Vector2(60, 87)
+const DICE_SIZE := 34.0                    # 吹牛骰子示例的 2D 骰子
+const DICE_LABEL_WIDTH := 64.0
 
 # 德州牌型表
 const HAND_CARD_SIZE := Vector2(40, 58)     # 规格 §6.6:示例小牌不超过 40×58
@@ -43,6 +45,8 @@ static func build(block: Dictionary) -> Control:
 			return _hands(block)
 		"bomb_cards":
 			return _bomb_cards(block["items"])
+		"dice":
+			return _dice(block)
 	push_warning("说明书:未知的块类型 %s" % block["type"])
 	return Control.new()
 
@@ -163,6 +167,33 @@ static func _bomb_cards(items: Array) -> Control:
 		col.add_child(_paragraph(item["text"], 15, UiTheme.PARCHMENT))
 		col.add_child(_paragraph(item["count"], 13, UiTheme.MUTED))
 	return grid
+
+
+# —— 吹牛骰子的开盅示例:每行名字 + 一排 2D 骰子,算进去的(等于 face 或 1 点)金边高亮 ——
+
+static func _dice(block: Dictionary) -> Control:
+	var face: int = block.get("face", 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var total := 0
+	for item in block.get("items", []):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		box.add_child(row)
+		var name_label := UiTheme.label(str(item.get("label", "")), 17, UiTheme.PARCHMENT_DIM, UiTheme.display_font())
+		name_label.custom_minimum_size = Vector2(DICE_LABEL_WIDTH, 0)
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row.add_child(name_label)
+		for v in item.get("dice", []):
+			var icon := DiceIcon.new(v, DICE_SIZE)
+			var hit: bool = face > 0 and (v == face or v == LiarsDiceState.WILD_FACE)
+			icon.set_state(hit, face > 0 and not hit)
+			if hit:
+				total += 1
+			row.add_child(icon)
+	if face > 0:
+		box.add_child(UiTheme.label("数「%d」:一共 %d 个" % [face, total], 19, UiTheme.BRASS_BRIGHT, UiTheme.display_font()))
+	return box
 
 
 # —— 二选一对照:出牌/质疑、真话/假话 ——
