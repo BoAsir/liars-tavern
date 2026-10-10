@@ -42,6 +42,14 @@ func test_round_started_sets_counts_total_and_starter():
 	assert_true(st.bid.is_empty())
 
 
+func test_seats_start_with_five_dice_before_the_first_round_is_played():
+	# 开局运镜期间(round_started 还没演到):铭牌与左上按每人 5 颗,不显示 0 颗
+	_open([1, 2, 3])
+	assert_eq(st.counts, {1: 5, 2: 5, 3: 5})
+	assert_eq(st.total, 15)
+	assert_false(st.started)
+
+
 func test_bids_and_turns_follow_the_events():
 	var events := _open([1, 2, 3])
 	_feed(events)
