@@ -45,15 +45,18 @@ var _dice_by_round := {}       # round -> [点数](私有视图记下来的,等�
 
 
 func set_seats(entries: Array) -> void:
-	# Net.seats:[{pid, name, species}]
+	# Net.seats:[{pid, name, species}]。开局运镜期间第一轮还没演到:骰子数先按开局的每人 5 颗,
+	# 铭牌与左上不会先显示「0 颗」「场上 0 颗骰子」
 	seats = []
 	for entry in entries:
 		if entry is Dictionary and entry.get("pid") is int:
 			seats.append(entry["pid"])
 			names[entry["pid"]] = str(entry.get("name", entry["pid"]))
 			if not counts.has(entry["pid"]):
-				counts[entry["pid"]] = 0
+				counts[entry["pid"]] = LiarsDiceState.DICE_PER_PLAYER
 				alive[entry["pid"]] = true
+	if not started:
+		total = seats.size() * LiarsDiceState.DICE_PER_PLAYER
 
 
 func name_of(pid: Variant) -> String:

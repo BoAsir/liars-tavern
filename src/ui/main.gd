@@ -231,7 +231,8 @@ func _show_lobby() -> void:
 
 
 func _show_table(_seats: Array) -> void:
-	# 按本房玩法选牌桌屏幕(game_started 发出之前 game_mode 已设好)
+	# 按本房玩法选牌桌屏幕(game_started 发出之前 game_mode 已设好);等待厅的进出提示到这里已经过时
+	toasts.clear()
 	if GameMode.is_bomb_cat(Net.game_mode):
 		_switch_to(BombCatScreen.new(self))
 		return

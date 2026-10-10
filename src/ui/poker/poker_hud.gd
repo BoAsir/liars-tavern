@@ -130,6 +130,7 @@ func _ready() -> void:
 	_build_top_right()
 	_build_bottom()
 	showdown = ShowdownPanel.new()
+	showdown.add_to_group(WorldLabels.KEEP_OUT_GROUP)
 	add_child(showdown)
 	_build_my_panel()
 	_build_log()
@@ -139,6 +140,7 @@ func _ready() -> void:
 
 func _build_header() -> void:
 	header_panel = _corner_panel(Control.PRESET_TOP_LEFT, MARGIN)
+	header_panel.add_to_group(WorldLabels.KEEP_OUT_GROUP)   # 对话气泡让开底池与公共牌
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	header_panel.add_child(box)
@@ -157,6 +159,7 @@ func _build_top_right() -> void:
 	add_child(row)
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, int(MARGIN.x))
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	row.add_to_group(WorldLabels.KEEP_OUT_GROUP)
 	end_button = UiTheme.button(END_TEXT)
 	end_button.add_theme_font_size_override("font_size", 15)
 	end_button.focus_mode = Control.FOCUS_NONE

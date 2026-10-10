@@ -17,9 +17,11 @@ extends Node
 #                        炸弹猫里由 BombCatBot 出牌、偶尔不行!、摸牌、塞回、给牌(同样走牌桌的公开入口);
 #                        斗地主里由 DdzBot 随机叫分、按「提示」出牌、偶尔不出(同样走牌桌的公开入口);
 #                        吹牛骰子里由 LiarsDiceBot 喊价或「开!」(经出价器的 nudge_count / pick_face 与 submit_bid / submit_challenge)
+#   --no-fidget          配合 --bot:不按 W / S 探头缩头(截图检查时画面不被自己伸出去的头挡住;冒烟测试的脖子同步要靠它,别加)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
+#   --shots-every=秒     配合 --shots:另外每隔这么久(真实时间)拍一张 <名>_t<序号>.png,逐帧检查演出节奏
 #   --camera=first|third 本次运行的牌桌视角(第一人称 / 越肩),只覆盖本次、不写设置
 #   --update-from=IP:端口 从这个房主下载更新并装好,装好后打印 UPDATE_READY 退出(失败退出码 1)
 #   --update-url=网址    同上,但从任意更新源(如 BuildInfo.FEED_URL + 平台 + "/")
@@ -172,6 +174,8 @@ func _ready() -> void:
 	if opts.has("shots"):
 		DirAccess.make_dir_recursive_absolute(opts["shots"])
 		_capture_later("menu", 2.5)
+		if opts.has("shots-every"):
+			_capture_every(maxf(0.2, float(opts["shots-every"])))
 	var player_name: String = opts.get("name", "测试%d" % (OS.get_process_id() % 1000))
 	if opts.has("autohost"):
 		var err := Net.host_game(player_name, room_option(opts, player_name, mode), int(opts.get("port", "0")), mode, _species())
@@ -308,7 +312,7 @@ func _on_update_changed() -> void:
 func _fidget(delta: float) -> void:
 	# 对局中轮流按住 W、S:走与真人相同的按键读取,头探出去再收回来
 	_fidget_timer -= delta
-	if not Net.in_game or _fidget_timer > 0.0:
+	if not Net.in_game or _fidget_timer > 0.0 or opts.has("no-fidget"):
 		return
 	_fidget_timer = BOT_FIDGET
 	var key := InputEventKey.new()
@@ -618,6 +622,15 @@ func _capture_once(tag: String, delay: float) -> void:
 		return
 	_shot_counts[tag] = true
 	_capture_later(tag, delay)
+
+
+func _capture_every(period: float) -> void:
+	# 按真实时间定时拍(不受 --fast 影响),序号连续
+	var index := 0
+	while is_inside_tree():
+		await get_tree().create_timer(period, true, false, true).timeout
+		_capture_later("t%03d" % index, 0.0)
+		index += 1
 
 
 func _capture_later(tag: String, delay: float) -> void:
