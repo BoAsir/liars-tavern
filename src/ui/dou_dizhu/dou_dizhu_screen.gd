@@ -499,7 +499,7 @@ func refresh_actions() -> void:
 	hud.set_action_mode(DdzHud.ACTION_NONE)
 	hud.set_hint_mode(DdzHud.ACTION_NONE)
 	if cur is int and state.stage != "":
-		hud.set_turn(DdzHud.turn_text(name_of(cur), cur == my_pid and not animating, state.stage), cur == my_pid and not animating)
+		hud.set_turn(DdzHud.turn_text(name_of(cur), cur == my_pid, state.stage), cur == my_pid and not animating)
 	else:
 		hud.set_turn("", false)
 

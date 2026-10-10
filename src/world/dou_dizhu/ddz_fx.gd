@@ -301,6 +301,7 @@ func spotlight_on(pid: int, life := SPOT_LIFE) -> Node3D:
 	if patron == null:
 		return root
 	var cone := _mesh(root, BombCatProps.cone(), Color(1.0, 0.92, 0.62), 0.0)
+	cone.visible = pid != my_pid   # 自己当地主:光柱会从镜头前穿过,只留真的聚光灯
 	var base := patron.global_position
 	base.y = world.to_global(Vector3.ZERO).y
 	cone.global_position = base
