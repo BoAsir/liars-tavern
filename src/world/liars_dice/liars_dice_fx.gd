@@ -10,6 +10,7 @@ extends BombCatFx
 
 const MARKER_POP := 0.28            # 出价标记弹出来
 const MARKER_BOB := 0.012
+const MARKER_GUARD_RADIUS := 0.12   # 穿模防护:出价标记(放大的骰子 + 字)在桌心占的半径,探头的头绕开它
 const LABEL_GAP := 0.15             # 「×N」在大骰子右边(镜头右方向)这么远
 const COUNTER_DROP := 0.16          # 计数器在标记下面这么低
 const OPEN_TEXT_SIZE := 1.4
@@ -61,6 +62,7 @@ func bid_marker(count: int, face: int) -> void:
 	# 桌心浮出「这个点数的大骰子 + ×N」,弹一下;已有标记时顶掉旧的
 	clear_bid_marker()
 	_marker = _spawn("bid_marker", -1.0)
+	_guard_marker()
 	_marker.global_position = world.to_global(LiarsDiceLayout.marker_position())
 	_marker_face = face
 	_marker_die = MeshKit.add(_marker, LiarsDiceProps.die(), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE * 0.05,
@@ -101,6 +103,7 @@ func set_counter(n: int, target: int) -> void:
 	# 标记下面的计数「数到 n / 喊了 target」:每次变化弹一下,够数变绿
 	if not is_instance_valid(_marker):
 		_marker = _spawn("bid_marker", -1.0)
+		_guard_marker()
 		_marker.global_position = world.to_global(LiarsDiceLayout.marker_position())
 	if not is_instance_valid(_counter):
 		_counter = _label("", COUNTER_TEXT, COUNT_COLOR)
@@ -145,3 +148,9 @@ func die_popped(pos_local: Vector3) -> void:
 	var pos := world.to_global(pos_local + Vector3(0, 0.04, 0))
 	star_burst(pos, 6, 0.2, 0.65)
 	pop_text("啵!", pos + Vector3(0, 0.1, 0), Color(1.0, 0.9, 0.6), 0.55, 0.7, 0.12)
+
+
+func _guard_marker() -> void:
+	# 穿模防护:探头的头绕开桌心的出价标记(标记收走后自动忽略)
+	world.clip_guard.set_prop(&"liars_dice_marker", ClipGuard.follow(_marker, MARKER_GUARD_RADIUS,
+		PackedVector3Array([Vector3(0, MARKER_GUARD_RADIUS, 0)]), ClipGuard.BLOCK))

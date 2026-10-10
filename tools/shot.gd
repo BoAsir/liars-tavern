@@ -25,6 +25,7 @@ extends SceneTree
 # (LiarsDiceShowcase.HUD_STATES:bidding / peek / counting / lost / out / settlement),没写时 dice_overview 用 out,其余用 bidding。
 # 全套:--views=dice_seat,dice_fp,dice_peek,dice_seat,dice_close,dice_seat,dice_close,dice_overview,dice_seat
 #       --hud=bidding,peek,peek,counting,counting,lost,lost,out,settlement --liars-dice-showcase
+# --lineup 时 8 个物种一字排开(机位 lineup_front / lineup_back / lineup_heads …);再加 --ddz-hats=landlord|farmer|mix 给他们戴上斗地主的身份帽。
 # --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # --celebrate[=秒] 在已摆好的展台(--showcase / --poker-showcase / --bomb-cat-showcase)上开演结算庆祝(tools/celebrate_stage.gd:
@@ -110,6 +111,10 @@ func _run() -> void:
 			patron.rotation.y = PI
 			tavern.table_root.add_child(patron)
 			patron.look_at_point(Vector3(0, 1.2, 3.0))
+			if opts.has("ddz-hats"):   # 斗地主的身份帽:--ddz-hats=landlord 全戴瓜皮帽,=farmer 全戴草帽,=mix 交替
+				var kind: String = opts["ddz-hats"]
+				var landlord := kind == "landlord" or (kind == "mix" and i % 2 == 0)
+				DdzHats.put_on(patron, DdzState.ROLE_LANDLORD if landlord else DdzState.ROLE_FARMER, false)
 	if opts.get("scene", "") == "menu":
 		var world := TableWorld.new(tavern)
 		tavern.table_root.add_child(world)

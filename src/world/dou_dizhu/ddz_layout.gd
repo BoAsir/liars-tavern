@@ -19,8 +19,12 @@ const MAX_ROW := 0.46                      # 一行最宽这么宽(两端牌心�
 # 越肩机位(TableWorld.third_person_view)里自己的头和帽子挡住桌面偏左、靠近自己的那一块(约 x < −0.13、z > −0.15):
 # 对手的出牌行在各自面前再往桌子里侧(−Z)挪一点,本机的出牌行往右挪,都露在头的右上方
 const MY_ROW_SPOT := Vector2(0.11, 0.29)   # 本机出牌行中心 (x, z)
-const ROW_RADIUS := 0.36                   # 对手出牌行离桌心
-const ROW_BACK := 0.1                      # 对手出牌行再往里侧挪这么多
+const ROW_RADIUS := 0.3                    # 对手出牌行离桌心
+const ROW_BACK := 0.05                     # 对手出牌行再往里侧挪这么多
+# 穿模修复(2026-10-10):他人的牌扇改立在两爪前方的桌面上空(离桌心 ≈0.6 米,Patron.FAN_SEAT_POS),出牌行沿世界 X 排开,
+# 侧边两位对手的行朝自己那头伸得太远会插进自己的牌扇。对手的行收近桌心(原 0.36 / 0.1)、最宽 OPP_MAX_ROW(原同 MAX_ROW 0.46),
+# 两行之间、与底牌之间仍有空隙(test_ddz_world、tools/clip_report.gd 量过)
+const OPP_MAX_ROW := 0.36
 const ROW_TILT_DEG := 24.0                 # 出牌行与翻开的底牌牌顶微微翘起、朝向本机(平躺在远处的牌看不清点数)
 const PASS_LIFT := 0.11                    # 「不出」牌子悬在出牌行上方
 const ALARM_SIDE := 0.32                   # 报警徽章挂在头顶偏右
@@ -65,16 +69,21 @@ static func row_center(angle: float, mine: bool) -> Vector3:
 	return Vector3(d.x, SeatLayout.FELT_TOP, d.z - ROW_BACK)
 
 
-static func row_step(count: int) -> float:
+static func row_step(count: int, mine := true) -> float:
 	if count <= 1:
 		return PLAY_STEP
-	return minf(PLAY_STEP, MAX_ROW / float(count - 1))
+	return minf(PLAY_STEP, max_row(mine) / float(count - 1))
+
+
+static func max_row(mine: bool) -> float:
+	# 一行最宽(两端牌心之间):本机 MAX_ROW,对手 OPP_MAX_ROW
+	return MAX_ROW if mine else OPP_MAX_ROW
 
 
 static func play_slot(angle: float, mine: bool, i: int, count: int) -> Transform3D:
 	# 出牌行里第 i 张(从左往右)
 	var c := row_center(angle, mine)
-	var step := row_step(count)
+	var step := row_step(count, mine)
 	var x := c.x + (i - (count - 1) / 2.0) * step
 	var y := SeatLayout.FELT_TOP + Card3D.THICKNESS * PLAY_SCALE / 2.0 + 0.0005 + i * LAYER_STEP + lift_for_tilt(PLAY_SCALE)
 	return Transform3D(Basis(Vector3.RIGHT, deg_to_rad(ROW_TILT_DEG)).scaled(Vector3.ONE * PLAY_SCALE), Vector3(x, y, c.z))

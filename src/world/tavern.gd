@@ -75,6 +75,11 @@ func set_table_radius(radius: float) -> void:
 	RoomProps.fit_rug(radius)
 
 
+func table_decor() -> Array[Node3D]:
+	# 桌面摆设(烛台)的节点:牌桌按它们登记穿模防护形状
+	return _table_decor
+
+
 func set_table_decor_visible(shown: bool) -> void:
 	# 烛台连同它们的灯一起显示 / 隐藏;藏起来时留一盏桌沿暖光
 	CandlesProp.set_decor_visible(self, _table_decor, shown, _flickers)

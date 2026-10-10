@@ -28,6 +28,11 @@ const PAPER := Color(0.8, 0.79, 0.76)
 const PAPER_STRIPE := Color(0.8, 0.5, 0.56)
 const PETAL_COLORS := [Color(1.0, 0.72, 0.8), Color(1.0, 0.84, 0.88), Color(0.98, 0.62, 0.72), Color(1.0, 0.93, 0.95)]
 const SKULL_REF := 0.122                    # 帽子按这个颅骨半径建(颅骨更大的物种按比例放大)
+# 穿模修复(2026-10-10):帽子按物种贴合(DdzHats.FIT),用到的建模尺寸
+const RIM_RADIUS := {"landlord": 0.094, "farmer": 0.079}   # 帽口外沿半径:瓜皮帽的金边、草帽的帽冠
+const STRAW_CROWN_R := 0.079
+const STRAW_BRIM_R := 0.145
+const HOLE_PAD := 0.012                     # 耳洞比耳朵穿过帽檐的那一圈再大这么多(建模单位)
 
 static var _cache := {}
 
@@ -82,22 +87,44 @@ static func landlord_hat() -> ArrayMesh:
 		f.glow = Vector2.ZERO)
 
 
-static func straw_hat() -> ArrayMesh:
-	return _prop("hat_straw", func(f: MeshForge):
+static func hat(role: String, holes := []) -> ArrayMesh:
+	# role:"landlord" 瓜皮帽 / 其余草帽;holes:草帽帽檐上的耳洞 [Vector3(x, z, 半径)](帽子局部,建模单位;DdzHats.FIT 按物种量好)
+	return landlord_hat() if role == "landlord" else straw_hat(holes)
+
+
+static func straw_hat(holes := []) -> ArrayMesh:
+	# 草帽:帽檐按极坐标网格建(开耳洞时跳过洞里的格子、洞边补一圈立壁和深色包边),帽冠、草编纹、帽带、小雏菊同原来
+	var key := "hat_straw"
+	for h in holes:
+		key += "_%d_%d_%d" % [roundi(h.x * 1000.0), roundi(h.y * 1000.0), roundi(h.z * 1000.0)]
+	return _prop(key, func(f: MeshForge):
 		f.paint(STRAW, 0.88)
-		# 宽檐:外缘往下垂一点,上下两面
-		f.lathe(PackedVector2Array([Vector2(0.07, 0.004), Vector2(0.105, 0.0), Vector2(0.138, -0.01), Vector2(0.145, -0.015),
-			Vector2(0.14, -0.018), Vector2(0.105, -0.005), Vector2(0.07, -0.003)]), 40, PackedInt32Array([3, 4]))
+		_straw_brim(f, holes)
 		# 帽冠
-		f.lathe(PackedVector2Array([Vector2(0.079, -0.002), Vector2(0.077, 0.03), Vector2(0.067, 0.051), Vector2(0.042, 0.061),
+		f.lathe(PackedVector2Array([Vector2(STRAW_CROWN_R, -0.002), Vector2(0.077, 0.03), Vector2(0.067, 0.051), Vector2(0.042, 0.061),
 			Vector2(0.0, 0.063)]), 32)
-		# 草编纹:深一档的细环
+		# 草编纹:深一档的细环(碰到耳洞的地方断开)
 		f.paint(STRAW_DARK, 0.9)
 		for r in [0.094, 0.116, 0.134]:
-			var y: float = -0.0034 * (r - 0.07) / 0.03
-			f.torus(r - 0.0016, r + 0.0016, 40, MeshForge.xf(Vector3(0, y + 0.0018, 0)))
+			var y: float = -0.0034 * (r - 0.07) / 0.03 + 0.0018
+			for path in _ring_paths(r, y, holes):
+				f.tube(path, 0.0016, 5)
 		for p in [Vector2(0.0765, 0.034), Vector2(0.06, 0.054)]:
 			f.torus(p.x - 0.0014, p.x + 0.0014, 32, MeshForge.xf(Vector3(0, p.y, 0)))
+		# 耳洞的深色包边(洞挨着帽檐外缘时成了缺口:只包帽檐上的那一段)
+		for h in holes:
+			var ring := PackedVector3Array()
+			for k in 33:
+				var a := TAU * k / 32.0
+				var q: Vector2 = Vector2(h.x, h.y) + Vector2(cos(a), sin(a)) * h.z
+				if q.length() > STRAW_BRIM_R - 0.006 or _in_hole(q, holes.filter(func(o: Vector3) -> bool: return o != h)):
+					if ring.size() > 1:
+						f.tube(ring, 0.0032, 6)
+					ring = PackedVector3Array()
+					continue
+				ring.append(Vector3(q.x, _brim_y(q.length(), true) - 0.0015, q.y))
+			if ring.size() > 1:
+				f.tube(ring, 0.0032, 6)
 		# 红帽带
 		f.paint(RIBBON, 0.7)
 		f.lathe(PackedVector2Array([Vector2(0.0805, 0.002), Vector2(0.0795, 0.019)]), 32)
@@ -113,6 +140,106 @@ static func straw_hat() -> ArrayMesh:
 		f.sphere(0.0045, 8, MeshForge.xf(Vector3(0, 0, 0.002), Vector3.ZERO, Vector3(1.0, 1.0, 0.6)))
 		f.glow = Vector2.ZERO
 		f.pop())
+
+
+const BRIM_TOP := [Vector2(0.07, 0.004), Vector2(0.105, 0.0), Vector2(0.138, -0.01), Vector2(STRAW_BRIM_R, -0.015)]
+const BRIM_BOTTOM := [Vector2(0.07, -0.003), Vector2(0.105, -0.005), Vector2(0.138, -0.0172), Vector2(STRAW_BRIM_R, -0.015)]
+const BRIM_RINGS := [0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.138, STRAW_BRIM_R]
+const BRIM_SEGMENTS := 72
+
+
+static func _brim_y(r: float, top: bool) -> float:
+	# 帽檐上 / 下表面在半径 r 处的高度(外缘往下垂)
+	var prof: Array = BRIM_TOP if top else BRIM_BOTTOM
+	if r <= prof[0].x:
+		return prof[0].y
+	for i in range(1, prof.size()):
+		if r <= prof[i].x:
+			return lerpf(prof[i - 1].y, prof[i].y, (r - prof[i - 1].x) / (prof[i].x - prof[i - 1].x))
+	return prof[-1].y
+
+
+static func _in_hole(q: Vector2, holes: Array) -> bool:
+	for h in holes:
+		if q.distance_to(Vector2(h.x, h.y)) < h.z:
+			return true
+	return false
+
+
+static func _straw_brim(f: MeshForge, holes: Array) -> void:
+	# 帽檐:BRIM_RINGS × BRIM_SEGMENTS 的极坐标网格,上下两面;格子中心在耳洞里就跳过,洞边(留下的格子挨着跳过的格子)补立壁
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var nr := BRIM_RINGS.size()
+	var keep := {}
+	for i in nr - 1:
+		for j in BRIM_SEGMENTS:
+			var rm: float = (BRIM_RINGS[i] + BRIM_RINGS[i + 1]) * 0.5
+			var am := TAU * (j + 0.5) / BRIM_SEGMENTS
+			keep[Vector2i(i, j)] = not _in_hole(Vector2(sin(am), cos(am)) * rm, holes)
+	for i in nr - 1:
+		for j in BRIM_SEGMENTS:
+			if not keep[Vector2i(i, j)]:
+				continue
+			for top in [true, false]:
+				var c := [_brim_point(i, j, top), _brim_point(i, j + 1, top), _brim_point(i + 1, j, top), _brim_point(i + 1, j + 1, top)]
+				_quad(points, normals, indices, c[0], c[1], c[2], c[3], Vector3.UP if top else Vector3.DOWN)
+			# 立壁:四个邻格里跳过的那一侧
+			var sides := [[Vector2i(i - 1, j), i, j, i, j + 1], [Vector2i(i + 1, j), i + 1, j, i + 1, j + 1],
+				[Vector2i(i, j - 1), i, j, i + 1, j], [Vector2i(i, j + 1), i, j + 1, i + 1, j + 1]]
+			for side in sides:
+				var n: Vector2i = side[0]
+				n.y = posmod(n.y, BRIM_SEGMENTS)
+				if n.x < 0 or n.x >= nr - 1 or keep.get(n, true):
+					continue
+				var a := _brim_point(side[1], side[2], true)
+				var b := _brim_point(side[3], side[4], true)
+				var a2 := _brim_point(side[1], side[2], false)
+				var b2 := _brim_point(side[3], side[4], false)
+				var mid := (_brim_point(i, j, true) + _brim_point(i + 1, j + 1, true)) * 0.5
+				var out := ((a + b) * 0.5 - mid) * Vector3(1, 0, 1)
+				_quad(points, normals, indices, a, b, a2, b2, out.normalized())
+	f._append(points, normals, indices, Transform3D.IDENTITY)
+
+
+static func _brim_point(i: int, j: int, top: bool) -> Vector3:
+	var r: float = BRIM_RINGS[i]
+	var a := TAU * float(j) / BRIM_SEGMENTS
+	return Vector3(sin(a) * r, _brim_y(r, top), cos(a) * r)
+
+
+static func _quad(points: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
+		p00: Vector3, p01: Vector3, p10: Vector3, p11: Vector3, n: Vector3) -> void:
+	# 四边形两个三角形,绕向按 MeshForge.grid 的口径朝 n
+	if (p01 - p00).cross(p10 - p00).dot(n) < 0.0:
+		var t := p01
+		p01 = p10
+		p10 = t
+	var base := points.size()
+	for p in [p00, p01, p10, p11]:
+		points.append(p)
+		normals.append(n)
+	indices.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+
+
+static func _ring_paths(r: float, y: float, holes: Array) -> Array:
+	# 半径 r 的一圈,在耳洞处断开:返回若干段折线
+	var paths := []
+	var cur := PackedVector3Array()
+	var steps := 48
+	for k in steps + 1:
+		var a := TAU * k / steps
+		var q := Vector2(sin(a), cos(a)) * r
+		if _in_hole(q, holes.map(func(h: Vector3) -> Vector3: return Vector3(h.x, h.y, h.z + 0.004))):
+			if cur.size() > 1:
+				paths.append(cur)
+			cur = PackedVector3Array()
+		else:
+			cur.append(Vector3(q.x, y, q.y))
+	if cur.size() > 1:
+		paths.append(cur)
+	return paths
 
 
 # —— 王炸的小火箭 ——

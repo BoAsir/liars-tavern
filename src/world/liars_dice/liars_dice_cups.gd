@@ -113,6 +113,9 @@ func setup(order: Array, species: Dictionary) -> void:
 		mesh.name = "Mesh"
 		holder.transform = rest_of(pid)
 		cups[pid] = holder
+		# 穿模防护:探头的头从骰盅上面拱过去(扣着、捧着摇、翻开都跟着盅走;盅收走后自动忽略)
+		world.clip_guard.set_prop(StringName("liars_dice_cup_%d" % pid), ClipGuard.follow(holder, LiarsDiceLayout.CUP_RADIUS,
+			PackedVector3Array([Vector3.ZERO, Vector3(0, LiarsDiceLayout.CUP_HEIGHT, 0)])))
 		cup_state[pid] = STATE_DOWN
 		dice[pid] = []
 		values[pid] = []
@@ -238,6 +241,9 @@ func _shake_one(pid: int, shake_time: float) -> void:
 	var rest := rest_of(pid)
 	var up_basis := LiarsDiceLayout.facing(angle) * Basis(Vector3.RIGHT, PI)
 	var center := LiarsDiceLayout.shake_global(seat)
+	if pid == my_pid and world.first_person:
+		# 第一人称:自己的盅捧得低一点、远一点,摇得看得见又不占半个画面(穿模修复 2026-10-10)
+		center = seat * LiarsDiceLayout.SHAKE_POINT_FP
 	var held := Transform3D(up_basis, center + Vector3(0, LiarsDiceLayout.CUP_HEIGHT * 0.5, 0))
 	var right := LiarsDiceLayout.right_of(angle)
 	var fwd := -LiarsDiceLayout.direction(angle)
