@@ -424,9 +424,8 @@ func pop_die(pid: int) -> Vector3:
 	if list.is_empty():
 		return world.head_position(pid) if world.patrons.has(pid) else LiarsDiceLayout.TABLE_FOCUS
 	var die: MeshInstance3D = list.pop_back()
-	var halo: Variant = die.get_meta(&"halo", null)
-	if halo is Node and is_instance_valid(halo):
-		halo.queue_free()
+	if die.has_meta(&"halo") and is_instance_valid(die.get_meta(&"halo")):
+		die.get_meta(&"halo").queue_free()
 	var vals: Array = values.get(pid, [])
 	if not vals.is_empty():
 		vals.pop_back()
