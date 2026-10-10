@@ -2,14 +2,17 @@ class_name WorldLabels
 extends Control
 # 3D 锚定的 2D 控件:每帧把控件投影到世界坐标点上方(铭牌、对话气泡)。
 # 锚点在相机背后或屏幕外时隐藏。
+# 登记时 avoid = true 的控件(各种对话气泡)摆好之后再让位:和铭牌、先登记的气泡重叠时左右挪开
+# (对面的人铭牌贴着画面上缘时,声称气泡、九宫格气泡都被收进画面、叠在同一处;邻座的气泡也会撞在一起)。
 # 条目里的控件可能已自行释放(气泡淡出后 queue_free):取出时先用无类型变量判有效,
 # 已释放的实例赋给 Control 类型变量或作为 Control 返回值本身就是脚本错误。
 
 
 const EDGE_MARGIN := 4.0   # 控件离屏幕边缘的最小距离
+const AVOID_GAP := 4.0     # 让位时和别的控件之间留的空隙
 
 var camera: Camera3D
-var _entries := {}   # key -> {"node": Control, "anchor": Callable, "offset": Vector2 或返回 Vector2 的 Callable}
+var _entries := {}   # key -> {"node": Control, "anchor": Callable, "offset": Vector2 或返回 Vector2 的 Callable, "avoid": bool}
 
 
 func _init(p_camera: Camera3D) -> void:
@@ -21,12 +24,13 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-func track(key: String, node: Control, anchor: Callable, offset: Variant = Vector2.ZERO) -> void:
-	# offset 可以是每帧现算的 Callable(快捷语气泡叠在铭牌、声称气泡之上,高度跟着它们变)
+func track(key: String, node: Control, anchor: Callable, offset: Variant = Vector2.ZERO, avoid := false) -> void:
+	# offset 可以是每帧现算的 Callable(快捷语气泡叠在铭牌、声称气泡之上,高度跟着它们变);
+	# avoid:摆好后和别的控件重叠就左右让开(对话气泡用;铭牌不用,它要跟着头)
 	untrack(key)
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(node)
-	_entries[key] = {"node": node, "anchor": anchor, "offset": offset}
+	_entries[key] = {"node": node, "anchor": anchor, "offset": offset, "avoid": avoid}
 	_place(node, _entries[key])
 
 
@@ -70,6 +74,54 @@ func _process(_delta: float) -> void:
 				continue
 			if (entry["offset"] is Callable) == dependent:
 				_place(node, entry)
+	_separate()
+
+
+func _separate() -> void:
+	# 让位:不让位的控件(铭牌)原地不动当障碍;让位的按「固定偏移的先、现算偏移的后,同一遍里先登记的先」
+	# 逐个摆:和已经摆好的重叠就左右挪到最近的空处(挪动量取各障碍左右边缘处,挑绝对值最小又不出画面的);
+	# 两边都没有空处就留在原处。每帧从 _place 的原位重新算,不累积
+	var placed: Array[Rect2] = []
+	var movers: Array = []
+	for dependent in [false, true]:
+		for key in _entries:
+			var entry: Dictionary = _entries[key]
+			var node = entry["node"]
+			if not is_instance_valid(node) or not node.visible or (entry["offset"] is Callable) != dependent:
+				continue
+			if entry.get("avoid", false):
+				movers.append(node)
+			else:
+				placed.append(Rect2(node.position, node.size))
+	for node in movers:
+		var rect := clear_spot(Rect2(node.position, node.size), placed, size.x)
+		node.position = rect.position
+		placed.append(rect)
+
+
+static func clear_spot(rect: Rect2, obstacles: Array[Rect2], width: float) -> Rect2:
+	# rect 和 obstacles 都不重叠时原样返回;否则横向挪到最近的空处(不出 [EDGE_MARGIN, width − EDGE_MARGIN]),没有空处原样返回
+	if not _hits(rect, obstacles):
+		return rect
+	var shifts: Array[float] = []
+	for other in obstacles:
+		shifts.append(other.end.x + AVOID_GAP - rect.position.x)
+		shifts.append(other.position.x - AVOID_GAP - rect.end.x)
+	shifts.sort_custom(func(a: float, b: float) -> bool: return absf(a) < absf(b))
+	for dx in shifts:
+		var moved := Rect2(rect.position + Vector2(dx, 0.0), rect.size)
+		if moved.position.x < EDGE_MARGIN - 0.5 or moved.end.x > width - EDGE_MARGIN + 0.5:
+			continue
+		if not _hits(moved, obstacles):
+			return moved
+	return rect
+
+
+static func _hits(rect: Rect2, obstacles: Array[Rect2]) -> bool:
+	for other in obstacles:
+		if rect.intersects(other):
+			return true
+	return false
 
 
 func _place(node: Control, entry: Dictionary) -> void:
