@@ -18,6 +18,7 @@ const ROW_GAP := 0.064             # 一行里相邻两颗的间距
 const OPEN_BACK := 0.13            # 开盅时骰盅翻过来(口朝上)放回主人那边这么远
 const OPEN_LIFT := 0.012           # 口朝上时顶上的小皮扣垫着,整只再抬这么高
 const SHAKE_POINT := Vector3(0.0, 0.91, -0.5)     # 摇盅时盅心的位置(座位坐标):下巴前下方、桌面上空(再高会戳进动森式大头里)
+const SHAKE_POINT_FP := Vector3(0.06, 0.86, -0.62)   # 第一人称时自己摇盅的位置:更低更远,盅在画面下方摇,不挡住别人
 const PAW_GAP := 0.12              # 两只爪子扶在盅身两侧,离盅心这么远
 const PAW_BACK := 0.04             # 爪子比盅心稍靠自己(手臂够得着)
 const PEEK_TILT := deg_to_rad(58.0)   # 偷看:靠主人那一边的盅沿掀起来这么多度
