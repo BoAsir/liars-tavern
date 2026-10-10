@@ -340,6 +340,27 @@ func test_first_person_fan_pulls_in_without_changing_the_picture():
 	assert_almost_eq(near_dist / far_dist, Patron.FP_FAN_NEAR, 0.02, "探头时牌扇收到 FP_FAN_NEAR")
 
 
+func test_own_fan_stows_onto_the_table_off_seat_and_comes_back():
+	# 镜头离开座位(特写、翻牌)时自己举着的牌扇收到桌面上空、矮下去,回座再举回来(越肩与第一人称都一样)
+	_world([0, 1])
+	await wait_seconds(SETTLE)
+	var me: Patron = world.patrons[1]
+	_fill(me, "liars", 5)
+	for fp in [false, true]:
+		world.set_first_person(fp)
+		await wait_frames(2)
+		var held := me.transform.affine_inverse() * me.fan.global_transform
+		me.set_fan_stowed(true)
+		await wait_seconds(0.6)
+		var stowed := me.transform.affine_inverse() * me.fan.global_transform
+		assert_almost_eq(stowed.origin, me.stowed_fan_transform().origin, Vector3.ONE * 0.01, "收到桌面上空 fp=%s" % fp)
+		assert_lt(stowed.origin.y, held.origin.y - 0.1, "比举着时低得多")
+		me.set_fan_stowed(false)
+		await wait_seconds(0.6)
+		var back := me.transform.affine_inverse() * me.fan.global_transform
+		assert_almost_eq(back.origin, held.origin, Vector3.ONE * 0.02, "回座举回来 fp=%s" % fp)
+
+
 # —— 出局 / 手臂 ——
 
 func test_dead_fan_lands_face_down_on_the_table_clear_of_the_body():
@@ -440,3 +461,20 @@ func test_guard_tolerates_shapes_already_touching_at_rest():
 	var moved: Vector2 = ClipGuard.push_out(list, Vector2(0.1, 0), Vector2(0, -1), m, 0.9)[0]
 	assert_almost_eq(moved.x, 0.0, 0.001, "往它那边挪会被推回原来的距离")
 	guard.world.free()
+
+
+func test_guard_drops_props_whose_node_is_freed():
+	# 骰盅、出价标记这类跟节点绑着的形状:节点释放后自动收走,不再报错
+	var holder := Node3D.new()
+	add_child(holder)
+	var guard := ClipGuard.new(holder)
+	var cup := Node3D.new()
+	holder.add_child(cup)
+	guard.set_prop(&"cup", ClipGuard.follow(cup, 0.1, PackedVector3Array([Vector3.ZERO, Vector3(0, 0.18, 0)])))
+	await wait_frames(1)
+	assert_eq(guard.shapes().size(), 1)
+	cup.free()
+	await wait_process_frames(2)
+	assert_eq(guard.shapes().size(), 0, "节点释放后不算")
+	assert_false(guard.has_prop(&"cup"), "登记也收走")
+	holder.free()
