@@ -114,7 +114,10 @@ func test_hats_fit_each_skull_and_hide_in_first_person():
 		var skull: Array = patron.skull_ellipsoid()
 		var hat_in_head := patron.head.global_transform.affine_inverse() * hat.global_transform
 		assert_gt(hat_in_head.origin.y, (skull[0] as Vector3).y, "帽口在颅骨中心之上")
-		assert_almost_eq(hat_in_head.basis.get_scale().x, (skull[1] as Vector3).x / DdzProps.SKULL_REF, 0.02, "按颅骨缩放")
+		# 穿模修复(2026-10-10):按物种贴合表摆(DdzHats.FIT,坐在头顶上、不碰头和耳朵;逐物种的穿模判定见 test_ddz_hats)
+		var want := DdzHats.head_transform(DdzHats.fit_for(patron.species_index, DdzState.ROLE_FARMER))
+		assert_almost_eq(hat_in_head.origin, want.origin, Vector3.ONE * 0.003, "按物种贴合表摆")
+		assert_almost_eq(hat_in_head.basis.get_scale(), want.basis.get_scale(), Vector3.ONE * 0.02, "按物种贴合表缩放")
 	var me: Patron = world.patrons[1]
 	me.set_head_hidden(true)
 	var mesh: GeometryInstance3D = DdzHats.hat_node(me).get_node("HatMesh")
@@ -127,6 +130,9 @@ func test_hat_meshes_are_cached():
 	assert_eq(DdzProps.landlord_hat(), DdzProps.landlord_hat())
 	assert_eq(DdzProps.straw_hat(), DdzProps.straw_hat())
 	assert_ne(DdzProps.landlord_hat(), DdzProps.straw_hat())
+	var holes := [Vector3(0.12, 0.0, 0.03)]
+	assert_eq(DdzProps.straw_hat(holes), DdzProps.straw_hat(holes), "开耳洞的草帽按洞缓存")
+	assert_ne(DdzProps.straw_hat(holes), DdzProps.straw_hat())
 
 
 # —— 牌层:只亮已公开的牌 ——
