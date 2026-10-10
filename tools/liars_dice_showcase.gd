@@ -5,6 +5,7 @@ extends Node
 # 状态(HUD_STATES)用假数据走与牌桌相同的接口(LiarsDiceCups / LiarsDiceFx / LiarsDiceHud / LiarsDiceNameplate),
 # 每种状态先用真实的动画入口摆好 3D(等动画播完再拍):
 #   bidding   自己的回合:桌心浮着「3 个 5」的大骰子,出价器停在 4 个 5,横幅「轮到你了」
+#   shaking   新一轮:全员双手捧着骰盅哗啦哗啦摇(摇个不停,方便取景)
 #   peek      新一轮刚摇完:自己掀开盅沿偷看(配 dice_fp 机位就是第一人称视线压低凑过去)
 #   counting  开盅计数:所有骰盅翻开、骰子排成一行,5 点与 1 点一颗颗亮起来,计数器数到一半
 #   lost      数完判定「吹牛!」:喊的人的一颗骰子「啵」地弹飞冒星星
@@ -24,12 +25,13 @@ const LOSER := 4
 const TURN_LEFT := 21.0
 const ANNOUNCE_HOLD := 30.0
 const STATE_BIDDING := "bidding"
+const STATE_SHAKING := "shaking"
 const STATE_PEEK := "peek"
 const STATE_COUNTING := "counting"
 const STATE_LOST := "lost"
 const STATE_OUT := "out"
 const STATE_SETTLEMENT := "settlement"
-const HUD_STATES := [STATE_BIDDING, STATE_PEEK, STATE_COUNTING, STATE_LOST, STATE_OUT, STATE_SETTLEMENT]
+const HUD_STATES := [STATE_BIDDING, STATE_SHAKING, STATE_PEEK, STATE_COUNTING, STATE_LOST, STATE_OUT, STATE_SETTLEMENT]
 const COUNTED := 5          # counting 状态数到第几颗
 const LOG := ["—— 第 3 轮 · 场上 27 颗骰子 ——", "小熊 喊 2 个 5", "老狐狸 喊 3 个 5"]
 
@@ -92,6 +94,9 @@ func _stage_world(state: String) -> void:
 			world.patrons[ME].set_active(true)
 			world.patrons[4].set_expression("smug")
 			await get_tree().create_timer(0.5).timeout
+		STATE_SHAKING:
+			cups.shake(range(1, SEATS + 1), 60.0)
+			await get_tree().create_timer(0.4).timeout
 		STATE_PEEK:
 			cups.peek(ME, 30.0)
 			for pid in [3, 5]:
@@ -143,7 +148,7 @@ func stage_hud(ui_root: Control, state: String) -> void:
 	match state:
 		STATE_COUNTING, STATE_LOST, STATE_OUT:
 			current = -1
-		STATE_PEEK:
+		STATE_PEEK, STATE_SHAKING:
 			current = 3
 	for pid in range(2, SEATS + 1):
 		var plate := LiarsDiceNameplate.new(NAMES[pid])
@@ -155,10 +160,10 @@ func stage_hud(ui_root: Control, state: String) -> void:
 		plate.set_info(count, not out, false, pid == current, last)
 		var anchor: Callable = world.nameplate_anchor.bind(pid) if world.is_poker_table() else world.patrons[pid].nameplate_anchor
 		labels.track("plate:%d" % pid, plate, anchor)
-	var bid := BID if state in [STATE_BIDDING, STATE_PEEK] else CHALLENGE
+	var bid := BID if state in [STATE_BIDDING, STATE_PEEK, STATE_SHAKING] else CHALLENGE
 	var bids := [{"pid": 3, "count": 2, "face": 5}, BID] if state == STATE_BIDDING else [{"pid": 3, "count": 2, "face": 5}, BID,
 		{"pid": 5, "count": 6, "face": 5}, {"pid": 6, "count": 8, "face": 4}, CHALLENGE]
-	if state == STATE_PEEK:
+	if state == STATE_PEEK or state == STATE_SHAKING:
 		bid = {}
 		bids = []
 	var total := 27
@@ -187,6 +192,9 @@ func stage_hud(ui_root: Control, state: String) -> void:
 			hud.set_turn("轮到你了 · 加注还是开?", true)
 			hud.set_countdown(TURN_LEFT, Protocol.TURN_TIMEOUT, true)
 			hud.set_picker(count, face, face_ok, true, true, true, true, true)
+		STATE_SHAKING:
+			hud.set_picker(count, face, face_ok, false, true, false, false, false)
+			hud.log_event("—— 第 4 轮 · 场上 26 颗骰子 ——", UiTheme.BRASS)
 		STATE_PEEK:
 			hud.set_turn("等待 小熊 喊…", false)
 			hud.set_picker(count, face, face_ok, false, true, false, false, false)

@@ -6,8 +6,8 @@ class_name LiarsDiceLayout
 
 const TABLE_FOCUS := Vector3(0, SeatLayout.TABLE_TOP + 0.05, 0)   # 酒客平时看向桌心
 const DIE_SIZE := 0.05             # 骰子边长(米;牌桌上隔两三米看,做得比真骰子胖)
-const CUP_RADIUS := 0.086          # 盅口外半径
-const CUP_HEIGHT := 0.15
+const CUP_RADIUS := 0.102          # 盅口外半径
+const CUP_HEIGHT := 0.18
 const CUP_INSET := 0.27            # 骰盅中心离桌沿这么远(往桌心)
 const CUP_SIDE := 0.17             # 往主人右手(或左手)挪这么多
 const CUP_SIDE_BIG := 0.27         # 大桌(5–6 人)座位更宽:越肩镜头从更高更远处看,盅再往右挪,不被自己的大头挡住
@@ -17,8 +17,9 @@ const ROW_FORWARD := 0.16          # 开盅后骰子排成一行:离盅心往桌
 const ROW_GAP := 0.064             # 一行里相邻两颗的间距
 const OPEN_BACK := 0.13            # 开盅时骰盅翻过来(口朝上)放回主人那边这么远
 const OPEN_LIFT := 0.012           # 口朝上时顶上的小皮扣垫着,整只再抬这么高
-const SHAKE_POINT := Vector3(0.0, 0.99, -0.34)   # 摇盅时捧在胸前(座位坐标)
-const PAW_GAP := 0.1               # 两只爪子扶在盅身两侧,离盅心这么远
+const SHAKE_POINT := Vector3(0.0, 0.91, -0.5)     # 摇盅时盅心的位置(座位坐标):下巴前下方、桌面上空(再高会戳进动森式大头里)
+const PAW_GAP := 0.12              # 两只爪子扶在盅身两侧,离盅心这么远
+const PAW_BACK := 0.04             # 爪子比盅心稍靠自己(手臂够得着)
 const PEEK_TILT := deg_to_rad(58.0)   # 偷看:靠主人那一边的盅沿掀起来这么多度
 const MARKER_HEIGHT := 0.36        # 桌心出价标记(大骰子图标 + 个数)离桌面这么高
 const MARKER_SCALE := 3.2          # 出价标记的大骰子是普通骰子的这么多倍
@@ -145,7 +146,7 @@ static func shake_global(seat: Transform3D) -> Vector3:
 static func paw_points(seat: Transform3D, cup_center: Vector3) -> Array:
 	# 两只爪子扶盅的位置(座位坐标):盅身两侧(盅心在座位坐标里左右各 PAW_GAP)
 	var local := seat.affine_inverse() * cup_center
-	return [local + Vector3(-PAW_GAP, 0.0, 0.02), local + Vector3(PAW_GAP, 0.0, 0.02)]
+	return [local + Vector3(-PAW_GAP, 0.0, PAW_BACK), local + Vector3(PAW_GAP, 0.0, PAW_BACK)]
 
 
 static func marker_position() -> Vector3:

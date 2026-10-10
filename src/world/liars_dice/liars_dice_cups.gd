@@ -206,7 +206,7 @@ func gather(pids: Array) -> void:
 		sfx.emit("dice_clack")
 
 
-func shake(pids: Array) -> void:
+func shake(pids: Array, shake_time := SHAKE_TIME) -> void:
 	# 双手捧起骰盅(口朝上)到胸前、哗啦哗啦摇、翻过来「啪」地扣在桌上;手跟着盅(Patron.hold_paws)。
 	# 自己的骰子在摇的时候藏起来(扣下后由 set_my_dice 按新点数重建)
 	var any := false
@@ -214,16 +214,16 @@ func shake(pids: Array) -> void:
 		if not cups.has(pid) or cup_state[pid] == STATE_TIPPED:
 			continue
 		any = true
-		_shake_one(pid)
+		_shake_one(pid, shake_time)
 	if not any:
 		return
 	sfx.emit("dice_shake")
 	var tween := create_tween()
-	tween.tween_interval(GRAB_TIME + SHAKE_TIME + SLAM_TIME * 0.8)
+	tween.tween_interval(GRAB_TIME + shake_time + SLAM_TIME * 0.8)
 	tween.tween_callback(func() -> void: sfx.emit("cup_slam"))
 
 
-func _shake_one(pid: int) -> void:
+func _shake_one(pid: int, shake_time: float) -> void:
 	_kill(pid)
 	_hover = false if pid == my_pid else _hover
 	cup_state[pid] = STATE_HELD
@@ -243,7 +243,7 @@ func _shake_one(pid: int) -> void:
 	var fwd := -LiarsDiceLayout.direction(angle)
 	var phase := float(pid % 7) * 0.9
 	var patron: Patron = world.patrons.get(pid)
-	var total := SHAKE_TOTAL
+	var total := GRAB_TIME + shake_time + SLAM_TIME
 	var tween := create_tween()
 	_tweens[pid] = tween
 	tween.tween_method(func(t: float) -> void:
@@ -252,18 +252,16 @@ func _shake_one(pid: int) -> void:
 		if time < GRAB_TIME:
 			var k := smoothstep(0.0, 1.0, time / GRAB_TIME)
 			xform = _blend(start, held, k)
-		elif time < GRAB_TIME + SHAKE_TIME:
+		elif time < GRAB_TIME + shake_time:
 			var s := (time - GRAB_TIME) * TAU * SHAKE_HZ + phase
 			var off := right * sin(s) * SHAKE_SWING + Vector3.UP * absf(sin(s * 0.5 + 0.4)) * SHAKE_BOB
 			xform = Transform3D(Basis(fwd, sin(s) * SHAKE_ROLL) * held.basis, held.origin + off)
 		else:
-			var k := (time - GRAB_TIME - SHAKE_TIME) / SLAM_TIME
+			var k := (time - GRAB_TIME - shake_time) / SLAM_TIME
 			xform = _blend(held, rest, k * k)
 		cup.transform = xform
 		if patron != null and is_instance_valid(patron) and patron.alive:
 			var body_center := xform.origin + xform.basis.y.normalized() * LiarsDiceLayout.CUP_HEIGHT * 0.5
-			if time >= GRAB_TIME + SHAKE_TIME:
-				body_center = xform.origin + xform.basis.y.normalized() * LiarsDiceLayout.CUP_HEIGHT * 0.5
 			var paws := LiarsDiceLayout.paw_points(seat, body_center)
 			patron.hold_paws(paws[0], paws[1]), 0.0, 1.0, total)
 	tween.tween_callback(func() -> void:

@@ -354,7 +354,9 @@ func _update_info() -> void:
 	var my_text := "已出局,观战中"
 	if state.am_alive():
 		my_text = "你:%d 颗骰子" % state.counts.get(my_pid, state.shown_dice.size())
-	hud.set_info(state.total, state.bid, LiarsDiceHud.bid_line(state.bid, state.name_of(bidder), bidder == my_pid),
+	var bid_text := LiarsDiceHud.bid_line(state.bid, state.name_of(bidder), bidder == my_pid) \
+		if state.step != LiarsDiceScreenState.STEP_OVER else "对局结束"
+	hud.set_info(state.total, state.bid, bid_text,
 		LiarsDiceHud.bids_line(state.bids), turn_text, my_text)
 
 
