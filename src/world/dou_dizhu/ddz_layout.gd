@@ -8,21 +8,30 @@ class_name DdzLayout
 const TABLE_FOCUS := Vector3(0, SeatLayout.TABLE_TOP + 0.05, 0)   # 酒客平时看向桌心
 const CARD_STEP := 0.0011
 const LAYER_STEP := 0.0009                 # 一行里后面的牌叠高一点(重叠处不闪烁)
-const DECK_SPOT := Vector2(0.0, 0.07)      # 发牌处 / 底牌中心 (x, z)
+const DECK_SPOT := Vector2(0.07, 0.02)     # 发牌处 / 底牌中心 (x, z):往右挪一点,越肩时自己的头挡住的是桌心偏左那块
 const DECK_SCALE := 1.1
-const BOTTOM_GAP := 0.155                  # 三张底牌之间的距离
+const BOTTOM_GAP := 0.16                   # 三张底牌之间的距离
 const BOTTOM_SCALE := 1.15
 const BOTTOM_TILT := [0.06, -0.03, 0.05]   # 底牌稍稍歪一点(弧度),不像摆得太整齐
-const PLAY_SCALE := 1.15
-const PLAY_STEP := 0.062                   # 出牌行相邻两张的距离(重叠排开)
-const MAX_ROW := 0.5                       # 一行最宽这么宽(两端牌心之间)
-const MY_ROW_RADIUS := 0.37                # 本机出牌行离桌心
-const ROW_RADIUS := 0.4                    # 对手出牌行离桌心
+const PLAY_SCALE := 1.25
+const PLAY_STEP := 0.064                   # 出牌行相邻两张的距离(重叠排开)
+const MAX_ROW := 0.46                      # 一行最宽这么宽(两端牌心之间)
+# 越肩机位(TableWorld.third_person_view)里自己的头和帽子挡住桌面偏左、靠近自己的那一块(约 x < −0.13、z > −0.15):
+# 对手的出牌行在各自面前再往桌子里侧(−Z)挪一点,本机的出牌行往右挪,都露在头的右上方
+const MY_ROW_SPOT := Vector2(0.11, 0.29)   # 本机出牌行中心 (x, z)
+const ROW_RADIUS := 0.36                   # 对手出牌行离桌心
+const ROW_BACK := 0.1                      # 对手出牌行再往里侧挪这么多
+const ROW_TILT_DEG := 24.0                 # 出牌行与翻开的底牌牌顶微微翘起、朝向本机(平躺在远处的牌看不清点数)
 const PASS_LIFT := 0.11                    # 「不出」牌子悬在出牌行上方
 const ALARM_SIDE := 0.32                   # 报警徽章挂在头顶偏右
 const SWEEP_SCALE := 0.4                   # 清桌:牌收向桌心时缩小到这么大
-const FAN_SCALE_ME := 0.82                 # 越肩时自己的牌扇缩小(同炸弹猫小桌)
-const FAN_RAISE_ME := 0.13
+# 越肩机位(TableWorld.third_person_override):比骗子酒馆的更靠右、更高一点,自己的头和帽子落在画面左下,
+# 不挡左边那位对手面前的出牌行
+const THIRD_PERSON := Vector3(0.95, 2.45, 1.05)
+const FAN_SCALE_ME := 0.55                 # 越肩时自己的牌扇缩小、往右下挪(20 张的扇子别挡住桌面;2D 手牌条才是主入口)
+const FAN_SHIFT_ME := Vector3(0.13, 0.03, 0.0)
+const FP_FAN_CAM := Vector3(0.36, -0.035, -0.62)   # 第一人称:牌扇拿在镜头右侧偏下(在底部 HUD 之上)
+const FP_FAN_SCALE := 0.5
 
 
 # —— 发牌处与底牌 ——
@@ -38,18 +47,22 @@ static func bottom_slot(i: int, face_up := false) -> Transform3D:
 	var x := DECK_SPOT.x + (i - 1) * BOTTOM_GAP
 	var tilt: float = BOTTOM_TILT[clampi(i, 0, BOTTOM_TILT.size() - 1)]
 	var basis := Basis(Vector3.UP, tilt)
+	var y := SeatLayout.FELT_TOP + Card3D.THICKNESS * BOTTOM_SCALE / 2.0 + 0.0004 + i * LAYER_STEP
 	if not face_up:
 		basis = basis * Basis(Vector3.BACK, PI)
-	var y := SeatLayout.FELT_TOP + Card3D.THICKNESS * BOTTOM_SCALE / 2.0 + 0.0004 + i * LAYER_STEP
+	else:
+		basis = basis * Basis(Vector3.RIGHT, deg_to_rad(ROW_TILT_DEG))
+		y += lift_for_tilt(BOTTOM_SCALE)
 	return Transform3D(basis.scaled(Vector3.ONE * BOTTOM_SCALE), Vector3(x, y, DECK_SPOT.y))
 
 
 # —— 出牌行 ——
 
 static func row_center(angle: float, mine: bool) -> Vector3:
-	var r := MY_ROW_RADIUS if mine else ROW_RADIUS
-	var d := SeatLayout.direction(angle) * r
-	return Vector3(d.x, SeatLayout.FELT_TOP, d.z)
+	if mine:
+		return Vector3(MY_ROW_SPOT.x, SeatLayout.FELT_TOP, MY_ROW_SPOT.y)
+	var d := SeatLayout.direction(angle) * ROW_RADIUS
+	return Vector3(d.x, SeatLayout.FELT_TOP, d.z - ROW_BACK)
 
 
 static func row_step(count: int) -> float:
@@ -63,8 +76,13 @@ static func play_slot(angle: float, mine: bool, i: int, count: int) -> Transform
 	var c := row_center(angle, mine)
 	var step := row_step(count)
 	var x := c.x + (i - (count - 1) / 2.0) * step
-	var y := SeatLayout.FELT_TOP + Card3D.THICKNESS * PLAY_SCALE / 2.0 + 0.0005 + i * LAYER_STEP
-	return Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * PLAY_SCALE), Vector3(x, y, c.z))
+	var y := SeatLayout.FELT_TOP + Card3D.THICKNESS * PLAY_SCALE / 2.0 + 0.0005 + i * LAYER_STEP + lift_for_tilt(PLAY_SCALE)
+	return Transform3D(Basis(Vector3.RIGHT, deg_to_rad(ROW_TILT_DEG)).scaled(Vector3.ONE * PLAY_SCALE), Vector3(x, y, c.z))
+
+
+static func lift_for_tilt(scale: float) -> float:
+	# 牌绕自己的横轴翘起 ROW_TILT_DEG:牌心抬高半张牌高 × sin,牌底边正好贴着桌面
+	return Card3D.HEIGHT * scale * 0.5 * sin(deg_to_rad(ROW_TILT_DEG))
 
 
 static func pass_point(angle: float, mine: bool) -> Vector3:

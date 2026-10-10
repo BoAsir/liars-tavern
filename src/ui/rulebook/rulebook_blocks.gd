@@ -15,7 +15,7 @@ const BOMB_CARD_SIZE := Vector2(60, 87)
 # 斗地主牌型表与大小顺序:示例小牌互相压住一半(飞机带对 10 张也放得下)
 const DDZ_CARD_SIZE := Vector2(38, 55)
 const DDZ_CARD_OVERLAP := -16
-const DDZ_NAME_WIDTH := 210.0
+const DDZ_NAME_WIDTH := 230.0
 
 # 德州牌型表
 const HAND_CARD_SIZE := Vector2(40, 58)     # 规格 §6.6:示例小牌不超过 40×58
@@ -403,22 +403,19 @@ static func _ddz_cards_row(ids: Array) -> HBoxContainer:
 
 
 static func _ddz_combos(items: Array) -> Control:
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 6)
+	# 一行一种:牌型名与一句说明在左(固定宽),示例小牌在右(同德州牌型表的底色条)
+	var grid := VBoxContainer.new()
+	grid.add_theme_constant_override("separation", 3)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for item in items:
 		var cells := HBoxContainer.new()
 		cells.add_theme_constant_override("separation", 12)
 		var names := VBoxContainer.new()
-		names.custom_minimum_size.x = DDZ_NAME_WIDTH * 0.55
+		names.custom_minimum_size.x = DDZ_NAME_WIDTH
 		names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		names.add_theme_constant_override("separation", 0)
 		names.add_child(UiTheme.label(item["name"], 19, UiTheme.BRASS_BRIGHT, UiTheme.display_font()))
-		var caption := _paragraph(item["caption"], 12, UiTheme.MUTED)
-		caption.custom_minimum_size.x = DDZ_NAME_WIDTH * 0.55
-		names.add_child(caption)
+		names.add_child(UiTheme.label(item["caption"], 12, UiTheme.MUTED))
 		cells.add_child(names)
 		var cards := _ddz_cards_row(item["cards"])
 		cards.size_flags_vertical = Control.SIZE_SHRINK_CENTER

@@ -27,7 +27,7 @@ const EYE := Color(0.24, 0.14, 0.1)
 const PAPER := Color(0.8, 0.79, 0.76)
 const PAPER_STRIPE := Color(0.8, 0.5, 0.56)
 const PETAL_COLORS := [Color(1.0, 0.72, 0.8), Color(1.0, 0.84, 0.88), Color(0.98, 0.62, 0.72), Color(1.0, 0.93, 0.95)]
-const SKULL_REF := 0.1                      # 帽子按这个颅骨半径建
+const SKULL_REF := 0.122                    # 帽子按这个颅骨半径建(颅骨更大的物种按比例放大)
 
 static var _cache := {}
 
@@ -86,15 +86,15 @@ static func straw_hat() -> ArrayMesh:
 	return _prop("hat_straw", func(f: MeshForge):
 		f.paint(STRAW, 0.88)
 		# 宽檐:外缘往下垂一点,上下两面
-		f.lathe(PackedVector2Array([Vector2(0.07, 0.004), Vector2(0.115, 0.0), Vector2(0.16, -0.012), Vector2(0.168, -0.017),
-			Vector2(0.163, -0.02), Vector2(0.115, -0.006), Vector2(0.07, -0.003)]), 40, PackedInt32Array([3, 4]))
+		f.lathe(PackedVector2Array([Vector2(0.07, 0.004), Vector2(0.105, 0.0), Vector2(0.138, -0.01), Vector2(0.145, -0.015),
+			Vector2(0.14, -0.018), Vector2(0.105, -0.005), Vector2(0.07, -0.003)]), 40, PackedInt32Array([3, 4]))
 		# 帽冠
 		f.lathe(PackedVector2Array([Vector2(0.079, -0.002), Vector2(0.077, 0.03), Vector2(0.067, 0.051), Vector2(0.042, 0.061),
 			Vector2(0.0, 0.063)]), 32)
 		# 草编纹:深一档的细环
 		f.paint(STRAW_DARK, 0.9)
-		for r in [0.098, 0.123, 0.147]:
-			var y: float = -0.0035 * (r - 0.07) / 0.03
+		for r in [0.094, 0.116, 0.134]:
+			var y: float = -0.0034 * (r - 0.07) / 0.03
 			f.torus(r - 0.0016, r + 0.0016, 40, MeshForge.xf(Vector3(0, y + 0.0018, 0)))
 		for p in [Vector2(0.0765, 0.034), Vector2(0.06, 0.054)]:
 			f.torus(p.x - 0.0014, p.x + 0.0014, 32, MeshForge.xf(Vector3(0, p.y, 0)))

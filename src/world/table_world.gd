@@ -71,6 +71,7 @@ var _slides := {}        # pid -> Tween:正在沿圆弧滑向新座位的酒客
 var _spawned_frame := {} # pid -> 建出这个酒客的帧号:同一帧里物种又变了,直接收走刚建的、不再冒一次烟
 var _menu_preview: Patron = null   # 主菜单上自己选的形象,坐在 0 号椅
 var first_person := false          # 本机牌桌视角(只影响本机):seat_view / rest_view 据此给机位
+var third_person_override: Variant = null   # 越肩机位的 (右移, 高, 座位外):牌桌屏幕按玩法换(斗地主),为空时按桌子大小用默认值
 var celebration: Celebration = null   # 结算庆祝(胜者跳舞、旁人鼓掌、礼炮彩纸),见 celebration.gd
 
 
@@ -425,6 +426,7 @@ func clear_poker() -> void:
 			if child is Card3D and not liars_cards.has(child):
 				fan.remove_child(child)
 				child.queue_free()
+	third_person_override = null   # 斗地主换过的越肩机位也回到默认
 
 
 func _clear_debris() -> void:
@@ -490,6 +492,8 @@ func third_person_view(pid: int) -> Transform3D:
 	var dir := SeatLayout.direction(angle)
 	var offset := Vector3(THIRD_PERSON_SIDE, THIRD_PERSON_HEIGHT, THIRD_PERSON_BEHIND) \
 		if table_radius <= SeatLayout.TABLE_RADIUS else POKER_THIRD_PERSON
+	if third_person_override is Vector3:
+		offset = third_person_override
 	var pos := dir * (seat_radius + offset.z) + seat_right(pid) * offset.x + Vector3(0, offset.y, 0)
 	var target := -dir * 0.12 + Vector3(0, SeatLayout.TABLE_TOP, 0)
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)

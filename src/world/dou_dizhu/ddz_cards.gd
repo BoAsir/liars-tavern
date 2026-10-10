@@ -22,13 +22,13 @@ const BOTTOM_FLIP := 0.3        # 底牌翻开
 const BOTTOM_HOLD := 0.35       # 翻开后亮一会儿
 const BOTTOM_FLIGHT := 0.45     # 再飞进地主手里
 const PLAY_FLIGHT := 0.4        # 出牌:从手里飞到面前的出牌行,路上翻成正面
-const PLAY_STAGGER := 0.012     # 一手里相邻两张出手的间隔(最多 20 张也只多 0.23 秒,算在 PLAY_FLIGHT_MAX 里)
+const PLAY_STAGGER := 0.008     # 一手里相邻两张出手的间隔(最多 20 张也只多 0.15 秒,算在 PLAY_FLIGHT_MAX 里)
 const PLAY_FLIGHT_MAX := PLAY_FLIGHT + PLAY_STAGGER * 19
 const PLAY_ARC := 0.12
 const PLAY_SPIN := 0.35
 const CLEAR_FLIGHT := 0.25      # 被自己下一手顶掉 / 不出时,面前上一手的牌收走
 const TRICK_SWEEP := 0.32       # 清桌:三行牌一起收向桌心、缩小消失
-const WAVE_TIME := 0.6          # 顺子 / 连对:一串牌从左到右像波浪一样亮起(跳一下)
+const WAVE_TIME := 0.55         # 顺子 / 连对:一串牌从左到右像波浪一样亮起(跳一下)
 const WAVE_LIFT := 0.035
 const REVEAL_FLIGHT := 0.5      # 一手结束:别人的剩牌从牌扇里摊到面前,翻成正面
 const LAYOUT_TIME := 0.18
@@ -132,6 +132,12 @@ func hoverable_cards() -> Array:
 
 func row_center(pid: int) -> Vector3:
 	return global_transform * DdzLayout.row_center(world.seat_angles.get(pid, 0.0), pid == my_pid)
+
+
+func across_from(pid: int) -> Vector3:
+	# 纸飞机的终点(贴着桌面):左右翻过来、再往桌子里侧挪,飞机从桌子远端掠过去,越肩机位里不被自己的头挡住
+	var c := DdzLayout.row_center(world.seat_angles.get(pid, 0.0), pid == my_pid)
+	return global_transform * Vector3(-c.x, c.y, minf(c.z, -0.1) - 0.15)
 
 
 # —— 对账 ——
@@ -465,16 +471,16 @@ func present_my_fan() -> void:
 
 
 func _present_my_fan() -> void:
-	# 越肩:按 Patron 的举牌位置(稍缩小、抬高一点,底部 HUD 高);第一人称:拿在镜头右下方
+	# 越肩:按 Patron 的举牌位置缩小、往右下挪(20 张的扇子别挡住桌面);第一人称:拿在镜头右侧
 	if not world.patrons.has(my_pid) or not world.seat_angles.has(my_pid):
 		return
 	var me: Patron = world.patrons[my_pid]
 	var seat := world.seat_transform(world.seat_angles[my_pid])
 	if world.first_person:
-		me.present_hand_first_person(seat, world.first_person_rest_view(my_pid), BombCatLayout.FP_FAN_CAM, BombCatLayout.FP_FAN_SCALE)
+		me.present_hand_first_person(seat, world.first_person_rest_view(my_pid), DdzLayout.FP_FAN_CAM, DdzLayout.FP_FAN_SCALE)
 		return
 	me.present_hand_to(world.third_person_view(my_pid).origin)
-	me.hold_fan(me.fan.transform.translated(Vector3.UP * DdzLayout.FAN_RAISE_ME))
+	me.hold_fan(me.fan.transform.translated(DdzLayout.FAN_SHIFT_ME))
 	me.hold_fan(me.fan.transform.scaled_local(Vector3.ONE * DdzLayout.FAN_SCALE_ME))
 
 

@@ -433,7 +433,7 @@ func _build_announce() -> void:
 func set_info(hand: int, base: int, multiplier: int, landlord_name: String, bottom: Array, bottom_hidden: bool, status: String) -> void:
 	_title.text = "斗地主 · 第 %d 手" % hand if hand > 0 else "斗地主"
 	_base_label.text = "底分 %s" % (str(base) if base > 0 else "—")
-	set_multiplier(multiplier)
+	set_multiplier(multiplier, false)   # 跳动交给导演:炸弹、王炸、春天那一拍再 pop_multiplier
 	_landlord_label.text = "地主:%s" % (landlord_name if landlord_name != "" else "—")
 	_bottom_ids = bottom.duplicate() if not bottom_hidden else []
 	_bottom_row.visible = bottom_hidden or not bottom.is_empty()
@@ -442,18 +442,24 @@ func set_info(hand: int, base: int, multiplier: int, landlord_name: String, bott
 
 
 func set_multiplier(multiplier: int, pop := true) -> void:
-	# 倍数变了:数字「噗」地放大、闪金光再回弹
 	var changed := multiplier != _multiplier
 	_multiplier = multiplier
 	_mult_label.text = "倍数 ×%d" % multiplier
-	if changed and pop and is_inside_tree():
-		if _mult_tween != null and _mult_tween.is_valid():
-			_mult_tween.kill()
-		_mult_label.scale = Vector2.ONE * 1.7
-		_mult_label.modulate = Color(1.6, 1.3, 0.7)
-		_mult_tween = create_tween().set_parallel()
-		_mult_tween.tween_property(_mult_label, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-		_mult_tween.tween_property(_mult_label, "modulate", Color.WHITE, 0.6)
+	if changed and pop:
+		pop_multiplier()
+
+
+func pop_multiplier() -> void:
+	# 倍数翻倍:数字「噗」地放大、闪金光再回弹
+	if not is_inside_tree():
+		return
+	if _mult_tween != null and _mult_tween.is_valid():
+		_mult_tween.kill()
+	_mult_label.scale = Vector2.ONE * 1.7
+	_mult_label.modulate = Color(1.6, 1.3, 0.7)
+	_mult_tween = create_tween().set_parallel()
+	_mult_tween.tween_property(_mult_label, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_mult_tween.tween_property(_mult_label, "modulate", Color.WHITE, 0.6)
 
 
 func multiplier_text() -> String:

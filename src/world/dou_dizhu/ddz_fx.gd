@@ -16,13 +16,14 @@ extends BombCatFx
 const BOMB_TIME := 1.2              # 炸弹:烟云鼓起来、字弹出来、冲击波扩散完
 const BOMB_TEXT_LIFE := 1.25
 const ROCKET_RISE := 0.55           # 小火箭冲到顶
-const ROCKET_HEIGHT := 1.15
+const ROCKET_HEIGHT := 0.78           # 到顶的高度(在吊灯罩下面炸开)
 const FIREWORK_BURSTS := 3          # 到顶炸成几簇
 const FIREWORK_STAGGER := 0.16
 const FIREWORK_LIFE := 0.95
 const ROCKET_TIME := ROCKET_RISE + FIREWORK_STAGGER * (FIREWORK_BURSTS - 1) + 0.55   # 导演等这么久(最后一簇炸开之后再看一下)
 const PLANE_TIME := 1.05            # 纸飞机从这头掠到那头
 const PLANE_LIFT := 0.22
+const PLANE_SCALE := 2.2
 const SPRING_TIME := 1.4            # 花瓣飘这么久(导演只等这么久,花瓣自己再飘一会儿淡掉)
 const SPRING_PETALS := 120
 const SPOT_LIFE := 2.4
@@ -31,6 +32,8 @@ const ALARM_SIDE := 0.3
 const ALARM_BLINK := 0.5
 const PASS_POP := 0.16
 const MULTIPLIER_COLOR := Color(1.0, 0.86, 0.36)
+const DELTA_GREEN := Color(0.5, 0.95, 0.55)   # 一手结束头顶飘的得分(赢绿输红)
+const DELTA_RED := Color(1.0, 0.5, 0.42)
 
 var _alarms := {}                   # pid -> 徽章根节点
 var _passes := {}                   # pid -> 「不出」牌子
@@ -60,8 +63,8 @@ func bomb(pos: Vector3, multiplier: int) -> void:
 	light.shadow_enabled = false
 	root.add_child(light)
 	light.create_tween().tween_property(light, "light_energy", 0.0, 0.45).set_ease(Tween.EASE_OUT)
-	puffs(pos, 24, [Color(1.0, 0.8, 0.3), Color(1.0, 0.56, 0.3), Color(1.0, 0.93, 0.62), Color(1.0, 0.68, 0.45)], 0.17, Vector2(0.7, 1.3), 0.8, 0.4)
-	puffs(pos + Vector3(0, 0.05, 0), 16, [Color(0.7, 0.6, 0.86), Color(0.56, 0.5, 0.68), Color(0.86, 0.76, 0.92)], 0.2,
+	puffs(pos, 30, [Color(1.0, 0.72, 0.25), Color(1.0, 0.5, 0.28), Color(1.0, 0.86, 0.45), Color(1.0, 0.62, 0.4)], 0.21, Vector2(0.7, 1.3), 0.85, 0.4)
+	puffs(pos + Vector3(0, 0.05, 0), 20, [Color(0.66, 0.56, 0.84), Color(0.52, 0.46, 0.66), Color(0.82, 0.7, 0.9)], 0.24,
 		Vector2(0.35, 0.8), 1.2, 0.3)
 	star_burst(pos + Vector3(0, 0.08, 0), 7, 0.55, 0.85)
 	Fx.sparkles(root, pos, Vector3.UP, 24)
@@ -107,13 +110,16 @@ func rocket(from: Vector3) -> void:
 		if is_instance_valid(ship) and ship.visible:
 			puffs(ship.global_position, 4, DdzProps.trail_puff_colors(), 0.06, Vector2(0.05, 0.2), 0.45, -0.1, 40.0))
 	trail.tween_interval((ROCKET_RISE - 0.06) / 6.0)
+	var toward := (_camera_pos() - top) * Vector3(1, 0, 1)
+	toward = toward.normalized() if toward.length() > 0.01 else Vector3.BACK
+	var side := Vector3.UP.cross(toward).normalized()
 	for k in range(1, FIREWORK_BURSTS):
-		var at := top + Vector3((k * 2 - 3) * 0.32, -0.12 * k, -0.1 * k)
+		var at := top + side * (0.4 if k % 2 == 1 else -0.4) + toward * 0.15 + Vector3(0, -0.08 * k, 0)
 		var delay := ROCKET_RISE + FIREWORK_STAGGER * k
 		var later := root.create_tween()
 		later.tween_interval(delay)
 		later.tween_callback(func() -> void: _firework(at, k))
-	pop_text("王炸!", top + Vector3(0, 0.12, 0), Color(1.0, 0.52, 0.42), 1.6, 1.4, 0.15)
+	pop_text("王炸!", top + Vector3(0, 0.42, 0), Color(1.0, 0.52, 0.42), 1.6, 1.4, 0.15)
 
 
 func _firework(at: Vector3, index: int) -> void:
@@ -122,9 +128,10 @@ func _firework(at: Vector3, index: int) -> void:
 		[Color(0.5, 0.85, 1.0), Color(0.75, 0.6, 1.0), Color(1.0, 1.0, 1.0)],
 		[Color(0.55, 1.0, 0.65), Color(1.0, 0.9, 0.45), Color(1.0, 0.6, 0.85)]]
 	var colors: Array = palettes[index % palettes.size()]
-	puffs(at, 46, colors, 0.04, Vector2(1.1, 1.6), FIREWORK_LIFE, -0.9, 180.0)
-	star_burst(at, 5, 0.42, 0.8)
-	glint(at, 0.28)
+	sparks(at, 120, colors, Vector2(0.9, 1.4), FIREWORK_LIFE)
+	puffs(at, 10, [colors[0], colors[1]], 0.06, Vector2(0.3, 0.5), FIREWORK_LIFE * 0.6, -0.3, 180.0)
+	star_burst(at, 6, 0.5, 0.85)
+	glint(at, 0.36)
 	var root := _spawn("firework", FIREWORK_LIFE)
 	root.global_position = at
 	Fx.sparkles(root, at, Vector3.UP, 26)
@@ -138,15 +145,74 @@ func _firework(at: Vector3, index: int) -> void:
 	sfx.emit("firework")
 
 
+func sparks(at: Vector3, amount: int, colors: Array, speed: Vector2, life: float) -> GPUParticles3D:
+	# 烟花的火星:一群发光的小圆点往四面八方炸开,边飞边往下坠、慢慢变暗缩小
+	var p := GPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = false
+	p.amount = clampi(amount, 1, MAX_PARTICLES)
+	p.lifetime = life
+	p.explosiveness = 0.95
+	p.randomness = 0.4
+	p.local_coords = false
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 4, 4))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.03
+	pm.direction = Vector3.UP
+	pm.spread = 180.0
+	pm.initial_velocity_min = speed.x
+	pm.initial_velocity_max = speed.y
+	pm.gravity = Vector3(0, -1.1, 0)
+	pm.damping_min = 1.4
+	pm.damping_max = 2.2
+	pm.scale_min = 0.7
+	pm.scale_max = 1.4
+	var curve := Curve.new()
+	curve.add_point(Vector2(0.0, 1.0))
+	curve.add_point(Vector2(0.6, 0.8))
+	curve.add_point(Vector2(1.0, 0.0))
+	var curve_tex := CurveTexture.new()
+	curve_tex.curve = curve
+	pm.scale_curve = curve_tex
+	var gradient := Gradient.new()
+	var offsets := PackedFloat32Array()
+	var packed := PackedColorArray()
+	for i in colors.size():
+		offsets.append(float(i) / maxf(colors.size() - 1, 1))
+		packed.append(colors[i])
+	gradient.offsets = offsets
+	gradient.colors = packed
+	gradient.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	pm.color_initial_ramp = ramp
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.7, 1.0])
+	fade.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
+	var fade_tex := GradientTexture1D.new()
+	fade_tex.gradient = fade
+	pm.color_ramp = fade_tex
+	p.process_material = pm
+	p.draw_pass_1 = Fx._additive_quad(0.06, 5.0)   # 同礼炮火星的加色软圆点(泛光会把它晕开)
+	add_child(p)
+	p.global_position = at
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+	spawned.emit("sparks")
+	return p
+
+
 # —— 飞机 ——
 
 func plane(from: Vector3, to: Vector3) -> void:
 	# 纸飞机从 from 那边起飞,贴着桌面上方划一道弧掠过桌心,往 to 那边拉高飞走、缩没;尾巴后面一串小星星
 	var root := _spawn("plane", PLANE_TIME + 0.2)
-	var craft := MeshKit.add(root, DdzProps.paper_plane(), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE * 1.6, MeshKit.SHADOW_OFF)
+	var craft := MeshKit.add(root, DdzProps.paper_plane(), null, Vector3.ZERO, Vector3.ZERO, Vector3.ONE * PLANE_SCALE, MeshKit.SHADOW_OFF)
 	craft.name = "Plane"
 	var mid := (from + to) * 0.5
-	var side := (to - from).cross(Vector3.UP).normalized() * 0.25
+	var side := (to - from).cross(Vector3.UP).normalized() * 0.18
 	var a := from + Vector3(0, 0.12, 0)
 	var b := mid + side + Vector3(0, PLANE_LIFT, 0)
 	var c := to + Vector3(0, 0.55, 0)
@@ -162,14 +228,14 @@ func plane(from: Vector3, to: Vector3) -> void:
 		if heading.length() > 0.0005:
 			var bank := sin(t * PI) * 0.6
 			craft.global_basis = Basis.looking_at(heading.normalized(), Vector3.UP) * Basis(Vector3.BACK, bank)
-		craft.scale = Vector3.ONE * 1.6 * (1.0 - smoothstep(0.85, 1.0, t)),
+		craft.scale = Vector3.ONE * PLANE_SCALE * (1.0 - smoothstep(0.85, 1.0, t)),
 		0.0, 1.0, PLANE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	var sparkle := root.create_tween().set_loops(7)
 	sparkle.tween_callback(func() -> void:
 		if is_instance_valid(craft):
 			glint(craft.global_position, 0.06))
 	sparkle.tween_interval(PLANE_TIME / 7.0)
-	pop_text("飞机!", mid + Vector3(0, 0.45, 0), Color(0.55, 0.82, 1.0), 1.3, 1.1, 0.16)
+	pop_text("飞机!", from + Vector3(0, 0.55, 0), Color(0.55, 0.82, 1.0), 1.3, 1.1, 0.16)
 
 
 # —— 春天 ——
@@ -188,7 +254,7 @@ func spring(center: Vector3) -> void:
 	p.visibility_aabb = AABB(Vector3(-2.5, -2, -2.5), Vector3(5, 4, 5))
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(1.0, 0.05, 1.0)
+	pm.emission_box_extents = Vector3(1.1, 0.2, 1.1)
 	pm.direction = Vector3.DOWN
 	pm.spread = 25.0
 	pm.initial_velocity_min = 0.1
@@ -199,8 +265,8 @@ func spring(center: Vector3) -> void:
 	pm.turbulence_enabled = true
 	pm.turbulence_noise_strength = 0.6
 	pm.turbulence_noise_scale = 1.6
-	pm.scale_min = 1.6
-	pm.scale_max = 2.6
+	pm.scale_min = 2.6
+	pm.scale_max = 4.2
 	pm.particle_flag_rotate_y = true
 	var gradient := Gradient.new()
 	gradient.offsets = PackedFloat32Array([0.0, 0.33, 0.66, 1.0])
@@ -220,7 +286,7 @@ func spring(center: Vector3) -> void:
 	p.process_material = pm
 	p.draw_pass_1 = DdzProps.petal_mesh()
 	root.add_child(p)
-	p.global_position = center + Vector3(0, 1.35, 0)
+	p.global_position = center + Vector3(0, 0.95, 0)
 	p.emitting = true
 	pop_text("春天!", center + Vector3(0, 0.62, 0), Color(1.0, 0.62, 0.74), 1.7, SPRING_TIME + 0.4, 0.18)
 	sfx.emit("chime")
@@ -238,7 +304,7 @@ func spotlight_on(pid: int, life := SPOT_LIFE) -> Node3D:
 	var base := patron.global_position
 	base.y = world.to_global(Vector3.ZERO).y
 	cone.global_position = base
-	cone.scale = Vector3(1.1, 2.8, 1.1)
+	cone.scale = Vector3(1.0, 2.1, 1.0)
 	var lamp := SpotLight3D.new()
 	lamp.light_color = Color(1.0, 0.86, 0.58)
 	lamp.light_energy = 0.0
@@ -249,11 +315,11 @@ func spotlight_on(pid: int, life := SPOT_LIFE) -> Node3D:
 	lamp.global_position = patron.head_position() + Vector3(0, 1.6, 0)
 	lamp.global_basis = Basis.looking_at(Vector3.DOWN, Vector3.FORWARD)
 	var tween := root.create_tween().set_parallel()
-	tween.tween_method(func(a: float) -> void: cone.set_instance_shader_parameter("alpha", a), 0.0, 0.22, SPOT_POP)
+	tween.tween_method(func(a: float) -> void: cone.set_instance_shader_parameter("alpha", a), 0.0, 0.16, SPOT_POP)
 	tween.tween_property(lamp, "light_energy", 6.0, SPOT_POP)
 	var out := root.create_tween().set_parallel()
 	out.tween_interval(maxf(life - 0.5, 0.1))
-	out.chain().tween_method(func(a: float) -> void: cone.set_instance_shader_parameter("alpha", a), 0.22, 0.0, 0.45)
+	out.chain().tween_method(func(a: float) -> void: cone.set_instance_shader_parameter("alpha", a), 0.16, 0.0, 0.45)
 	out.tween_property(lamp, "light_energy", 0.0, 0.45)
 	sfx.emit("sparkle")
 	return root
@@ -274,14 +340,15 @@ func set_alarm(pid: int, count: int) -> void:
 		inner.name = "Inner"
 		root.add_child(inner)
 		_mesh(inner, DdzProps.alarm_badge(), Color.WHITE, 1.0).name = "Disc"
-		var mark := _label("!", 0.42, Color(1.0, 0.98, 0.92))
+		var mark := _label("!", 0.5, Color(1.0, 0.98, 0.92))
 		mark.name = "Mark"
 		mark.outline_size = 20
 		mark.position = Vector3(0, 0.004, 0.002)
 		inner.add_child(mark)
-		var tag := _label("", 0.3, Color(1.0, 0.86, 0.8))
+		var tag := _label("", 0.42, Color(1.0, 0.9, 0.84))
 		tag.name = "Count"
-		tag.position = Vector3(0, -0.105, 0.002)
+		tag.outline_size = 22
+		tag.position = Vector3(0, -0.12, 0.002)
 		inner.add_child(tag)
 		var side := world.seat_right(pid) * ALARM_SIDE
 		_follow.append([root, func() -> Vector3: return _head_top(pid), side + Vector3(0, 0.04, 0)])

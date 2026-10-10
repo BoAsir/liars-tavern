@@ -60,6 +60,7 @@ func _ready() -> void:
 	world.clear_poker()
 	world.revive_all()
 	world.cards.clear_all()
+	world.third_person_override = DdzLayout.THIRD_PERSON   # 拆台(clear_poker)时复原
 	app.labels.clear()
 	# 形象用房主分配的(Net.species_of 查本局座位表与等待厅名单),各端一致
 	world.arrange(Net.seats.map(func(s: Dictionary) -> Dictionary: return {"pid": s["pid"], "species": Net.species_of(s["pid"])}),

@@ -28,8 +28,6 @@ const BUBBLE_KEY := "bubble:%d"
 const BUBBLE_ABOVE_PLATE := -66.0
 const MODE_SEAT := "seat"
 const MODE_ORBIT := "orbit"
-const DELTA_GREEN := Color(0.5, 0.95, 0.55)
-const DELTA_RED := Color(1.0, 0.5, 0.42)
 # 导演认得的公共事件(§6.3 全部 13 种;测试核对与 DouDizhuPacing 一一对应)
 const HANDLED_EVENTS := ["hand_started", "redeal", "turn", "bid", "landlord", "played", "passed", "trick_cleared", "trustee",
 	"hand_over", "ending", "player_left", "session_over"]
@@ -304,7 +302,9 @@ func _played(ev: Dictionary) -> void:
 		_:
 			await _wait(PLAY_HOLD)
 	if mult != before:
-		hud.set_multiplier(mult)
+		hud.set_multiplier(mult, false)
+		hud.pop_multiplier()
+		Sfx.play("pop")
 		if effect != "bomb":
 			fx3d.multiplier_pop(cards.row_center(pid) + Vector3(0.25, 0.32, 0) if pid is int else TABLE_FOCUS, mult)
 	var left := _int(ev, "remaining")
@@ -323,9 +323,7 @@ func _plane_later(pid: int) -> void:
 	await _wait(PLANE_DELAY)
 	if not is_inside_tree():
 		return
-	var from := cards.row_center(pid)
-	var to := cards.to_global(Vector3.ZERO) * 2.0 - from
-	fx3d.plane(from, to)
+	fx3d.plane(cards.row_center(pid), cards.across_from(pid))
 
 
 func _passed(ev: Dictionary) -> void:
@@ -388,7 +386,7 @@ func _hand_over(ev: Dictionary) -> void:
 		if row is Dictionary and row.get("pid") is int:
 			var delta := _int(row, "delta")
 			fx3d.pop_text(DdzNameplate.signed(delta), fx3d._above(row["pid"]) + Vector3(0, 0.12, 0),
-				DELTA_GREEN if delta > 0 else DELTA_RED, 1.1, HAND_OVER_HOLD, 0.2)
+				DdzFx.DELTA_GREEN if delta > 0 else DdzFx.DELTA_RED, 1.1, HAND_OVER_HOLD, 0.2)
 	for pid in world.patrons:
 		var patron: Patron = world.patrons[pid]
 		if winners.has(pid):
@@ -401,6 +399,8 @@ func _hand_over(ev: Dictionary) -> void:
 	screen.show_hand_summary()
 	if ev.get("spring") is bool and ev["spring"]:
 		fx3d.spring(cards.to_global(Vector3(0, SeatLayout.TABLE_TOP, 0)))
+		hud.set_multiplier(_int(ev, "multiplier"), false)
+		hud.pop_multiplier()   # 春天 ×2
 		hud.announce("春天!", Color(1.0, 0.62, 0.74), title, 1.2, DdzHud.ANNOUNCE_Y_LOW)
 		await _wait(DdzFx.SPRING_TIME)
 	await _wait(HAND_OVER_HOLD)
