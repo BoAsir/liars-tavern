@@ -223,7 +223,27 @@ func _show_table(_seats: Array) -> void:
 	if GameMode.is_bomb_cat(Net.game_mode):
 		_switch_to(BombCatScreen.new(self))
 		return
+	if GameMode.is_dou_dizhu(Net.game_mode):
+		# TODO(斗地主阶段二):换成 DouDizhuScreen.new(self) 并删掉 _dou_dizhu_placeholder。在那之前给一块不会崩的占位牌:
+		# 规则与网络照常跑,每步到点由房主代打(连续超时进托管,一手手自己打下去),但没有牌桌与结算界面
+		_switch_to(_dou_dizhu_placeholder())
+		return
 	_switch_to(PokerScreen.new(self) if GameMode.is_poker(Net.game_mode) else TableScreen.new(self))
+
+
+func _dou_dizhu_placeholder() -> Control:
+	# 临时占位(斗地主阶段二删掉):居中一块说明 + 离开按钮
+	var screen := CenterContainer.new()
+	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	screen.add_child(box)
+	box.add_child(UiTheme.label("斗地主的牌桌还在布置中", 28, UiTheme.BRASS_BRIGHT))
+	box.add_child(UiTheme.label("这一局由房主代打,想走随时可以离开", 16, UiTheme.PARCHMENT_DIM))
+	var leave := UiTheme.button("离开房间")
+	leave.pressed.connect(func() -> void: Net.end_session())
+	box.add_child(leave)
+	return screen
 
 
 func _back_to_menu(reason: String) -> void:
