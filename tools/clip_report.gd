@@ -85,6 +85,13 @@ func _make_world(species: Array, radius := SeatLayout.TABLE_RADIUS, revolvers :=
 	return world
 
 
+func _ddz_stage(world: TableWorld) -> void:
+	# 斗地主:越肩机位换成斗地主的,2 号当地主戴瓜皮帽、其余戴草帽(同 DouDizhuScreen / DdzDirector)
+	world.third_person_override = DdzLayout.THIRD_PERSON
+	for pid in world.patrons:
+		DdzHats.put_on(world.patrons[pid], DdzState.ROLE_LANDLORD if pid == 2 else DdzState.ROLE_FARMER, false)
+
+
 func _drop_world(world: TableWorld) -> void:
 	world.queue_free()
 	await process_frame
@@ -98,7 +105,7 @@ static func fill_fan(p: Patron, kind: String, count: int) -> void:
 	for i in count:
 		var card := Card3D.new()
 		p.fan.add_child(card)
-		card.transform = BombCatLayout.fan_slot(i, count) if kind == "bomb" else CardTable.fan_slot(i, count, 0.0)
+		card.transform = BombCatLayout.fan_slot(i, count) if kind in ["bomb", "ddz"] else CardTable.fan_slot(i, count, 0.0)
 
 
 static func pitch_floor(p: Patron) -> float:
@@ -124,6 +131,10 @@ func _present_self(world: TableWorld, mode: String) -> void:
 	match mode:
 		"dice":
 			return   # 吹牛骰子没有牌
+		"ddz":
+			me.present_hand_to(view)   # 同 DdzCards:越肩举牌再缩小、往右下挪
+			me.hold_fan(me.fan.transform.translated(DdzLayout.FAN_SHIFT_ME))
+			me.hold_fan(me.fan.transform.scaled_local(Vector3.ONE * DdzLayout.FAN_SCALE_ME))
 		"poker":
 			me.hold_fan(PokerLayout.fan_transform(seat, view))
 		"bomb":
@@ -143,6 +154,8 @@ func _present_fp(world: TableWorld, mode: String) -> void:
 			me.present_hand_first_person(seat, view, PokerLayout.FP_FAN_CAM, PokerLayout.FP_FAN_SCALE)
 		"bomb":
 			me.present_hand_first_person(seat, view, BombCatLayout.FP_FAN_CAM, BombCatLayout.FP_FAN_SCALE)
+		"ddz":
+			me.present_hand_first_person(seat, view, DdzLayout.FP_FAN_CAM, DdzLayout.FP_FAN_SCALE)
 		_:
 			me.present_hand_first_person(seat, view)
 
@@ -161,6 +174,13 @@ func _table_cards(world: TableWorld, mode: String) -> Array:
 					xforms.append(PokerLayout.shown_card(world.seat_angles[pid], world.table_radius, i))
 			for i in 4:
 				xforms.append(PokerLayout.muck_slot(i))
+		"ddz":
+			xforms.append(DdzLayout.deck_transform(10))
+			for i in 3:
+				xforms.append(DdzLayout.bottom_slot(i, true))
+			for pid in world.seat_angles:
+				for i in 12:   # 最长的一行(顺子 / 飞机):MAX_ROW 封顶
+					xforms.append(DdzLayout.play_slot(world.seat_angles[pid], pid == 1, i, 12))
 		"bomb":
 			xforms.append(BombCatLayout.deck_top(30))
 			for i in BombCatLayout.DISCARD_SHOWN:
@@ -231,7 +251,7 @@ static func neck_targets() -> Array:
 # —— fan:他人的牌扇 vs 持牌者自己 ——
 
 func _fan() -> void:
-	var fans := [["liars", 5], ["poker", 2], ["bomb", 8], ["bomb", 14]]
+	var fans := [["liars", 5], ["poker", 2], ["bomb", 8], ["bomb", 14], ["ddz", 20]]
 	var totals := {}
 	for s in Species.count():
 		var world := await _make_world([(s + 1) % Species.count(), s], SeatLayout.TABLE_RADIUS, true)
@@ -243,6 +263,9 @@ func _fan() -> void:
 		var gun: Array = world.revolvers[2].find_children("*", "MeshInstance3D", true, false)
 		for f in fans:
 			fill_fan(p, f[0], f[1])
+			if f[0] == "ddz":   # 斗地主戴着身份帽(草帽帽檐最宽)
+				DdzHats.put_on(p, DdzState.ROLE_FARMER, false)
+				head = Probe.patron_meshes(p, "head")
 			var cards := Probe.fan_cards(p)
 			var key := "%s%d" % f
 			var hit := {"head": 0, "torso": 0, "arms": 0, "gun": 0, "table(head)": 0}
@@ -293,14 +316,17 @@ func _neck_worlds() -> Array:
 	return [["liars", [0, 1, 2, 3], SeatLayout.TABLE_RADIUS, 5], ["liars", [4, 5, 6, 7], SeatLayout.TABLE_RADIUS, 5],
 		["poker", [0, 1, 2, 3, 4, 5, 6, 7], SeatLayout.POKER_TABLE_RADIUS, 2],
 		["bomb", [3, 7, 5, 0, 1, 2], SeatLayout.POKER_TABLE_RADIUS, 5],
-		["dice", [7, 5, 3, 0], SeatLayout.TABLE_RADIUS, 0], ["dice", [1, 2, 4, 6, 7, 5], SeatLayout.POKER_TABLE_RADIUS, 0]]
+		["dice", [7, 5, 3, 0], SeatLayout.TABLE_RADIUS, 0], ["dice", [1, 2, 4, 6, 7, 5], SeatLayout.POKER_TABLE_RADIUS, 0],
+		["ddz", [0, 3, 7], SeatLayout.TABLE_RADIUS, 17], ["ddz", [5, 7, 3], SeatLayout.TABLE_RADIUS, 20]]
 
 
 func _neck() -> void:
-	var sums := {"own_fan": [0, 0], "others": [0, 0], "other_fans": [0, 0], "props": [0, 0], "lamp": [0, 0]}
+	var sums := {"own_fan": [0, 0], "others": [0, 0], "other_fans": [0, 0], "props": [0, 0], "lamp": [0, 0], "fan_table": [0, 0]}
 	for spec in _neck_worlds():
 		var mode: String = spec[0]
 		var world := await _make_world(spec[1], spec[2])
+		if mode == "ddz":
+			_ddz_stage(world)
 		if mode != "liars":
 			world.cards.set_stand_visible(false)
 		for pid in world.patrons:
@@ -323,7 +349,7 @@ func _neck() -> void:
 				if q != pid:
 					others.append_array(Probe.patron_meshes(world.patrons[q]))
 					other_cards.append_array(Probe.fan_cards(world.patrons[q]))
-			var hit := {"own_fan": 0, "others": 0, "other_fans": 0, "props": 0, "lamp": 0}
+			var hit := {"own_fan": 0, "others": 0, "other_fans": 0, "props": 0, "lamp": 0, "fan_table": 0}
 			var targets := neck_targets()
 			for target in targets:
 				Probe.pose(p, Vector3.ZERO, target)
@@ -352,6 +378,15 @@ func _neck() -> void:
 									print("     card %s scale %s hits %s" % [world.to_local(card.global_position), card.scale, mi.name])
 				if lamp_hits(p):
 					hit["lamp"] += 1
+				var crossed := false
+				for a in own:
+					for b in table:
+						if not crossed and _cards_cross(a, b):
+							crossed = true
+				if crossed:
+					hit["fan_table"] += 1
+					if opts.has("poses"):
+						print("  fan_table %s %s pid%d %s" % [mode, Species.IDS[p.species_index], pid, target])
 			Probe.pose(p)
 			for k in hit:
 				sums[k][0] += hit[k]
@@ -361,7 +396,7 @@ func _neck() -> void:
 		await _drop_world(world)
 	for k in sums:
 		_record("neck", "头 vs " + {"own_fan": "自己的牌扇(含脖子)", "others": "别人的身体与头", "other_fans": "别人的牌扇",
-			"props": "桌心立牌 / 公共牌 / 牌堆", "lamp": "吊灯"}[k], sums[k][0], sums[k][1])
+			"props": "桌心立牌 / 公共牌 / 牌堆", "lamp": "吊灯", "fan_table": "(倒下的)自己的牌扇 vs 桌上的牌"}[k], sums[k][0], sums[k][1])
 
 
 # —— arms:手势逐帧 ——
@@ -475,6 +510,8 @@ func _fp() -> void:
 	for spec in _neck_worlds():
 		var mode: String = spec[0]
 		var world := await _make_world(spec[1], spec[2])
+		if mode == "ddz":
+			_ddz_stage(world)
 		if mode != "liars":
 			world.cards.set_stand_visible(false)
 		for pid in world.patrons:
@@ -539,6 +576,8 @@ func _table() -> void:
 	for spec in _neck_worlds():
 		var mode: String = spec[0]
 		var world := await _make_world(spec[1], spec[2])
+		if mode == "ddz":
+			_ddz_stage(world)
 		if mode != "liars":
 			world.cards.set_stand_visible(false)
 		var table := _table_cards(world, mode)

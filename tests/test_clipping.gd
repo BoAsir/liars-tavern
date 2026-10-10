@@ -35,7 +35,7 @@ static func _fill(p: Patron, kind: String, count: int) -> void:
 	for i in count:
 		var card := Card3D.new()
 		p.fan.add_child(card)
-		card.transform = BombCatLayout.fan_slot(i, count) if kind == "bomb" else CardTable.fan_slot(i, count, 0.0)
+		card.transform = BombCatLayout.fan_slot(i, count) if kind in ["bomb", "ddz"] else CardTable.fan_slot(i, count, 0.0)
 
 
 static func _pitch_floor(p: Patron) -> float:
@@ -54,7 +54,7 @@ func test_opponent_fan_clears_its_holder_for_every_species():
 		var head := Probe.patron_meshes(p, "head")
 		var rest := Probe.patron_meshes(p, "torso") + Probe.patron_meshes(p, "arms")
 		var gun: Array = world.revolvers[2].find_children("*", "MeshInstance3D", true, false)
-		for f in FANS:
+		for f in FANS + [["ddz", 20]]:
 			_fill(p, f[0], f[1])
 			var cards := Probe.fan_cards(p)
 			for active in [false, true]:
@@ -204,13 +204,31 @@ func test_head_lifts_over_its_own_fan_and_the_fan_tucks():
 	Probe.freeze(p)
 	Probe.pose(p)
 	assert_almost_eq(p.neck_offset().length(), 0.0, 0.001, "原位不推不抬")
+	var rest_top := _fan_top(p)
 	Probe.pose(p, Vector3.ZERO, Vector3(0, 0, -0.6))
-	var flat := p.transform.affine_inverse() * p.fan.global_transform
-	assert_gt(absf(flat.basis.y.normalized().y), 0.99, "往前探时牌扇平放在桌上")
-	assert_lt(flat.origin.y, SeatLayout.FELT_TOP + 0.03, "贴着毡面")
+	var low := p.transform.affine_inverse() * p.fan.global_transform
+	assert_almost_eq(low.basis.get_scale().x, Patron.FAN_SCALE * Patron.FAN_TUCK_SCALE, 0.001, "往前探时牌扇缩小")
+	assert_lt(_fan_top(p), rest_top - 0.06, "矮下去")
+	assert_gt(_fan_bottom(p), SeatLayout.FELT_TOP, "最低的牌角仍在毡面之上")
 	Probe.pose(p)
 	assert_true((p.transform.affine_inverse() * p.fan.global_transform).is_equal_approx(Patron.fan_rest_transform(p._look_data)),
 		"收回来牌扇立回去")
+
+
+func _fan_top(p: Patron) -> float:
+	var top := -INF
+	for card in Probe.fan_cards(p):
+		for sgm in Probe.card_segments(card).slice(0, 4):
+			top = maxf(top, p.to_local(sgm[0]).y)
+	return top
+
+
+func _fan_bottom(p: Patron) -> float:
+	var low := INF
+	for card in Probe.fan_cards(p):
+		for sgm in Probe.card_segments(card).slice(0, 4):
+			low = minf(low, p.to_local(sgm[0]).y)
+	return low
 
 
 func test_dice_cups_and_marker_are_guarded():
@@ -237,6 +255,66 @@ func test_dice_cups_and_marker_are_guarded():
 			Probe.pose(p, Vector3.ZERO, target)
 			assert_eq(Probe.head_hits(p, props), 0, "%s 探到 %s:头碰到骰盅或出价标记" % [Species.IDS[p.species_index], target])
 		Probe.pose(p)
+
+
+func test_dou_dizhu_hats_fans_and_play_rows():
+	# 斗地主:戴着地主帽 / 草帽,别人 17–20 张的牌扇立在桌面上空,对手的出牌行收近桌心(DdzLayout.ROW_RADIUS / OPP_MAX_ROW);
+	# 坐着与往前探时牌扇不碰头和帽子、不碰出牌行与底牌,越肩时自己缩小的牌扇不碰自己的头
+	_world([0, 3, 7])
+	await wait_seconds(SETTLE)
+	world.third_person_override = DdzLayout.THIRD_PERSON
+	for pid in world.patrons:
+		DdzHats.put_on(world.patrons[pid], DdzState.ROLE_LANDLORD if pid == 2 else DdzState.ROLE_FARMER, false)
+		_fill(world.patrons[pid], "ddz", 20 if pid == 2 else 17)
+	var me: Patron = world.patrons[1]
+	me.present_hand_to(world.third_person_view(1).origin)
+	me.hold_fan(me.fan.transform.translated(DdzLayout.FAN_SHIFT_ME))
+	me.hold_fan(me.fan.transform.scaled_local(Vector3.ONE * DdzLayout.FAN_SCALE_ME))
+	var table := []
+	var xforms := [DdzLayout.deck_transform(10)]
+	for i in 3:
+		xforms.append(DdzLayout.bottom_slot(i, true))
+	for pid in world.seat_angles:
+		for i in 12:
+			xforms.append(DdzLayout.play_slot(world.seat_angles[pid], pid == 1, i, 12))
+	for xf in xforms:
+		var card := Card3D.new()
+		world.cards.add_child(card)
+		card.transform = xf
+		table.append(card)
+	for pid in world.patrons:
+		Probe.freeze(world.patrons[pid])
+		Probe.pose(world.patrons[pid])
+	for pid in world.patrons:
+		var p: Patron = world.patrons[pid]
+		var head := Probe.patron_meshes(p, "head")
+		for target in [Vector3.ZERO, Vector3(0, 0, -0.1), Vector3(0, 0, -0.6), Vector3(0.6, 0, -0.4), Vector3(-0.6, 0, -0.4)]:
+			Probe.pose(p, Vector3(_pitch_floor(p), 0.0, 0.0) if target == Vector3.ZERO else Vector3.ZERO, target)
+			var cards := Probe.fan_cards(p)
+			var label := "%s 探到 %s" % [Species.IDS[p.species_index], target]
+			assert_eq(Probe.cards_hitting(cards, head), 0, label + ":牌扇碰到头或帽子")
+			for a in cards:
+				for b in table:
+					assert_false(_cards_cross(a, b), label + ":牌扇碰到桌上的牌 %s" % world.to_local(b.global_position))
+		Probe.pose(p)
+	for i in table.size():
+		for j in range(i + 1, table.size()):
+			if table[i].get_index() >= 0 and i >= 4 and j >= 4 and (i - 4) / 12 != (j - 4) / 12:
+				assert_false(_cards_cross(table[i], table[j]), "两行出牌相交")
+
+
+static func _cards_cross(a: Node3D, b: Node3D) -> bool:
+	var xf := b.global_transform
+	var h := Vector2(Card3D.WIDTH, Card3D.HEIGHT) * 0.5
+	var p0 := xf * Vector3(-h.x, 0, -h.y)
+	var p1 := xf * Vector3(h.x, 0, -h.y)
+	var p2 := xf * Vector3(h.x, 0, h.y)
+	var p3 := xf * Vector3(-h.x, 0, h.y)
+	for sgm in Probe.card_segments(a):
+		if Geometry3D.segment_intersects_triangle(sgm[0], sgm[1], p0, p1, p2) != null \
+				or Geometry3D.segment_intersects_triangle(sgm[0], sgm[1], p0, p2, p3) != null:
+			return true
+	return false
 
 
 # —— 第一人称 ——

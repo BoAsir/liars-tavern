@@ -142,12 +142,15 @@ static func head_center_local() -> Vector3:
 
 static func hull(p: Patron) -> PackedFloat32Array:
 	# 物种的头部外壳(Head 局部,头没转、没压扁时):每根辐条从头心到最外表面的长度
-	if _hull.has(p.species_index):
-		return _hull[p.species_index]
+	# 按物种 + 头上挂的东西缓存(斗地主的身份帽挂在 Head/Hat 下,换帽子外壳就变)
+	var key := "%d:%d:%s" % [p.species_index, p.head.find_children("*", "MeshInstance3D", true, false).size(),
+		p.head.find_child("DdzRoleHat", true, false) != null]
+	if _hull.has(key):
+		return _hull[key]
 	var parts := []
 	for node in p.head.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		if mi.mesh != null and mi.visible and mi.name != "Tongue":
+		if mi.mesh != null and mi.is_visible_in_tree() and mi.name != "Tongue":
 			parts.append(mi)
 	var lengths := PackedFloat32Array()
 	var c := head_center_local()
@@ -160,7 +163,7 @@ static func hull(p: Patron) -> PackedFloat32Array:
 				var from_mesh := p.head.global_transform.affine_inverse() * mi.global_transform
 				best = maxf(best, (from_mesh * Vector3(hit["position"])).distance_to(c))
 		lengths.append(best)
-	_hull[p.species_index] = lengths
+	_hull[key] = lengths
 	return lengths
 
 
