@@ -72,6 +72,12 @@ func muck_cards() -> Array:
 	return _muck.duplicate()
 
 
+func hoverable_cards(pid: int) -> Array:
+	# 本机能悬停放大(CardPreview)的牌:桌上的公共牌与亮牌、pid(本机)牌扇里的手牌;弃牌堆不算。
+	# 牌面朝不朝镜头、是不是牌背由 CardPreview 自己判断
+	return _table_cards() + _held.get(pid, []).filter(func(card): return is_instance_valid(card))
+
+
 # —— 动画(协程)——
 
 func deal_hole(order: Array, p_my_pid: int, my_cards: Array) -> void:
