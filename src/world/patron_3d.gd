@@ -81,11 +81,12 @@ const FP_FAN_SCALE := 1.0
 # 但不再伸到眼前 0.55 米外戳进别人的头、立牌(牌留在头自己的碰撞范围里)。脖子水平伸出 FP_FAN_PULL 米时收到底
 const FP_FAN_NEAR := 0.4
 const FP_FAN_PULL := 0.3
-# 探头往前时他人(自己在别人屏幕上)立在桌面上空的牌扇往前倒、平放在毡面上(牌顶朝桌心):头和伸长的脖子从上面过去,
-# 不再从牌里穿过。脖子往前伸 FAN_TUCK.x 米开始倒,到 FAN_TUCK.y 米平放;FAN_TUCK_SHIFT 是平放时再往桌心挪的距离
-const FAN_TUCK := Vector2(0.06, 0.3)
-const FAN_TUCK_SHIFT := 0.04
-const FAN_STACK := 0.024   # 扣着平放时牌底抬高的一叠牌(炸弹猫最多十几张,每张错开 1.6 mm × 缩放)
+# 探头往前时他人(自己在别人屏幕上)立在桌面上空的牌扇矮下去:以牌底为中心缩到 FAN_TUCK_SCALE、落到毡面上,
+# 头和伸长的脖子从上面过去,不再从牌里穿过;不转、不往前伸,扫不到前面桌上的东西。脖子往前伸 FAN_TUCK.x 米开始收,FAN_TUCK.y 米收到底
+const FAN_TUCK := Vector2(0.04, 0.18)
+const FAN_TUCK_SCALE := 0.45
+const FAN_SAG := 0.05      # 立着的牌扇两侧最低的牌角比中间那张的牌底低这么多(扇形下沉 + 转角,缩放 1 时)
+const FAN_STACK := 0.032   # 扣着平放时牌底抬高的一叠牌(斗地主地主最多 20 张,每张错开 1.6 mm × 缩放)
 const FP_SPEECH_AHEAD := Vector3(0, 0.12, -0.7)   # 第一人称时自己的快捷语气泡挂在眼前上方(座位坐标,相对眼睛):头顶在镜头背后
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
 const CHEER_BOUNCES := 3
@@ -179,7 +180,8 @@ var guard_id := -1                 # 在牌桌上的 pid:查询形状时跳过�
 var _blockers: Array = []          # 这一帧要躲的「挡」形状(_guard_target 取)
 var _guard_fwd := Vector2(0, -1)   # 座位朝向(牌桌坐标的水平方向)
 var _neck_goal := Vector3.ZERO     # 软碰撞时弹簧追的目标(截短后的探头目标,限速 NECK_GOAL_SPEED 滑过去)
-static var _metrics := {}          # 物种 -> 头的解析尺寸(head_metrics)
+var _head_metrics := {}            # 头的解析尺寸(head_metrics),头上挂的东西变了才重量
+var _metrics_key := -1
 
 
 func _init(p_species_index := 0) -> void:
@@ -229,7 +231,7 @@ func _build() -> void:
 	_antics = PatronAntics.new()
 	add_child(_antics)
 	_antics.setup(self)
-	head_metrics()   # 帽子还戴着、表演件都藏着时量一次(按物种缓存)
+	head_metrics()
 
 
 func _build_head(spec: Dictionary) -> void:
@@ -478,27 +480,39 @@ func _neck_lift() -> float:
 
 
 func head_metrics() -> Dictionary:
-	# 头的解析尺寸(Head 局部,相对头心 PatronParts.HEAD_CENTER;按物种缓存):构建时由头上各部件网格的包围盒换算,运行时不读网格。
-	# rx / front / back:含帽、耳的水平半宽、往前(吻、帽檐)、往后;above:帽顶、耳尖;below:下巴;mx:脸本身的半宽(拱过矮东西用)
-	if _metrics.has(species_index):
-		return _metrics[species_index]
+	# 头的解析尺寸(Head 局部,相对头心 PatronParts.HEAD_CENTER):由头上各部件网格的包围盒换算,运行时不读网格。
+	# rx / front / back:含帽、耳的水平半宽、往前(吻、帽檐)、往后;above:帽顶、耳尖;below:下巴;mx:脸本身的半宽(拱过矮东西用)。
+	# 按头上挂的东西缓存:换帽子(斗地主的地主帽 / 草帽挂在 Head/Hat 下)、帽子被打飞时重量一次,平时只比一下子节点数
+	var key := head.get_child_count() * 1000 + (_hat.get_child_count() if _hat != null else -1)
+	if key == _metrics_key and not _head_metrics.is_empty():
+		return _head_metrics
+	_metrics_key = key
 	var box := AABB()
 	var first := true
 	for node in head.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		if mi.mesh == null or not mi.visible:
+		if mi.mesh == null or not mi.visible or mi.name == "Tongue" or not _visible_under(mi, head):
 			continue
 		var b: AABB = _relative(head, mi) * mi.get_aabb()
 		box = b if first else box.merge(b)
 		first = false
 	var face: AABB = (head.get_node("HeadMesh") as MeshInstance3D).get_aabb()
 	var c := PatronParts.HEAD_CENTER
-	var m := {
+	_head_metrics = {
 		"rx": maxf(-box.position.x, box.end.x), "front": c.z - box.position.z, "back": box.end.z - c.z,
 		"above": box.end.y - c.y, "below": c.y - face.position.y, "mx": maxf(-face.position.x, face.end.x),
 	}
-	_metrics[species_index] = m
-	return m
+	return _head_metrics
+
+
+static func _visible_under(node: Node3D, root: Node3D) -> bool:
+	# 从 node 到 root 一路都可见(不依赖是否在场景树里;藏起来的原帽子 HatMesh 不算)
+	var n: Node = node
+	while n != null and n != root:
+		if n is Node3D and not (n as Node3D).visible:
+			return false
+		n = n.get_parent()
+	return true
 
 
 static func _relative(root: Node3D, node: Node3D) -> Transform3D:
@@ -670,18 +684,23 @@ func table_fan_transform() -> Transform3D:
 
 
 static func fan_tucked(rest: Transform3D, amount: float, backward := false) -> Transform3D:
-	# 纯函数:立着的牌扇(座位坐标)绕牌底那条边倒下 amount(0 = 立着,1 = 平放在毡面上),边倒边落到毡面。
-	# 往前倒(探头时):牌顶朝桌心、牌面朝上(别人手里的牌两面都是牌背),再往桌心挪 FAN_TUCK_SHIFT;扫过的地方离持牌者的头最远。
-	# 往后倒(backward,出局时):牌顶朝持牌者、牌背朝上扣在桌上;这时身子已经往后仰开
+	# 纯函数:立着的牌扇(座位坐标)收起 amount(0 = 原样,1 = 收到底)。
+	# 探头时(默认):不转、不往前伸,以中间那张的牌底为中心缩到 FAN_TUCK_SCALE、落到毡面上:矮下去让头和伸长的脖子从上面过,
+	# 也不扫到前面桌上的东西(斗地主对手的出牌行)。
+	# 出局时(backward):绕牌底往持牌者这边倒下、牌背朝上扣在桌上(身子已经往后仰开,爪子也离开了桌面)
 	var top := (rest.basis * Vector3(0, 0, -1)).normalized()            # 牌顶方向(卡牌本地 −Z)
 	var height := (rest.basis * Vector3(0, 0, Card3D.HEIGHT)).length()   # 牌高(含缩放)
 	var pivot := rest.origin - top * height * 0.5                        # 中间那张牌的底边
+	if not backward:
+		var k := lerpf(1.0, FAN_TUCK_SCALE, amount)
+		# 两侧的牌比中间低(扇形下沉 + 转角),缩小后仍让最低的牌角高出毡面
+		var floor_y := SeatLayout.FELT_TOP + FAN_SAG * k + 0.004
+		var low := Vector3(pivot.x, lerpf(pivot.y, floor_y, amount), pivot.z)
+		return Transform3D(rest.basis.scaled_local(Vector3.ONE * k), low + (rest.origin - pivot) * k)
 	var lean := asin(clampf(-top.z, -1.0, 1.0))                          # 牌顶已经往桌心倒了多少(弧度,前倾为正)
-	var angle := (PI / 2.0 + lean) if backward else -(PI / 2.0 - lean)
-	var turn := Basis(Vector3.RIGHT, angle * amount)
+	var turn := Basis(Vector3.RIGHT, (PI / 2.0 + lean) * amount)
 	# 扣着放时一层层往下叠(牌扇里后面的牌在下面):底边抬高一叠牌的厚度
-	var rest_y := SeatLayout.FELT_TOP + (FAN_STACK if backward else 0.003)
-	var drop := Vector3(0, (rest_y - pivot.y) * amount, (0.0 if backward else -FAN_TUCK_SHIFT) * amount)
+	var drop := Vector3(0, (SeatLayout.FELT_TOP + FAN_STACK - pivot.y) * amount, 0.0)
 	return Transform3D(turn * rest.basis, pivot + drop + turn * (rest.origin - pivot))
 
 

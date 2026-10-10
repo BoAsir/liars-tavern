@@ -23,7 +23,7 @@ const LIFT_MARGIN := 0.03       # 头从矮东西上面拱过去时,椭球下沿
 const MAX_LIFT := 0.16          # 最多抬这么高
 const LIFT_FLAT := 8.0          # 头下沿的超椭球指数(2 = 椭球;越大底面越平)
 const NECK_SAMPLES := 16        # 脖子从矮东西上面过:沿脖子取样找第一次进到占地的位置
-const NECK_IGNORE := 0.3        # 脖子根附近(前 30%)进到占地的不管:那是自己的牌扇,头往前探时它会倒下平放(Patron.fan_tucked)
+const NECK_IGNORE := 0.2        # 脖子根附近(前 20%)进到占地的不管:那是自己的牌扇,头往前探时它会矮下去(Patron.fan_tucked)
 const LAMP_Y := Tavern.ROOM_HEIGHT + LampProp.MOUTH_Y - LampProp.BEAD   # 吊灯罩口高度(牌桌坐标,≈1.89)
 const LAMP_RADIUS := LampProp.MOUTH_RADIUS + LampProp.BEAD
 const CEILING_MARGIN := 0.04    # 帽顶离罩口至少这么多
