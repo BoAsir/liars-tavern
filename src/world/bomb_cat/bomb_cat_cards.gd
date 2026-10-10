@@ -119,6 +119,11 @@ func bomb_node() -> BombCard3D:
 	return _bomb if is_instance_valid(_bomb) else null
 
 
+func hoverable_cards() -> Array:
+	# 本机能悬停放大(CardPreview)的牌:自己牌扇里的手牌、弃牌堆顶上摊开的几张(牌背由 CardPreview 自己排除)
+	return held_cards(my_pid) + _discard_cards.filter(func(c): return is_instance_valid(c))
+
+
 func peek_nodes() -> Array:
 	return _peek.filter(func(c): return is_instance_valid(c))
 
