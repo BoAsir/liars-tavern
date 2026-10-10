@@ -67,14 +67,16 @@ func test_untrack_leaves_other_screens_keys_alone():
 
 # —— 让位 ——
 
+const AREA := Vector2(1600, 900)
+
 func test_clear_spot_keeps_a_free_rect_where_it_is():
 	var rect := Rect2(100, 10, 80, 40)
-	assert_eq(WorldLabels.clear_spot(rect, [Rect2(300, 10, 80, 40)], 1280.0), rect)
+	assert_eq(WorldLabels.clear_spot(rect, [Rect2(300, 10, 80, 40)], AREA), rect)
 
 
 func test_clear_spot_moves_sideways_by_the_smallest_shift():
 	var obstacle := Rect2(100, 10, 100, 40)
-	var moved := WorldLabels.clear_spot(Rect2(130, 20, 60, 40), [obstacle], 1280.0)
+	var moved := WorldLabels.clear_spot(Rect2(130, 20, 60, 40), [obstacle], AREA)
 	assert_false(moved.intersects(obstacle))
 	assert_eq(moved.position.y, 20.0, "只横着挪")
 	assert_eq(moved.position.x, obstacle.end.x + WorldLabels.AVOID_GAP, "往右挪 74 比往左挪 94 近")
@@ -84,15 +86,23 @@ func test_clear_spot_stays_on_screen_and_skips_crowded_sides():
 	# 左边贴着画面边缘放不下,右边紧挨着又有一个:挪到两个都让开的地方
 	var a := Rect2(10, 10, 100, 40)
 	var b := Rect2(114, 10, 100, 40)
-	var moved := WorldLabels.clear_spot(Rect2(20, 10, 60, 40), [a, b], 1280.0)
+	var moved := WorldLabels.clear_spot(Rect2(20, 10, 60, 40), [a, b], AREA)
 	assert_false(moved.intersects(a) or moved.intersects(b))
 	assert_gte(moved.position.x, WorldLabels.EDGE_MARGIN)
 
 
 func test_clear_spot_gives_up_when_there_is_no_room():
-	var wall := Rect2(0, 0, 400, 40)
+	var wall := Rect2(0, 0, 400, 300)
 	var rect := Rect2(100, 10, 60, 40)
-	assert_eq(WorldLabels.clear_spot(rect, [wall], 400.0), rect, "整行都被占了:留在原处")
+	assert_eq(WorldLabels.clear_spot(rect, [wall], Vector2(400, 300)), rect, "整块都被占了:留在原处")
+
+
+func test_clear_spot_without_sideways_only_moves_down():
+	# 铭牌:被右上按钮行盖住时往下挪到按钮下面,不横着挪
+	var buttons := Rect2(1190, 24, 380, 52)
+	var plate := WorldLabels.clear_spot(Rect2(1300, 4, 220, 60), [buttons], AREA, false)
+	assert_eq(plate.position.x, 1300.0)
+	assert_eq(plate.position.y, buttons.end.y + WorldLabels.AVOID_GAP)
 
 
 func test_bubbles_clamped_to_the_top_edge_move_apart_but_plates_stay():
