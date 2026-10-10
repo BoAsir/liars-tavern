@@ -8,8 +8,8 @@ extends Node3D
 const WIDTH := 0.12
 const HEIGHT := 0.1733
 const THICKNESS := 0.0008
-const CORNER := 0.012667        # = 38/360 × WIDTH,与贴图圆角一致(CardFaces.CORNER_RADIUS)
-const CORNER_STEPS := 6
+const CORNER := 0.0146667       # = 44/360 × WIDTH,与贴图圆角一致(CardFaces.CORNER_RADIUS)
+const CORNER_STEPS := 8         # 圆角加大后每角多两段:轮廓 36 点,正反面 + 侧边共 144 个三角形(≤ 160)
 const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 
 static var _shared: ShaderMaterial = null   # 骗子酒馆的 5 种牌共用
