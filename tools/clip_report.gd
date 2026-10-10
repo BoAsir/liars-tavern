@@ -79,6 +79,9 @@ func _make_world(species: Array, radius := SeatLayout.TABLE_RADIUS, revolvers :=
 		players.append({"pid": i + 1, "species": species[i]})
 	world.arrange(players, 1, true, revolvers)
 	await create_timer(0.8).timeout   # 登场缩放走完
+	if opts.has("no-guard"):   # 对比:关掉探头的软碰撞(改动之前的探头)
+		for pid in world.patrons:
+			world.patrons[pid].guard = null
 	return world
 
 
@@ -119,6 +122,8 @@ func _present_self(world: TableWorld, mode: String) -> void:
 	var seat := world.seat_transform(world.seat_angles[1])
 	var view := world.third_person_view(1).origin
 	match mode:
+		"dice":
+			return   # 吹牛骰子没有牌
 		"poker":
 			me.hold_fan(PokerLayout.fan_transform(seat, view))
 		"bomb":
@@ -174,8 +179,19 @@ func _table_cards(world: TableWorld, mode: String) -> Array:
 
 
 func _static_meshes(world: TableWorld, mode: String) -> Array:
-	# 桌心不动的东西:骗子酒馆的目标牌立牌(底座、夹子、牌)
+	# 桌上的道具:骗子酒馆的目标牌立牌(底座、夹子、牌);吹牛骰子的骰盅与桌心出价标记(同 tools/liars_dice_showcase.gd 搭)
 	var out := []
+	if mode == "dice":
+		var cups := LiarsDiceCups.new(world)
+		world.poker_root.add_child(cups)
+		var fx := LiarsDiceFx.new(world)
+		world.poker_root.add_child(fx)
+		cups.setup(world.seat_angles.keys(), {})
+		fx.bid_marker(3, 4)
+		for node in world.poker_root.find_children("*", "MeshInstance3D", true, false):
+			if (node as MeshInstance3D).is_visible_in_tree():
+				out.append(node)
+		return out
 	if mode == "liars":
 		for node in world.cards.find_children("*", "MeshInstance3D", true, false):
 			var mi := node as MeshInstance3D
@@ -276,7 +292,8 @@ func _fan() -> void:
 func _neck_worlds() -> Array:
 	return [["liars", [0, 1, 2, 3], SeatLayout.TABLE_RADIUS, 5], ["liars", [4, 5, 6, 7], SeatLayout.TABLE_RADIUS, 5],
 		["poker", [0, 1, 2, 3, 4, 5, 6, 7], SeatLayout.POKER_TABLE_RADIUS, 2],
-		["bomb", [3, 7, 5, 0, 1, 2], SeatLayout.POKER_TABLE_RADIUS, 8]]
+		["bomb", [3, 7, 5, 0, 1, 2], SeatLayout.POKER_TABLE_RADIUS, 5],
+		["dice", [7, 5, 3, 0], SeatLayout.TABLE_RADIUS, 0], ["dice", [1, 2, 4, 6, 7, 5], SeatLayout.POKER_TABLE_RADIUS, 0]]
 
 
 func _neck() -> void:
@@ -318,6 +335,9 @@ func _neck() -> void:
 					hit["others"] += 1
 					if opts.has("poses"):
 						print("  others %s %s pid%d %s -> %s" % [mode, Species.IDS[p.species_index], pid, target, p.neck_offset()])
+						for mi in others:
+							if Probe.head_hits(p, [mi]) > 0:
+								print("     hits %s of %s" % [mi.name, mi.get_parent().name])
 				if Probe.cards_hitting(other_cards, head) > 0:
 					hit["other_fans"] += 1
 					if opts.has("poses"):

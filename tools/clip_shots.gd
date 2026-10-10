@@ -98,7 +98,9 @@ func _peek(name: String, neck: Vector3) -> void:
 		world.patrons[pid].look_at_point(Vector3(0, SeatLayout.TABLE_TOP, 0))
 	await create_timer(SETTLE).timeout
 	await _shot(name + "_seat", world.third_person_view(1), TableWorld.SEAT_FILL_LIGHT)
-	await _shot(name + "_overhead", Transform3D(Basis.looking_at(Vector3(0, -2.4, -1.5), Vector3.UP), Vector3(0, 3.0, 1.9)))
+	# 斜上方(吊灯罩下面)看桌心
+	var eye := Vector3(1.55, 1.75, 1.55)
+	await _shot(name + "_table", Transform3D(Basis.looking_at(Vector3(0, 1.05, -0.1) - eye, Vector3.UP), eye))
 
 
 func _clap() -> void:
