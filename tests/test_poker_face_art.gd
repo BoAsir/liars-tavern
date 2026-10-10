@@ -92,9 +92,10 @@ func test_card_size_is_shared_with_poker_faces():
 func test_four_colour_suits_follow_the_spec():
 	var colors: Array = PokerFaceArt.SUIT_COLORS
 	assert_eq(colors.size(), 4)
-	assert_lt(colors[PokerCard.SPADES].get_luminance(), 0.1, "♠ 墨黑")
+	# 动森式柔化后:♠ 是带靛色的深墨(仍远暗于纸)、♥ 是柔一点的红(红通道明显压过另两个)
+	assert_lt(colors[PokerCard.SPADES].get_luminance(), 0.25, "♠ 深墨")
 	var heart: Color = colors[PokerCard.HEARTS]
-	assert_true(heart.r > 0.7 and heart.g < 0.2 and heart.b < 0.2, "♥ 红 %s" % heart)
+	assert_true(heart.r > 0.75 and heart.r - maxf(heart.g, heart.b) > 0.45, "♥ 红 %s" % heart)
 	for pair in [[PokerCard.DIAMONDS, SPEC_DIAMOND], [PokerCard.CLUBS, SPEC_CLUB]]:
 		var c: Color = colors[pair[0]]
 		var want: Color = pair[1]
