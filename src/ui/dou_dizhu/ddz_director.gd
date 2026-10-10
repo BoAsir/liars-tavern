@@ -59,6 +59,7 @@ func _init(p_screen: Node, p_app: Node, p_hud: DdzHud) -> void:
 	fx = app.get("post_fx")
 	var path = app.get("settings_path")
 	seat_camera = SeatCamera.new(rig, world, screen.my_pid, path if path is String else Settings.PATH)
+	seat_camera.stow_fan_in_first_person = true   # 第一人称时 3D 牌扇收起来,不和底部的 2D 手牌条叠在一起(穿模修复 2026-10-10)
 	add_child(seat_camera)
 
 

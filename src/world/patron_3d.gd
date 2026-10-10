@@ -86,6 +86,10 @@ const FP_FAN_PULL := 0.3
 const FAN_TUCK := Vector2(0.04, 0.18)
 const FAN_TUCK_SCALE := 0.45
 const FAN_SAG := 0.05      # 立着的牌扇两侧最低的牌角比中间那张的牌底低这么多(扇形下沉 + 转角,缩放 1 时)
+# 自己举着的牌扇(越肩 / 第一人称)收起来:镜头离开座位去拍特写、翻牌时,牌扇落回桌面上空、矮下去(同探头时的收法),
+# 不再挡在特写镜头前;回座后再举起来(试玩挑错 2026-10-10:骗子酒馆第一人称翻牌机位就在自己头上,右半屏被 5 张大牌挡住)。
+# FAN_STOW_SPEED:每秒收 / 举这么多(0..1)
+const FAN_STOW_SPEED := 4.0
 const FAN_STACK := 0.032   # 扣着平放时牌底抬高的一叠牌(斗地主地主最多 20 张,每张错开 1.6 mm × 缩放)
 const FP_SPEECH_AHEAD := Vector3(0, 0.12, -0.7)   # 第一人称时自己的快捷语气泡挂在眼前上方(座位坐标,相对眼睛):头顶在镜头背后
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
@@ -134,6 +138,8 @@ var _fan_mode := FAN_TABLE
 var _fan_hold := Transform3D()   # FAN_HAND:身体局部的固定变换;FAN_FP:座位坐标(眼睛在 rest_eye 时),每帧跟着眼睛平移,画面里不动
 var _fan_alive = null   # 出局前的 [牌扇模式, 变换];reset_pose 时放回
 var _fan_drop := 0.0    # 出局时牌扇倒下的进度(0..1,FAN_LAP 模式)
+var _fan_stow := 0.0    # 举着的牌扇收起来的进度(0 = 举着,1 = 收在桌面上空)
+var _fan_stow_target := 0.0
 var _fan_drop_from := Transform3D()   # 出局那一刻牌扇的座位坐标变换(越肩 / 第一人称举着的牌从这里落下)
 var _head_hidden := false
 var _hidden_parts := {}  # 第一人称时藏起来的几何体 -> [原 cast_shadow, 原 layers](恢复用)
@@ -420,7 +426,7 @@ func _update_neck(delta: float) -> void:
 	# 偏移按座位坐标给出:换到(前倾、出局时歪倒的)身体局部坐标,头才是水平地探出去
 	head.position = HEAD_PIVOT + body.quaternion.inverse() * _neck_offset
 	_fit_neck()
-	_place_fan()
+	_place_fan(delta)
 
 
 func _head_base() -> Vector3:
@@ -709,14 +715,36 @@ func fan_dead_transform() -> Transform3D:
 	return fan_tucked(fan_rest_transform(_look_data), 1.0, true)
 
 
-func _place_fan() -> void:
-	# 每帧(_update_neck 末尾):立在桌面上空 / 第一人称两种模式按座位坐标摆,再换到身体局部(抵消前倾与呼吸缩放)
+func set_fan_stowed(on: bool) -> void:
+	# 自己举着的牌扇(hold_fan / present_hand_first_person)收到桌面上空、矮下去;false 举回来。按 FAN_STOW_SPEED 平滑过渡。
+	# SeatCamera 每帧按镜头在不在座位上调;立在桌面上空的牌扇(别人的)不受影响
+	_fan_stow_target = 1.0 if on else 0.0
+
+
+func is_fan_stowed() -> bool:
+	return _fan_stow_target > 0.5
+
+
+func _place_fan(delta := 0.0) -> void:
+	# 每帧(_update_neck 末尾):立在桌面上空 / 第一人称两种模式按座位坐标摆,再换到身体局部(抵消前倾与呼吸缩放);
+	# 举着的牌扇收起来时朝「桌面上空、矮下去」插过去
+	_fan_stow = move_toward(_fan_stow, _fan_stow_target, FAN_STOW_SPEED * delta)
+	var stowing := _fan_stow > 0.0 and alive and (_fan_mode == FAN_HAND or _fan_mode == FAN_FP)
 	match _fan_mode:
 		FAN_TABLE:
 			fan.transform = body.transform.affine_inverse() * table_fan_transform()
 		FAN_FP:
 			if alive:
-				fan.transform = body.transform.affine_inverse() * first_person_fan_now()
+				var held := first_person_fan_now()
+				if stowing:
+					held = blend_transform(held, stowed_fan_transform(), smoothstep(0.0, 1.0, _fan_stow))
+				fan.transform = body.transform.affine_inverse() * held
+		FAN_HAND:
+			if stowing:
+				var held := blend_transform(body.transform * _fan_hold, stowed_fan_transform(), smoothstep(0.0, 1.0, _fan_stow))
+				fan.transform = body.transform.affine_inverse() * held
+			elif not fan.transform.is_equal_approx(_fan_hold):
+				fan.transform = _fan_hold
 		FAN_LAP:
 			var xf: Transform3D
 			if _fan_drop_from.origin == Vector3.INF:
@@ -731,6 +759,17 @@ func _place_fan() -> void:
 				var size := from.basis.get_scale().lerp(to.basis.get_scale(), t)
 				xf = Transform3D(Basis(turn).scaled(size), from.origin.lerp(bend, t).lerp(bend.lerp(to.origin, t), t))
 			fan.transform = body.transform.affine_inverse() * xf
+
+
+func stowed_fan_transform() -> Transform3D:
+	# 收起来的牌扇(座位坐标):桌面上空的位置、矮下去(同探头时)
+	return fan_tucked(fan_rest_transform(_look_data).translated(body.position - HIP), 1.0)
+
+
+static func blend_transform(a: Transform3D, b: Transform3D, t: float) -> Transform3D:
+	# 带缩放的变换插值:转角球面插值,缩放、位置线性插值
+	var turn := a.basis.get_rotation_quaternion().slerp(b.basis.get_rotation_quaternion(), t)
+	return Transform3D(Basis(turn).scaled(a.basis.get_scale().lerp(b.basis.get_scale(), t)), a.origin.lerp(b.origin, t))
 
 
 func first_person_fan_now() -> Transform3D:

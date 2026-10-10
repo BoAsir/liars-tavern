@@ -7,6 +7,7 @@ extends Node
 # 拍特写、观战、换屏时头一律露出来;酒客重建(复活、换形象)也按每帧的判断重新处理。
 # 不论视角,镜头钻进自己的头里(翻牌机位就在自己座位上方、开局运镜从后脑穿过去、探出去的头挡在特写前)时也藏头,
 # 免得满屏是自己的胡须、耳朵和帽子里面。
+# 离座时自己举着的牌扇收到桌面上空(Patron.set_fan_stowed),回座举回来;stow_fan_in_first_person 让第一人称时也收着。
 
 
 signal mode_changed(first_person: bool)
@@ -26,6 +27,8 @@ var first_person := false
 var _seated := false        # enter() 之后、leave() 之前:镜头归座位
 var _hidden: Patron = null  # 正藏着头的酒客
 var _entering: Tween = null # 回座运镜;导演会 await 它,切换视角不能把它打断
+# 第一人称时把自己的 3D 牌扇收起来(底部有 2D 手牌条当主要入口的玩法:斗地主),免得牌扇和手牌条叠在一起
+var stow_fan_in_first_person := false
 
 
 func _init(p_rig: CameraRig, p_world: TableWorld, p_my_pid: int, p_settings_path := Settings.PATH) -> void:
@@ -123,6 +126,9 @@ func update_head() -> void:
 	if want and not me.is_head_hidden():
 		me.set_head_hidden(true)
 		_hidden = me
+	# 镜头离开座位(特写、翻牌、观战)时自己举着的牌扇收到桌面上空,不挡镜头;回座再举起来(穿模修复 2026-10-10)
+	if me != null and is_instance_valid(me):
+		me.set_fan_stowed(not _seated or (first_person and stow_fan_in_first_person))
 
 
 func _show_head() -> void:
