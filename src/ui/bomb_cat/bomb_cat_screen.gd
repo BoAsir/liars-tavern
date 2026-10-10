@@ -32,6 +32,7 @@ var director: BombCatDirector
 var quips: QuipController
 var world: TableWorld
 var cards: BombCatCards
+var fx3d: BombCatFx                # 道具效果层(平底锅、放大镜、炸弹猫……),挂在 poker_root 下随拆台收走
 var state := BombCatScreenState.new()
 var animating := true
 var intent_sink := Callable()     # 测试钩子:不走 Net,直接把意图交给本地会话(func(intent: Dictionary))
@@ -72,6 +73,10 @@ func _ready() -> void:
 	cards.my_pid = my_pid
 	world.poker_root.add_child(cards)
 	cards.sfx.connect(Sfx.play)
+	fx3d = BombCatFx.new(world)
+	fx3d.my_pid = my_pid
+	world.poker_root.add_child(fx3d)
+	fx3d.sfx.connect(Sfx.play)
 	BombCatFaces.build(self)
 	hud = BombCatHud.new()
 	add_child(hud)
@@ -382,6 +387,15 @@ func _build_nameplates() -> void:
 		var anchor: Callable = world.nameplate_anchor.bind(pid) if world.is_poker_table() else world.patrons[pid].nameplate_anchor
 		app.labels.track(PLATE_KEY % pid, BombCatNameplate.new(state.name_of(pid)), anchor)
 	_update_nameplates()
+
+
+func pulse_nameplate(pid: Variant) -> void:
+	# 轮到他了:铭牌亮一下(自己没有铭牌,有回合横幅)
+	if not pid is int or app == null or app.get("labels") == null:
+		return
+	var plate: Variant = app.labels.get_node_for(PLATE_KEY % pid)
+	if plate is BombCatNameplate:
+		plate.pulse()
 
 
 func _update_nameplates() -> void:
