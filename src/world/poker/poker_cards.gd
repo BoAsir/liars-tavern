@@ -46,7 +46,10 @@ func _init(p_world: TableWorld) -> void:
 	world = p_world
 	name = "PokerCards"
 	_board.resize(PokerRules.BOARD_CARDS)
-	add_child(BoardRack.new())
+	var rack := BoardRack.new()
+	add_child(rack)
+	# 穿模防护:探头的头从公共牌架上面拱过去(牌架随本节点释放后自动忽略)
+	world.clip_guard.set_prop(&"poker_board", BoardRack.guard_shape(rack))
 	world.first_person_changed.connect(_on_first_person_changed)
 
 

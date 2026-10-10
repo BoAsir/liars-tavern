@@ -31,6 +31,11 @@ static func candle_height(i: int, seed: float) -> float:
 	return 0.06 + 0.035 * ((i * 37 + int(seed)) % 3)
 
 
+static func top_height() -> float:
+	# 最高那支蜡烛的火焰顶(牌桌坐标):穿模防护里头从烛台上面拱过去按它算
+	return SeatLayout.TABLE_TOP + WAX_BASE + 0.06 + 0.035 * 2 + FLAME_ABOVE + FLAME_SIZE.y * 0.5
+
+
 static func build(parent: Node3D, flickers: Array) -> Array[Node3D]:
 	var holders: Array[Node3D] = []
 	for k in SPECS.size():

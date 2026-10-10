@@ -46,7 +46,8 @@ const LOOK := {
 		Vector3(-0.36, 0.3, 0.3), Vector3(-0.35, 0.13, 0.36), Vector3(-0.32, 0.058, 0.46), Vector3(-0.26, 0.042, 0.58),
 		Vector3(-0.16, 0.03, 0.68), Vector3(-0.045, 0.022, 0.74)], "radius": 0.07, "tip_radius": 0.012,
 		"color": "fur", "material": 4.0, "sway_range": Vector2(0.86, 1.0), "sway": 0.07},
-	"anim": {"look_pitch_min": -0.3, "blink_speed": 1.0},
+	# 低头下限比别人浅:长吻低头会戳进桌面(穿模修复 2026-10-10 实测:−0.3 再加噪声与点头,轮到他前倾时下颌尖低于桌面)
+	"anim": {"look_pitch_min": -0.25, "blink_speed": 1.0},
 }
 
 # 两颌(Head 局部):上颌宽而罩住下颌,吻尖 z ≥ −0.38

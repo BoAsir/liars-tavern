@@ -10,6 +10,7 @@ const ARM_LENGTH := 0.45   # 动森式大头离肩更远:举枪时手要离头�
 const SHOULDER := Vector3(0.21, 0.38, -0.02)   # 动森式:躯干压扁加宽后肩更低,肩宽不变(举枪够得着大头;Q 版 0.205, 0.485;最初 0.21, 0.52)
 const PAW_RADIUS := 0.058
 const PAW_SCALE := Vector3(1, 0.8, 1.1)
+const PAW_CLEAR := PAW_RADIUS * 1.1 + 0.01   # clear_of_head:手掌离头的椭球至少这么远(爪子半径按最长的轴 + 1 cm)
 const HEAD_PIVOT := Vector3(0, 0.62, -0.02)   # 动森式:下巴压在领口上,看不见脖子(Q 版 0.615;最初 0.65)
 # 弹簧脖子:头按座位坐标的水平偏移伸出去,脖子从领口自动拉长连到头
 const NECK_BASE := Vector3(0, 0.55, -0.02)   # 物种 LOOK 按压扁前写,构建时乘 PatronParts.BODY_SQUASH
@@ -22,12 +23,17 @@ const NECK_STIFFNESS := 60.0  # 弹簧刚度与阻尼:临界阻尼(2√刚度),�
 const NECK_DAMPING := 15.5
 const NECK_MIN_THICKNESS := 0.55   # 拉长时脖子变细,最细到原粗细的这个比例
 const NECK_MAX_STEP := 1.0 / 60.0  # 弹簧积分的最大步长(秒):掉帧时分步积分,不会弹飞
+# 探头的软碰撞(穿模修复 2026-10-10):有牌桌(guard)时,头每个积分小步都被推出别人的头与身体、立牌等「挡」形状,
+# 从牌扇、烛台等「抬」形状上面拱过去(见 ClipGuard);同步的仍是原始探头偏移,各端按自己的场景各自推、各自抬
 const HIP := Vector3(0, 0.5, 0.12)
 # 前倾角(弧度,绕髋部):坐着时趴向牌桌,单节手臂才够得着桌面;轮到自己时再多倾一点
 const SEATED_LEAN := 0.18
 const TURN_LEAN := 0.13
 # 举枪、庆祝时坐直——仍留一点前倾,空着的那只手才搭得到桌面
 const SITTING_UP_LEAN := 0.08
+# 低头的余量:看向的俯仰按物种下限(LOOK anim.look_pitch_min)截断之后,待机噪声(0.05)与说话点头(PatronAntics.NOD 0.075)
+# 还会再往下压;总俯仰最低到下限 − 这么多(前倾时再按世界俯仰抬回来,见 head_pitch_floor)
+const HEAD_DIP_ROOM := 0.125
 # 搭在桌上的手:掌心离身体中线的横向距离;拍桌落点更靠里
 const PAW_SPREAD := 0.15
 const SLAM_SPREAD := 0.08
@@ -48,10 +54,16 @@ const GUN_TWIST_TIME := 0.18   # 手位到了之后转手(不转枪)对准头心
 const GUN_DROP := Vector3(0.24, 0.0, -0.42)          # 中弹后枪落在面前的桌沿(座位坐标,高度另按毡面算)
 const HAND_CHEER := Vector3(0.32, 1.0, -0.12)
 const HAND_DEAD := Vector3(0.28, 0.0, 0.05)
-# 他人的牌扇:在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)基础上再上仰,牌面迎向持牌者的视线。
-# FAN_POS 为座位坐标(相对髋部):前倾坐着时牌扇停在这里,轮到他再前倾时下沉也碰不到桌面
-const FAN_TILT_DEG := -18.0
-const FAN_POS := Vector3(0, 0.46, -0.37)
+# 他人的牌扇(穿模修复 2026-10-10,规格 2026-10-08-cozy-toon-style-design §穿模修复):在 CardTable.FAN_BASIS(竖立、牌面朝持牌者)
+# 基础上再上仰 FAN_TILT_DEG,牌面迎向持牌者的视线、牌背斜朝上给别人看。动森式大头的下巴压在领口上、两条手臂几乎平搭在桌沿,
+# 胸前已经没有空地(原来摆在 HIP + (0, 0.46, −0.37):实测 8 个物种静坐时牌扇上半截埋进下巴、外侧几张插进手臂)。
+# 改成立在两只爪子前方的桌面上空:FAN_SEAT_POS 是座位坐标(不跟着前倾转,只跟着身体蹦跳、侧挪平移),略缩小 FAN_SCALE。
+# 转头包络(低头到物种下限、前倾、左右转)里吻尖与帽檐都够不着,轮到他前倾时爪子也碰不到;牌的最低角高出毡面。
+# 物种 LOOK 可写 "fan": {"pos", "tilt", "scale"} 单独调(目前都用默认值)。见 fan_rest_transform / table_fan_transform
+const FAN_SEAT_POS := Vector3(0, 0.9, -0.62)
+const FAN_TILT_DEG := -25.0
+const FAN_SCALE := 0.9
+enum { FAN_TABLE, FAN_HAND, FAN_FP, FAN_LAP }   # 牌扇怎么摆:立在桌面上空(他人)/ hold_fan 给的固定位置 / 第一人称跟着眼睛 / 出局扣在面前桌上
 # 第三人称下自己的牌扇:举在右肩外侧、比头更靠近越肩镜头,头怎么探都只会在牌后面;牌面朝向镜头,
 # 高度让牌扇停在回合横幅之上(座位坐标,相对髋部;越肩机位按它取景)
 const SELF_FAN_POS := Vector3(0.48, 0.88, 0.16)
@@ -63,6 +75,15 @@ const FP_EYE_OFFSET := Vector3(0, 0.07, -0.12)
 const VIEW_FOLLOW := 10.0   # 第一人称镜头追转头目标的速度(每秒):比头本身(3)快,跟手又不跳
 const FP_FAN_CAM := Vector3(0.22, -0.12, -0.55)
 const FP_FAN_SCALE := 1.0
+# 第一人称探头时手里的牌扇往眼睛收:以眼睛为中心按 FP_FAN_NEAR 等比缩小、拉近,画面上一模一样(透视下以视点为中心缩放不变形),
+# 但不再伸到眼前 0.55 米外戳进别人的头、立牌(牌留在头自己的碰撞范围里)。脖子水平伸出 FP_FAN_PULL 米时收到底
+const FP_FAN_NEAR := 0.4
+const FP_FAN_PULL := 0.3
+# 探头往前时他人(自己在别人屏幕上)立在桌面上空的牌扇往前倒、平放在毡面上(牌顶朝桌心):头和伸长的脖子从上面过去,
+# 不再从牌里穿过。脖子往前伸 FAN_TUCK.x 米开始倒,到 FAN_TUCK.y 米平放;FAN_TUCK_SHIFT 是平放时再往桌心挪的距离
+const FAN_TUCK := Vector2(0.06, 0.3)
+const FAN_TUCK_SHIFT := 0.04
+const FAN_STACK := 0.024   # 扣着平放时牌底抬高的一叠牌(炸弹猫最多十几张,每张错开 1.6 mm × 缩放)
 const FP_SPEECH_AHEAD := Vector3(0, 0.12, -0.7)   # 第一人称时自己的快捷语气泡挂在眼前上方(座位坐标,相对眼睛):头顶在镜头背后
 # 庆祝:原地蹦几下,每次起跳/落下的时长(秒)与高度(米)
 const CHEER_BOUNCES := 3
@@ -74,9 +95,11 @@ const GREY := Color(0.42, 0.42, 0.42)   # 褪色的灰(patron.gdshader 里同值
 const FADE_TIME := 1.4
 const DIE_BODY_ROT := Vector3(0.55, 0.15, -0.5)
 const DIE_HEAD_ROT := Vector3(0.3, 0.3, -0.4)
-# 出局时牌扇扣在大腿上(座位坐标):身子往后仰,挂在胸前的牌会跟着翻上来戳进大头的脸
-const DIE_FAN_POS := Vector3(0, 0.6, -0.1)
+# 出局时牌扇扣在面前的桌面上(穿模修复 2026-10-10:原来扣在大腿上,实测整扇牌都埋进躯干与裤子里):
+# 立在桌面上空的牌扇绕牌底往持牌者这边倒下、牌背朝上平放(身子往后仰,倒下的牌扫过的地方够不着头和手);
+# 越肩 / 第一人称举着的牌扇从手里按座位坐标直接落到同一位置。DIE_FAN_TIME 秒落定
 const DIE_FAN_TIME := 0.4
+const DIE_FAN_SWING := Vector3(0, 0.3, -0.45)   # 举在手里的牌先往上、往桌心抛出去(贝塞尔控制点,座位坐标)再落到桌上
 # 丢番茄(规格 2026-10-08):抛的人右手往后上方蓄力再甩向目标;被砸的人左爪抹一下脸(身体局部坐标,相对头的位置)
 const HAND_WINDUP := Vector3(0.34, 0.92, 0.14)
 const THROW_WINDUP := 0.16      # 蓄力时长(秒):番茄在这之后出手
@@ -94,6 +117,8 @@ const SNIP_TIME := 0.9
 const PEEK_GLASS := Vector3(0.15, -0.04, -0.3)    # 炸弹猫「偷看」:右爪举着放大镜凑到脸旁(相对头枢轴,身体坐标)
 const PLEAD_PAWS := Vector3(0.035, -0.2, -0.3)    # 炸弹猫「讨要」:双爪合十抵在下巴下
 const SNEAK_LEAN := 0.36                          # 炸弹猫「溜了」:身子往一侧一缩
+# 炸弹猫「甩锅」:头被拍扁(竖向压扁、横向撑开)。前后不放大:头枢轴在下巴,前后一放大,鳄鱼的长吻就往前捅进自己的牌扇
+const BONK_SQUASH := Vector3(1.22, 0.68, 1.0)
 const SNEAK_SHIFT := 0.13
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
@@ -102,8 +127,11 @@ var alive := true
 var body: Node3D
 var head: Node3D
 var fan: Node3D
-var _fan_alive = null   # 出局前牌扇的位置(Transform3D);reset_pose 时放回
-var _fan_fp = null      # 第一人称的牌扇(Transform3D,座位坐标,眼睛在 rest_eye 时):有值时牌扇每帧跟着眼睛平移,画面里不动
+var _fan_mode := FAN_TABLE
+var _fan_hold := Transform3D()   # FAN_HAND:身体局部的固定变换;FAN_FP:座位坐标(眼睛在 rest_eye 时),每帧跟着眼睛平移,画面里不动
+var _fan_alive = null   # 出局前的 [牌扇模式, 变换];reset_pose 时放回
+var _fan_drop := 0.0    # 出局时牌扇倒下的进度(0..1,FAN_LAP 模式)
+var _fan_drop_from := Transform3D()   # 出局那一刻牌扇的座位坐标变换(越肩 / 第一人称举着的牌从这里落下)
 var _head_hidden := false
 var _hidden_parts := {}  # 第一人称时藏起来的几何体 -> [原 cast_shadow, 原 layers](恢复用)
 var right_hand: Node3D
@@ -144,6 +172,11 @@ var _wipe_tween: Tween = null      # 被番茄砸中后抹脸的补间(出局、
 var _view_angles := Vector2.ZERO   # 第一人称镜头跟着的转头角度 (yaw, pitch):只含看向目标,不含待机晃动与表演,追得比头快
 var _antics: PatronAntics          # Q 版搞笑表演(冒汗、发抖、星星、待机小动作……),见 patron_antics.gd
 var _dance: PatronDance = null     # 结算庆祝:跳舞 / 鼓掌 / 出局抽手(只在庆祝期间存在),见 patron_dance.gd
+var guard: ClipGuard = null        # 牌桌的穿模防护(TableWorld 落座时给;没有时探头不做软碰撞,如主菜单的形象、单独测试)
+var guard_id := -1                 # 在牌桌上的 pid:查询形状时跳过自己的头和身体
+var _blockers: Array = []          # 这一帧要躲的「挡」形状(_guard_target 取)
+var _guard_fwd := Vector2(0, -1)   # 座位朝向(牌桌坐标的水平方向)
+static var _metrics := {}          # 物种 -> 头的解析尺寸(head_metrics)
 
 
 func _init(p_species_index := 0) -> void:
@@ -187,13 +220,13 @@ func _build() -> void:
 	_arm_r = _build_arm(1.0, spec)
 	right_hand = _arm_r.get_node("Hand")
 	fan = MeshKit.pivot(body, Vector3.ZERO, "Fan")
-	fan.transform = _in_seat(Transform3D(CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(FAN_TILT_DEG)),
-		HIP + FAN_POS))
+	_place_fan()
 	_resting = {_arm_l: true, _arm_r: true}
 	_plant_paws()
 	_antics = PatronAntics.new()
 	add_child(_antics)
 	_antics.setup(self)
+	head_metrics()   # 帽子还戴着、表演件都藏着时量一次(按物种缓存)
 
 
 func _build_head(spec: Dictionary) -> void:
@@ -284,6 +317,7 @@ func _animate_idle(delta: float) -> void:
 	_view_angles = _view_angles.lerp(Vector2(yaw, pitch), minf(delta * VIEW_FOLLOW, 1.0))
 	yaw += (_noise.get_noise_1d(_time * 0.4) * 0.08 + _antics.head_add.y) * wobble
 	pitch += (_noise.get_noise_1d(_time * 0.3 + 40.0) * 0.05 + _antics.head_add.x + _antics.nod) * wobble
+	pitch = maxf(pitch, head_pitch_floor(_look_data, -body.rotation.x))
 	head.rotation.y = lerpf(head.rotation.y, yaw, minf(delta * 3.0, 1.0))
 	head.rotation.x = lerpf(head.rotation.x, pitch, minf(delta * 3.0, 1.0))
 	head.rotation.z = lerpf(head.rotation.z, (_noise.get_noise_1d(_time * 0.25 + 90.0) * 0.06 + _antics.head_add.z) * wobble,
@@ -294,6 +328,12 @@ func _animate_idle(delta: float) -> void:
 	if _blink_in <= 0.0:
 		_blink_in = randf_range(1.8, 5.5)
 		_blink()
+
+
+static func head_pitch_floor(look: Dictionary, lean: float) -> float:
+	# 低头的下限(含待机噪声、说话点头、表演的叠加):物种看向下限再留 HEAD_DIP_ROOM;身体比坐着(SEATED_LEAN)前倾得越多,
+	# 头越要往上抬回来(按世界俯仰算):鳄鱼的长吻轮到他前倾时低头会戳进桌面(穿模修复 2026-10-10 实测)
+	return float(look.get("anim", {}).get("look_pitch_min", -0.45)) - HEAD_DIP_ROOM + (lean - SEATED_LEAN)
 
 
 func _update_look(delta: float) -> void:
@@ -351,18 +391,117 @@ func neck_offset() -> Vector3:
 
 func _update_neck(delta: float) -> void:
 	var target := _neck_target if alive else Vector3.ZERO
+	var guarded := guard != null and alive and is_inside_tree() \
+		and (target.length_squared() > 0.000001 or _neck_offset.length_squared() > 0.000001)
+	if guarded:
+		target = _guard_target(target)
 	var left := delta
 	while left > 0.0:
 		var step := minf(left, NECK_MAX_STEP)
-		var accel := (target - _neck_offset) * NECK_STIFFNESS - _neck_velocity * NECK_DAMPING
+		var goal := target
+		if guarded:
+			goal.y = _neck_lift()
+		var accel := (goal - _neck_offset) * NECK_STIFFNESS - _neck_velocity * NECK_DAMPING
 		_neck_velocity += accel * step
 		_neck_offset += _neck_velocity * step
+		if guarded:
+			_guard_neck()
 		left -= step
 	# 偏移按座位坐标给出:换到(前倾、出局时歪倒的)身体局部坐标,头才是水平地探出去
 	head.position = HEAD_PIVOT + body.quaternion.inverse() * _neck_offset
 	_fit_neck()
-	if _fan_fp != null and alive:
-		_place_fan_first_person()
+	_place_fan()
+
+
+func _head_base() -> Vector3:
+	# 脖子没探出时的头心(座位坐标,含此刻的前倾、呼吸与蹦跳)
+	return body.transform * (HEAD_PIVOT + Vector3(0, 0.12, 0))
+
+
+func _seat_frame() -> Transform3D:
+	# 座位在牌桌坐标里的变换(去掉登场缩放)
+	return transform.orthonormalized()
+
+
+func _guard_target(target: Vector3) -> Vector3:
+	# 这一帧要躲的形状(按帧取一次),并把探头目标沿直线截到第一个碰撞之前(ClipGuard.ray_clamp)
+	var seat := _seat_frame()
+	var base := _head_base()
+	var home := seat * base
+	var fwd3 := -seat.basis.z
+	_guard_fwd = Vector2(fwd3.x, fwd3.z).normalized()
+	var m := head_metrics()
+	_blockers = guard.blockers_for(guard_id, Vector2(home.x, home.z), _guard_fwd, m)
+	var to := seat * (base + Vector3(target.x, 0.0, target.z))
+	var t := ClipGuard.ray_clamp(_blockers, Vector2(home.x, home.z), Vector2(to.x, to.z), _guard_fwd, m)
+	return Vector3(target.x * t, 0.0, target.z * t)
+
+
+func _guard_neck() -> void:
+	# 把头推出「挡」形状:位置投影到形状外面,速度去掉往里的分量(贴着边滑,不弹)
+	var seat := _seat_frame()
+	var c := seat * (_head_base() + _neck_offset)
+	var m := head_metrics()
+	var res := ClipGuard.push_out(_blockers, Vector2(c.x, c.z), _guard_fwd, m, c.y - m["below"])
+	var h: Vector2 = res[0]
+	if h.is_equal_approx(Vector2(c.x, c.z)):
+		return
+	_neck_offset += seat.basis.inverse() * Vector3(h.x - c.x, 0.0, h.y - c.z)
+	var n: Vector2 = res[1]
+	var normal := seat.basis.inverse() * Vector3(n.x, 0.0, n.y)
+	var into := _neck_velocity.dot(normal)
+	if into < 0.0:
+		_neck_velocity -= normal * into
+
+
+func _neck_lift() -> float:
+	# 头此刻的水平位置要抬多高才从「抬」形状上面过去(灯下封顶)
+	var seat := _seat_frame()
+	var c := seat * (_head_base() + Vector3(_neck_offset.x, 0.0, _neck_offset.z))
+	var m := head_metrics()
+	var h := Vector2(c.x, c.z)
+	var base := seat * (body.transform * _neck_base)
+	var length := (HEAD_PIVOT - _neck_base).length()
+	var span := (seat * (body.transform * (HEAD_PIVOT + body.quaternion.inverse() * Vector3(_neck_offset.x, 0.0, _neck_offset.z)))) - base
+	var thickness := clampf(sqrt(length / maxf(span.length(), 0.001)), NECK_MIN_THICKNESS, 1.0)
+	var radius: float = _look_data["neck"].get("radius", 0.08) * thickness
+	var lift := ClipGuard.lift_needed(guard.shapes(), h, c.y, _guard_fwd, m, guard_id, base, radius)
+	return minf(lift, ClipGuard.ceiling_cap(h, c.y, m))
+
+
+func head_metrics() -> Dictionary:
+	# 头的解析尺寸(Head 局部,相对头心 PatronParts.HEAD_CENTER;按物种缓存):构建时由头上各部件网格的包围盒换算,运行时不读网格。
+	# rx / front / back:含帽、耳的水平半宽、往前(吻、帽檐)、往后;above:帽顶、耳尖;below:下巴;mx:脸本身的半宽(拱过矮东西用)
+	if _metrics.has(species_index):
+		return _metrics[species_index]
+	var box := AABB()
+	var first := true
+	for node in head.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null or not mi.visible:
+			continue
+		var b: AABB = _relative(head, mi) * mi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	var face: AABB = (head.get_node("HeadMesh") as MeshInstance3D).get_aabb()
+	var c := PatronParts.HEAD_CENTER
+	var m := {
+		"rx": maxf(-box.position.x, box.end.x), "front": c.z - box.position.z, "back": box.end.z - c.z,
+		"above": box.end.y - c.y, "below": c.y - face.position.y, "mx": maxf(-face.position.x, face.end.x),
+	}
+	_metrics[species_index] = m
+	return m
+
+
+static func _relative(root: Node3D, node: Node3D) -> Transform3D:
+	# node 在 root 局部坐标里的变换(不依赖是否在场景树里)
+	var xf := Transform3D.IDENTITY
+	var n: Node = node
+	while n != null and n != root:
+		if n is Node3D:
+			xf = (n as Node3D).transform * xf
+		n = n.get_parent()
+	return xf
 
 
 func _fit_neck() -> void:
@@ -478,25 +617,105 @@ func present_hand_to(viewer: Vector3) -> void:
 func present_hand_first_person(seat: Transform3D, view: Transform3D, cam_offset := FP_FAN_CAM, fan_scale := FP_FAN_SCALE) -> void:
 	# 第一人称:牌扇拿在镜头右下方(cam_offset),牌面正对眼睛、牌顶朝画面上方;之后每帧跟着眼睛平移
 	# (探头、轮到自己前倾、呼吸都不会让牌在画面里挪动)。seat = 座位的静止变换,view = 脖子没探出时的第一人称机位
-	_fan_fp = first_person_fan(seat, view, cam_offset, fan_scale)
-	_place_fan_first_person()
+	_fan_mode = FAN_FP
+	_fan_hold = first_person_fan(seat, view, cam_offset, fan_scale)
+	_place_fan()
 
 
 func hold_fan(xform: Transform3D) -> void:
-	# 越肩:自己的牌扇停在 xform(身体局部),不再跟着眼睛走
-	_fan_fp = null
+	# 越肩:自己的牌扇停在 xform(身体局部),不再跟着眼睛走、也不再立在桌面上空
+	_fan_mode = FAN_HAND
+	_fan_hold = xform
 	fan.transform = xform
 
 
+func rest_fan() -> void:
+	# 牌扇回到默认的「立在两爪前方的桌面上空」(他人的牌扇;自己从越肩 / 第一人称的举牌位置放回去时用)
+	_fan_mode = FAN_TABLE
+	_place_fan()
+
+
 func holds_fan_first_person() -> bool:
-	return _fan_fp != null
+	return _fan_mode == FAN_FP
 
 
-func _place_fan_first_person() -> void:
-	# 座位坐标里的牌扇按眼睛离开 rest_eye 的位移平移,再换到身体局部(身体前倾、呼吸缩放都抵消掉)
-	var seat_xform: Transform3D = _fan_fp
-	seat_xform.origin += eye_local() - rest_eye()
-	fan.transform = body.transform.affine_inverse() * seat_xform
+func fan_mode() -> int:
+	return _fan_mode
+
+
+static func fan_rest_transform(look := {}) -> Transform3D:
+	# 纯函数:他人牌扇的静止摆放(座位坐标):FAN_SEAT_POS、上仰 FAN_TILT_DEG、缩放 FAN_SCALE,物种 LOOK 的 "fan" 可覆盖。
+	# 牌扇节点里的牌按 CardTable.fan_slot / BombCatLayout.fan_slot 排开(新玩法的牌扇也挂在 Patron.fan 下即可,不用自己摆)
+	var spec: Dictionary = look.get("fan", {})
+	var tilt: float = spec.get("tilt", FAN_TILT_DEG)
+	var s: float = spec.get("scale", FAN_SCALE)
+	return Transform3D((CardTable.FAN_BASIS * Basis(Vector3.RIGHT, deg_to_rad(tilt))).scaled(Vector3.ONE * s),
+		spec.get("pos", FAN_SEAT_POS))
+
+
+func table_fan_transform() -> Transform3D:
+	# 此刻立在桌面上空的牌扇(座位坐标):静止摆放 + 身体的平移(吓一跳、庆祝蹦起、拆弹发抖、溜了侧挪时牌跟着动);
+	# 探头往前时往前倒、平放到毡面上(fan_tucked)
+	var rest := fan_rest_transform(_look_data).translated(body.position - HIP)
+	var tuck := smoothstep(FAN_TUCK.x, FAN_TUCK.y, -_neck_offset.z) if alive else 0.0
+	return fan_tucked(rest, tuck) if tuck > 0.0 else rest
+
+
+static func fan_tucked(rest: Transform3D, amount: float, backward := false) -> Transform3D:
+	# 纯函数:立着的牌扇(座位坐标)绕牌底那条边倒下 amount(0 = 立着,1 = 平放在毡面上),边倒边落到毡面。
+	# 往前倒(探头时):牌顶朝桌心、牌面朝上(别人手里的牌两面都是牌背),再往桌心挪 FAN_TUCK_SHIFT;扫过的地方离持牌者的头最远。
+	# 往后倒(backward,出局时):牌顶朝持牌者、牌背朝上扣在桌上;这时身子已经往后仰开
+	var top := (rest.basis * Vector3(0, 0, -1)).normalized()            # 牌顶方向(卡牌本地 −Z)
+	var height := (rest.basis * Vector3(0, 0, Card3D.HEIGHT)).length()   # 牌高(含缩放)
+	var pivot := rest.origin - top * height * 0.5                        # 中间那张牌的底边
+	var lean := asin(clampf(-top.z, -1.0, 1.0))                          # 牌顶已经往桌心倒了多少(弧度,前倾为正)
+	var angle := (PI / 2.0 + lean) if backward else -(PI / 2.0 - lean)
+	var turn := Basis(Vector3.RIGHT, angle * amount)
+	# 扣着放时一层层往下叠(牌扇里后面的牌在下面):底边抬高一叠牌的厚度
+	var rest_y := SeatLayout.FELT_TOP + (FAN_STACK if backward else 0.003)
+	var drop := Vector3(0, (rest_y - pivot.y) * amount, (0.0 if backward else -FAN_TUCK_SHIFT) * amount)
+	return Transform3D(turn * rest.basis, pivot + drop + turn * (rest.origin - pivot))
+
+
+func fan_dead_transform() -> Transform3D:
+	# 出局后扣在面前桌上的牌扇(座位坐标)
+	return fan_tucked(fan_rest_transform(_look_data), 1.0, true)
+
+
+func _place_fan() -> void:
+	# 每帧(_update_neck 末尾):立在桌面上空 / 第一人称两种模式按座位坐标摆,再换到身体局部(抵消前倾与呼吸缩放)
+	match _fan_mode:
+		FAN_TABLE:
+			fan.transform = body.transform.affine_inverse() * table_fan_transform()
+		FAN_FP:
+			if alive:
+				fan.transform = body.transform.affine_inverse() * first_person_fan_now()
+		FAN_LAP:
+			var xf: Transform3D
+			if _fan_drop_from.origin == Vector3.INF:
+				xf = fan_tucked(fan_rest_transform(_look_data), _fan_drop * _fan_drop, true)
+			else:
+				# 举在手里的牌:先往上、往桌心抛,再落到面前桌上(二次贝塞尔,起步快):往后仰倒的大头正朝举牌的肩头这边歪下来
+				var to := fan_dead_transform()
+				var from := _fan_drop_from
+				var bend := from.origin + DIE_FAN_SWING
+				var t := 1.0 - (1.0 - _fan_drop) * (1.0 - _fan_drop)
+				var turn := from.basis.get_rotation_quaternion().slerp(to.basis.get_rotation_quaternion(), t)
+				var size := from.basis.get_scale().lerp(to.basis.get_scale(), t)
+				xf = Transform3D(Basis(turn).scaled(size), from.origin.lerp(bend, t).lerp(bend.lerp(to.origin, t), t))
+			fan.transform = body.transform.affine_inverse() * xf
+
+
+func first_person_fan_now() -> Transform3D:
+	# 第一人称手里的牌扇此刻在座位坐标里的变换:跟着眼睛平移;探头时以眼睛为中心收拢(FP_FAN_NEAR),画面不变
+	var eye := eye_local()
+	var xf := _fan_hold
+	xf.origin += eye - rest_eye()
+	var reach := Vector2(_neck_offset.x, _neck_offset.z).length()
+	var k := lerpf(1.0, FP_FAN_NEAR, smoothstep(0.02, FP_FAN_PULL, reach))
+	if k < 1.0:
+		xf = Transform3D(xf.basis * k, eye + (xf.origin - eye) * k)
+	return xf
 
 
 static func first_person_fan(seat: Transform3D, view: Transform3D, cam_offset: Vector3, fan_scale: float) -> Transform3D:
@@ -566,16 +785,17 @@ func _exit_tree() -> void:
 	set_head_hidden(false)
 
 
-func pose_arms(left_target: Vector3, right_target: Vector3, duration: float) -> Tween:
+func pose_arms(left_target: Vector3, right_target: Vector3, duration: float, clear_face := false) -> Tween:
+	# clear_face:手掌不许落进自己的大头里(见 clear_of_head);贴脸的动作(捂嘴、抹脸、举枪)不开
 	var tween := create_tween().set_parallel()
-	_tween_arm(tween, _arm_l, left_target, duration)
-	_tween_arm(tween, _arm_r, right_target, duration)
+	_tween_arm(tween, _arm_l, left_target, duration, Tween.TRANS_CUBIC, clear_face)
+	_tween_arm(tween, _arm_r, right_target, duration, Tween.TRANS_CUBIC, clear_face)
 	return tween
 
 
-func pose_right(target: Vector3, duration: float, trans := Tween.TRANS_CUBIC) -> Tween:
+func pose_right(target: Vector3, duration: float, trans := Tween.TRANS_CUBIC, clear_face := false) -> Tween:
 	var tween := create_tween()
-	_tween_arm(tween, _arm_r, target, duration, trans)
+	_tween_arm(tween, _arm_r, target, duration, trans, clear_face)
 	return tween
 
 
@@ -596,7 +816,7 @@ func slam_table() -> void:
 		return
 	_arms_locked = true
 	set_expression("angry")
-	await pose_right(HAND_RAISED, 0.2, Tween.TRANS_BACK).finished
+	await pose_right(HAND_RAISED, 0.2, Tween.TRANS_BACK, true).finished
 	await pose_right(rest_target(1.0, SLAM_SPREAD), 0.08, Tween.TRANS_EXPO).finished
 	_finish_slam()
 
@@ -643,8 +863,8 @@ func snip_wires(duration := SNIP_TIME) -> void:
 		var right := _to_body(SNIP_RIGHT + Vector3(-0.03 * side, -0.025 * side, 0.01 * side))
 		# 每一步左右手同时动(并行加进同一步),步与步之间用 0 秒的间隔隔开
 		tween.set_parallel(true)
-		_tween_arm(tween, _arm_l, left, SNIP_STEP, Tween.TRANS_SINE)
-		_tween_arm(tween, _arm_r, right, SNIP_STEP, Tween.TRANS_SINE)
+		_tween_arm(tween, _arm_l, left, SNIP_STEP, Tween.TRANS_SINE, true)
+		_tween_arm(tween, _arm_r, right, SNIP_STEP, Tween.TRANS_SINE, true)
 		tween.set_parallel(false)
 		tween.tween_interval(0.0)
 	var serial := _arm_serial
@@ -675,7 +895,7 @@ func bonk() -> void:
 	if not alive:
 		return
 	var tween := create_tween()
-	tween.tween_property(head, "scale", Vector3(1.2, 0.68, 1.2), 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(head, "scale", BONK_SQUASH, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(head, "scale", Vector3.ONE, 0.55).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	_antics.bonked(0.75)
 
@@ -871,11 +1091,11 @@ func die(gun: Node3D = null, table_parent: Node3D = null) -> void:
 	_tween_arm(fall, _arm_l, _mirror(HAND_DEAD, -1.0), 0.5, Tween.TRANS_BOUNCE)
 	_tween_arm(fall, _arm_r, HAND_DEAD, 0.5, Tween.TRANS_BOUNCE)
 	_knock_hat_off()
-	_fan_alive = fan.transform
-	var body_final := Transform3D(Basis.from_euler(body_rot), HIP)
-	var lap := Transform3D(Basis(Vector3.BACK, PI), DIE_FAN_POS)   # 平放、牌背朝上
-	fall.tween_property(fan, "transform", body_final.affine_inverse() * lap, DIE_FAN_TIME) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_fan_alive = [_fan_mode, fan.transform if _fan_mode != FAN_FP else _fan_hold]
+	_fan_drop_from = Transform3D(Basis(), Vector3.INF) if _fan_mode == FAN_TABLE else body.transform * fan.transform
+	_fan_mode = FAN_LAP
+	_fan_drop = 0.0
+	fall.tween_property(self, "_fan_drop", 1.0, DIE_FAN_TIME)   # 立着的牌按 ease-in 倒下(在 _place_fan 里换算),举着的按 ease-out 送走
 	fall.tween_method(_set_fade, 0.0, 1.0, FADE_TIME)
 	if not _look_data.get("tail", {}).is_empty():
 		fall.tween_method(func(v: float): _legs.set_instance_shader_parameter("tail",
@@ -918,7 +1138,7 @@ func celebrate() -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	bounce.tween_property(body, "position:y", HIP.y, CHEER_BOUNCE_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	_cheer_tweens = [bounce, pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3)]
+	_cheer_tweens = [bounce, pose_arms(_mirror(HAND_CHEER, -1.0), HAND_CHEER, 0.3, true)]
 	_antics.celebrate()
 	await bounce.finished
 	_arms_locked = false
@@ -940,8 +1160,12 @@ func reset_pose() -> void:
 	body.position = HIP
 	head.scale = Vector3.ONE   # 炸弹猫被平底锅拍扁的头弹回原样
 	if _fan_alive != null:
-		fan.transform = _fan_alive
+		_fan_mode = _fan_alive[0]
+		if _fan_mode == FAN_HAND:
+			fan.transform = _fan_alive[1]
+		_fan_hold = _fan_alive[1]
 		_fan_alive = null
+	_place_fan()
 	rest_arms(false)
 	_antics.reset()
 
@@ -1043,12 +1267,12 @@ func throw_at(target: Vector3) -> void:
 	if not can_throw():
 		return
 	_arms_locked = true
-	var windup := pose_right(HAND_WINDUP, THROW_WINDUP, Tween.TRANS_SINE)
+	var windup := pose_right(HAND_WINDUP, THROW_WINDUP, Tween.TRANS_SINE, true)
 	var serial := _arm_serial
 	await windup.finished
 	if not alive or serial != _arm_serial:
 		return   # 期间出局或有别的手臂动作接管(举枪、复位……):交给它们收尾
-	pose_right(body.to_local(target), THROW_FLING, Tween.TRANS_EXPO)
+	pose_right(body.to_local(target), THROW_FLING, Tween.TRANS_EXPO, true)
 	serial = _arm_serial
 	await get_tree().create_timer(THROW_FLING + THROW_RECOVER).timeout
 	if alive and serial == _arm_serial:
@@ -1126,17 +1350,38 @@ func _set_arm(arm: Node3D, target: Vector3) -> void:
 	arm.quaternion = _arm_quat(arm, target)
 
 
-func _tween_arm(tween: Tween, arm: Node3D, target: Vector3, duration: float, trans := Tween.TRANS_CUBIC) -> void:
+func _tween_arm(tween: Tween, arm: Node3D, target: Vector3, duration: float, trans := Tween.TRANS_CUBIC, clear_face := false) -> void:
 	_resting[arm] = false
 	_arm_serial += 1
-	tween.tween_property(arm, "quaternion", _arm_quat(arm, target), maxf(duration, 0.001)) \
+	tween.tween_property(arm, "quaternion", _arm_quat(arm, target, clear_face), maxf(duration, 0.001)) \
 		.set_trans(trans).set_ease(Tween.EASE_IN_OUT if trans != Tween.TRANS_BACK else Tween.EASE_OUT)
 
 
-func _arm_quat(arm: Node3D, target: Vector3) -> Quaternion:
+func _arm_quat(arm: Node3D, target: Vector3, clear_face := false) -> Quaternion:
 	var dir := target - arm.position
+	if clear_face:
+		dir = clear_of_head(arm.position, dir)
 	var up := Vector3.UP if absf(dir.normalized().dot(Vector3.UP)) < 0.95 else Vector3.BACK
 	return Basis.looking_at(dir, up).get_rotation_quaternion()
+
+
+func clear_of_head(shoulder: Vector3, dir: Vector3) -> Vector3:
+	# 穿模修复 2026-10-10:单节直臂指向 dir(身体局部)时,手掌在肩外一臂长处;若落进自己大头的椭球(head_metrics 的
+	# 半宽、帽顶、下巴、前后,随头的转动与缩放,外扩爪子半径 PAW_CLEAR),沿头心径向推到椭球表面外,返回新的方向。
+	# 欢呼、跳舞、鼓掌、拍桌抬手、丢番茄、拆弹用(大头比 Q 版大一倍,原来调好的举手位置会插进脸颊、耳朵、帽檐)
+	var m := head_metrics()
+	var center := PatronParts.HEAD_CENTER
+	var paw := shoulder + dir.normalized() * ARM_LENGTH
+	for i in 3:
+		var local := head.transform.affine_inverse() * paw - center
+		var radii := Vector3(m["rx"], m["above"] if local.y > 0.0 else m["below"], m["front"] if local.z < 0.0 else m["back"])
+		var scaled := local / (radii + Vector3.ONE * PAW_CLEAR)
+		var k := scaled.length()
+		if k >= 1.0:
+			break
+		var out := local / maxf(k, 0.05) if k > 0.0001 else Vector3(0, radii.y + PAW_CLEAR, 0)
+		paw = shoulder + (head.transform * (out + center) - shoulder).normalized() * ARM_LENGTH
+	return paw - shoulder
 
 
 func _to_body(seat_point: Vector3) -> Vector3:
