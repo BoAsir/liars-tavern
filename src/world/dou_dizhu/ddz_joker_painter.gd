@@ -3,7 +3,7 @@ extends PokerFacePainter
 # 斗地主的两张王(原创插画,和德州 J/Q/K 同一家族):同样的暖奶油纸、粉彩内框、软描边、动森式 2 头身大头角色。
 # - 大王:戴大金冠的大熊猫国王,莓红长袍 + 白貂毛领,一手举着顶端一颗星的金权杖,背后一圈淡淡的放射光;
 # - 小王:歪戴小金冠的小浣熊王子,黑眼罩、白眉毛,藏青小斗篷,身后一条一圈一圈的大尾巴,举着一根星星小魔杖。
-# 角标是竖排的「大 / 王」「小 / 王」(圆体粗字,大王莓红、小王藏青墨),下面一颗小星,右下角绕牌心转 180°。
+# 角标是竖排的「大 / 王」「小 / 王」(自己画的圆头粗笔画,不靠字体;大王莓红、小王藏青墨),下面一颗小星,右下角绕牌心转 180°。
 # 坐标按 PokerFaceArt.SIZE(256×372)写,由 DdzJokerFaces 烘焙时整体放大;多边形靠离屏视口的 2D MSAA 抗锯齿。
 
 
@@ -11,10 +11,11 @@ const SMALL := 0
 const BIG := 1
 const PANEL := Rect2(66, 30, 124, 312)       # 王的画框比 J/Q/K 宽(角标只有一个字宽,左右各让出 10 像素以上的纸缝)
 const PANEL_RADIUS := 34.0
-const INDEX_X := 35.0                        # 角标字的中线
-const INDEX_TOP := 16.0
-const INDEX_FONT := 40
-const INDEX_GAP := 42.0                      # 两个字的行距
+const INDEX_X := 36.0                        # 角标字的中线
+const INDEX_TOP := 15.0
+const INDEX_GLYPH := 46.0                   # 一个字的方框边长
+const INDEX_STROKE := 9.5                    # 笔画粗细(缩到手牌条的 66 像素宽时还有一个多像素)
+const INDEX_GAP := 59.0                      # 两个字的行距
 const INK_BIG := Color(0.86, 0.26, 0.4)      # 大王:暖莓红(同 ♥)
 const INK_SMALL := Color(0.2, 0.22, 0.42)    # 小王:软藏青墨(同 ♠)
 const PANDA_BLACK := Color(0.2, 0.18, 0.21)
@@ -54,18 +55,39 @@ static func index_lines(p_which: int) -> Array:
 
 
 func _draw_index(ink: Color) -> void:
-	# 竖排两个字(先描一圈同色粗边,笔画更胖更圆)+ 一颗小星
-	var font := CardFaces.round_font()
+	# 竖排两个字(粗笔画、圆头,不依赖字体:各平台的系统字体不一样,缩到手牌条那么小也认得出)+ 一颗小星
 	var lines := index_lines(which)
 	for i in lines.size():
-		var text: String = lines[i]
-		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, INDEX_FONT).x
-		var base := Vector2(INDEX_X - w / 2.0, INDEX_TOP + font.get_ascent(INDEX_FONT) + i * INDEX_GAP)
-		draw_string_outline(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, INDEX_FONT, 5, ink)
-		draw_string(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, INDEX_FONT, ink)
-	var star_y := INDEX_TOP + INDEX_GAP * lines.size() + 14.0
+		var box := Rect2(INDEX_X - INDEX_GLYPH / 2.0, INDEX_TOP + i * INDEX_GAP, INDEX_GLYPH, INDEX_GLYPH)
+		for stroke in glyph_strokes(lines[i], box):
+			_stroke(stroke, ink.darkened(0.12), INDEX_STROKE + 2.0)
+			_stroke(stroke, ink, INDEX_STROKE)
+	var star_y := INDEX_TOP + INDEX_GAP * lines.size() + 10.0
 	draw_colored_polygon(CardFaces.star_points(Vector2(INDEX_X, star_y), 13.0, 5.6), CardFaces.GOLD if which == BIG else pastel(ink, 0.35))
 	draw_polyline(_closed(CardFaces.star_points(Vector2(INDEX_X, star_y), 13.0, 5.6)), ink.darkened(0.2), 1.6, true)
+
+
+static func glyph_strokes(ch: String, box: Rect2) -> Array[PackedVector2Array]:
+	# 「大」「小」「王」三个字的笔画(单位框坐标 0..1 换到 box 里),每笔一条折线
+	var unit: Array = []
+	match ch:
+		"王":
+			unit = [[Vector2(0.12, 0.1), Vector2(0.88, 0.1)], [Vector2(0.18, 0.5), Vector2(0.82, 0.5)],
+				[Vector2(0.06, 0.9), Vector2(0.94, 0.9)], [Vector2(0.5, 0.1), Vector2(0.5, 0.9)]]
+		"大":
+			unit = [[Vector2(0.06, 0.34), Vector2(0.94, 0.34)],
+				[Vector2(0.5, 0.04), Vector2(0.5, 0.36), Vector2(0.42, 0.62), Vector2(0.08, 0.95)],
+				[Vector2(0.52, 0.5), Vector2(0.72, 0.76), Vector2(0.94, 0.95)]]
+		"小":
+			unit = [[Vector2(0.5, 0.04), Vector2(0.5, 0.88), Vector2(0.38, 0.96)],
+				[Vector2(0.24, 0.36), Vector2(0.06, 0.74)], [Vector2(0.76, 0.36), Vector2(0.94, 0.72)]]
+	var out: Array[PackedVector2Array] = []
+	for line in unit:
+		var pts := PackedVector2Array()
+		for p in line:
+			pts.append(box.position + p * box.size)
+		out.append(pts)
+	return out
 
 
 static func _closed(poly: PackedVector2Array) -> PackedVector2Array:

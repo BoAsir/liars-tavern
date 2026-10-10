@@ -21,6 +21,7 @@ class Notifier:
 static var batch_renderer := Callable()
 
 static var _textures := {}
+static var _fallbacks := {}                # 还没生成时的纯色占位(每种一份,不每次新建)
 static var _notifier: Notifier = null
 static var _building := false
 static var _generation := 0
@@ -70,6 +71,7 @@ static func built_signal() -> Signal:
 
 static func clear() -> void:
 	_textures = {}
+	_fallbacks = {}
 	_notifier = null
 	_building = false
 	_generation += 1
@@ -111,7 +113,8 @@ static func to_texture(image: Image, kind: int) -> Texture2D:
 	if image == null or image.is_empty():
 		return _fallback(kind)
 	image.generate_mipmaps()
-	return ImageTexture.create_from_image(image)
+	_fallbacks[kind] = ImageTexture.create_from_image(image)
+	return _fallbacks[kind]
 
 
 static func _render(tree: SceneTree) -> Array:
@@ -144,7 +147,10 @@ static func _render(tree: SceneTree) -> Array:
 
 
 static func _fallback(kind: int) -> Texture2D:
+	if _fallbacks.has(kind):
+		return _fallbacks[kind]
 	var image := Image.create(PokerFaces.FALLBACK_SIZE, PokerFaces.FALLBACK_SIZE, false, Image.FORMAT_RGBA8)
 	image.fill(CardFaces.PAPER.lerp(FALLBACK_TINT.get(kind, CardFaces.INK), PokerFaces.FALLBACK_TINT))
 	image.generate_mipmaps()
-	return ImageTexture.create_from_image(image)
+	_fallbacks[kind] = ImageTexture.create_from_image(image)
+	return _fallbacks[kind]
