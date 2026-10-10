@@ -20,6 +20,11 @@ extends SceneTree
 # --hud= 按位置给每个机位一个状态(DouDizhuShowcase.HUD_STATES:bidding / landlord / playing / bomb / rocket / plane / spring /
 # settlement),没写时用 playing。全套:--views=ddz_seat,ddz_seat,ddz_seat,ddz_seat,ddz_overview,ddz_seat,ddz_seat,ddz_seat,ddz_fp
 #       --hud=bidding,landlord,playing,bomb,rocket,plane,spring,settlement,playing --dou-dizhu-showcase
+# --liars-dice-showcase 时摆吹牛骰子展台(tools/liars_dice_showcase.gd,6 人大桌):机位 dice_seat / dice_overview / dice_fp(第一人称)/
+# dice_close(骰盅与骰子特写)/ dice_peek(第一人称偷看时视线压低);--hud= 按位置给每个机位一个状态
+# (LiarsDiceShowcase.HUD_STATES:bidding / peek / counting / lost / out / settlement),没写时 dice_overview 用 out,其余用 bidding。
+# 全套:--views=dice_seat,dice_fp,dice_peek,dice_seat,dice_close,dice_seat,dice_close,dice_overview,dice_seat
+#       --hud=bidding,peek,peek,counting,counting,lost,lost,out,settlement --liars-dice-showcase
 # --atlas 时另存墙饰图集与墙地噪声贴图(decor_atlas.png、surface_noise.png)。
 # --stats 时每个机位打印全帧削顶比例、每张酒客脸与爪子的发白(亮度 ≥ 0.85)/削顶比例、墙面灰泥区域的亮度标准差。
 # --celebrate[=秒] 在已摆好的展台(--showcase / --poker-showcase / --bomb-cat-showcase)上开演结算庆祝(tools/celebrate_stage.gd:
@@ -61,6 +66,7 @@ var _poker_world: TableWorld = null
 var _poker: Node = null
 var _bomb: Node = null
 var _ddz: Node = null
+var _dice: Node = null
 var _showcase: Node = null
 var _ui: Control = null
 var _celebrate_world: TableWorld = null   # --celebrate:开演庆祝的那张牌桌
@@ -130,6 +136,11 @@ func _run() -> void:
 		root.add_child(ddz)
 		await ddz.build(tavern)
 		_ddz = ddz
+	if opts.has("liars-dice-showcase"):
+		var dice: Node = load("res://tools/liars_dice_showcase.gd").new()
+		root.add_child(dice)
+		await dice.build(tavern)
+		_dice = dice
 	if opts.has("celebrate"):
 		await _stage_celebration()
 	if opts.has("neck"):
@@ -166,6 +177,10 @@ func _run() -> void:
 				hud_state = {"bomb_overview": BombCatShowcase.STATE_EXPLODED, "bomb_close": BombCatShowcase.STATE_BOMB}.get(view,
 					BombCatShowcase.STATE_TURN)
 			await _place_bomb_camera(tavern, view, hud_state)
+		elif view.begins_with("dice_") and _dice != null:
+			if hud_state == "" or not LiarsDiceShowcase.HUD_STATES.has(hud_state):
+				hud_state = LiarsDiceShowcase.STATE_OUT if view == "dice_overview" else LiarsDiceShowcase.STATE_BIDDING
+			await _place_dice_camera(tavern, view, hud_state)
 		elif CameraViews.FIRST_PERSON.has(view):
 			var fp_world: TableWorld = _poker_table(tavern) if view.begins_with("poker_") else _showcase.world
 			if view.begins_with("poker_"):
@@ -420,6 +435,35 @@ func _place_ddz_camera(tavern: Tavern, view: String, state: String) -> void:
 		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		layer.add_child(_ui)
 	_ddz.stage_hud(_ui, state)
+
+
+func _place_dice_camera(tavern: Tavern, view: String, state: String) -> void:
+	# 吹牛骰子机位:取自展台的牌桌(本机座位 = 1 号);先摆状态的 3D,再上机位与 HUD(偷看与特写机位不叠 HUD)
+	var world: TableWorld = _dice.world
+	var rig := tavern.camera_rig
+	await _dice.stage(state)
+	if view == "dice_fp":
+		CameraViews.place_first_person(rig, world, LiarsDiceShowcase.ME, view)
+	else:
+		CameraViews.leave_first_person(world, LiarsDiceShowcase.ME)
+		rig.stop_follow()
+		rig.camera.fov = TableWorld.FIRST_PERSON_FOV if view == "dice_peek" else CameraRig.DEFAULT_FOV
+		rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT if view == "dice_seat" else 0.0
+		var xform: Transform3D = _dice.view(view)
+		rig.snap(xform.origin, xform.origin - xform.basis.z)
+		world.patrons[LiarsDiceShowcase.ME].set_head_hidden(view == "dice_peek")
+	if _ui == null:
+		var layer := CanvasLayer.new()
+		root.add_child(layer)
+		_ui = Control.new()
+		_ui.theme = UiTheme.theme()
+		_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_ui)
+	if view == "dice_close" or view == "dice_peek":
+		_dice.clear_hud()
+	else:
+		_dice.stage_hud(_ui, state)
 
 
 func _poker_table(tavern: Tavern) -> TableWorld:

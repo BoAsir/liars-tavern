@@ -6,10 +6,12 @@
 # 另外两人各不相同且不是 crocodile(先到先得,被占时房主给空着的)。
 # 接着再跑一局炸弹猫(--mode=bomb_cat,同样 1 房主 + 发现 + 直连,机器人走牌桌的真实入口出牌、不行!、摸牌、塞回、给牌):
 # 三个进程都以 0 退出、都打到 MATCH_OVER、三端的胜者一致、都收到另外两人的九宫格快捷对话(QUIPS heard=2)、日志里没有脚本错误。
+# 最后再跑一局吹牛骰子(--mode=liars_dice,同样 1 房主 + 发现 + 直连,机器人经出价器喊价或「开!」):
+# 三个进程都以 0 退出、都打到 MATCH_OVER、三端的胜者一致、都收到另外两人的九宫格快捷对话(QUIPS heard=2)、日志里没有脚本错误。
 # 再跑一局斗地主(--mode=dou_dizhu,正好 3 端:1 房主 + 发现 + 直连,机器人走牌桌的真实入口叫分、按提示出牌、不出;
 # 房主 --hands=DDZ_HANDS(默认 3)打到第 N 手开始时散局):三个进程都以 0 退出、都打印 SESSION_OVER 与九宫格快捷对话(QUIPS heard=2)、
 # 日志里没有脚本错误、房主打完了 N 手(DDZ_HAND_OVER 有 N 条)、三端的结算行(DDZ_RESULTS)完全一致且分数总和为 0。
-# SKIP_BOMB_CAT=1 跳过炸弹猫,SKIP_DOU_DIZHU=1 跳过斗地主。
+# SKIP_BOMB_CAT=1 时不跑炸弹猫,SKIP_LIARS_DICE=1 时不跑吹牛骰子,SKIP_DOU_DIZHU=1 时不跑斗地主。
 set -u
 
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
@@ -117,9 +119,47 @@ if [ "${SKIP_BOMB_CAT:-0}" != "1" ]; then
 		echo "ok   bomb_cat — 三端胜者一致(${winners[0]})"
 	fi
 fi
+# —— 吹牛骰子一局 ——
+if [ "${SKIP_LIARS_DICE:-0}" != "1" ]; then
+	DICE_PORT=$((PORT + 400))
+	DICE_ROOM="骰局$$"
+	DICE_COMMON=(--headless --path "$ROOT" -- --bot --fast="$SPEED" --quit-after-match)
+	run_capped "$GODOT" "${DICE_COMMON[@]}" --autohost=3 --mode=liars_dice --port="$DICE_PORT" --room="$DICE_ROOM" --name=骰房主 \
+		>"$LOG_DIR/dice_host.log" 2>&1 &
+	DHOST=$!
+	sleep 2
+	run_capped "$GODOT" "${DICE_COMMON[@]}" --discover="$DICE_ROOM" --name=骰发现 >"$LOG_DIR/dice_discover.log" 2>&1 &
+	DDISCOVER=$!
+	run_capped "$GODOT" "${DICE_COMMON[@]}" --autojoin="127.0.0.1:$DICE_PORT" --name=骰直连 >"$LOG_DIR/dice_direct.log" 2>&1 &
+	DDIRECT=$!
+	dice_winners=()
+	for pair in "dice_host:$DHOST" "dice_discover:$DDISCOVER" "dice_direct:$DDIRECT"; do
+		name="${pair%%:*}"
+		pid="${pair##*:}"
+		if wait "$pid"; then code=0; else code=$?; fi
+		log="$LOG_DIR/$name.log"
+		errors=$(grep -c "SCRIPT ERROR" "$log" || true)
+		winner=$(grep -m1 -o "MATCH_OVER winner=[0-9]*" "$log" || true)
+		dice_winners+=("$winner")
+		if [ "$code" -ne 0 ] || [ -z "$winner" ] || [ "$errors" -ne 0 ] || ! grep -q "QUIPS heard=2" "$log"; then
+			echo "FAIL $name (exit=$code, script_errors=$errors) — 日志:$log"
+			grep -A3 "SCRIPT ERROR\|FAIL" "$log" | head -20
+			status=1
+		else
+			echo "ok   $name — 吹牛骰子 $winner · $(grep -m1 -o "QUIPS heard=[0-9]*" "$log")"
+		fi
+	done
+	if [ -z "${dice_winners[0]}" ] || [ "${dice_winners[0]}" != "${dice_winners[1]}" ] || [ "${dice_winners[0]}" != "${dice_winners[2]}" ]; then
+		echo "FAIL liars_dice winner — 三端的胜者不一致:"
+		printf '  %s\n' "${dice_winners[@]}"
+		status=1
+	else
+		echo "ok   liars_dice — 三端胜者一致(${dice_winners[0]})"
+	fi
+fi
 # —— 斗地主一局(正好 3 端)——
 if [ "${SKIP_DOU_DIZHU:-0}" != "1" ]; then
-	DDZ_PORT=$((PORT + 400))
+	DDZ_PORT=$((PORT + 600))
 	DDZ_ROOM="地主$$"
 	DDZ_HANDS="${DDZ_HANDS:-3}"
 	DDZ_COMMON=(--headless --path "$ROOT" -- --bot --fast="$SPEED" --quit-after-match)

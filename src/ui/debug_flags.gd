@@ -5,7 +5,7 @@ extends Node
 #   --species=物种id     本次运行想要的形象(fox/bear/…/crocodile),只覆盖本次、不写设置;
 #                        每次名单更新与开局时打印 [debug] species {pid: id}(冒烟测试比对各进程)
 #   --autohost[=N]       自动建房;满 N 人(默认 2)且全员准备后自动开局
-#   --mode=玩法id        配合 --autohost:liars / bomb_cat / holdem / short_deck(默认 liars;非法值退出码 1),默认房名跟着玩法
+#   --mode=玩法id        配合 --autohost:liars / bomb_cat / liars_dice / dou_dizhu / holdem / short_deck(默认 liars;非法值退出码 1),默认房名跟着玩法
 #   --hands=N            德州 / 斗地主房主:演到第 N 手开始时散局(本手结束后结算);非法值退出码 1
 #   --port=端口          房主优先绑定的游戏端口(并行测试互不串房)
 #   --room=房名          房主的房间名
@@ -15,7 +15,8 @@ extends Node
 #                        对局中隔几秒说一句快捷对话(九宫格,同样走真实界面路径);
 #                        德州按合法动作下注、输光再领(见 PokerBot);
 #                        炸弹猫里由 BombCatBot 出牌、偶尔不行!、摸牌、塞回、给牌(同样走牌桌的公开入口);
-#                        斗地主里由 DdzBot 随机叫分、按「提示」出牌、偶尔不出(同样走牌桌的公开入口)
+#                        斗地主里由 DdzBot 随机叫分、按「提示」出牌、偶尔不出(同样走牌桌的公开入口);
+#                        吹牛骰子里由 LiarsDiceBot 喊价或「开!」(经出价器的 nudge_count / pick_face 与 submit_bid / submit_challenge)
 #   --fast[=倍率]        加速演出(Engine.time_scale,默认 3)
 #   --quit-after-match   对局结束后退出(退出码 0);中途失败退出码 1
 #   --shots=目录         在关键时刻截图
@@ -49,6 +50,7 @@ var _tomato_from := {}   # 收到过谁丢的番茄(冒烟测试据此确认丢�
 var _said_from := {}     # 收到过谁说的快捷语
 var _bomb_bot: BombCatBot = null
 var _ddz_bot: DdzBot = null
+var _dice_bot: LiarsDiceBot = null
 var _hands_limit := 0      # --hands:演到第几手开始时散局;0 = 不自动散局
 var _hands_dealt := 0      # 自己被发到牌的手数(冒烟测试据此确认迟到者真的上了桌)
 var _spectated := false    # 截图模式下已经观战过一次
@@ -219,6 +221,9 @@ func _process(delta: float) -> void:
 	if screen != null and screen.get("state") is DdzScreenState:
 		_ddz_bot_tick(screen, delta)
 		return
+	if screen != null and screen.get("state") is LiarsDiceScreenState:
+		_dice_bot_tick(screen, delta)
+		return
 	if screen != null and screen.has_method("choose_rebuy"):
 		_poker_tick(screen, delta)
 		return
@@ -368,6 +373,20 @@ static func ddz_results_line(results: Array) -> String:
 	return "[debug] DDZ_RESULTS {%s} sum=%d" % [", ".join(parts), total]
 
 
+func _dice_bot_tick(screen: Node, delta: float) -> void:
+	# 吹牛骰子:轮到自己时想一会儿再喊价或「开!」
+	if _dice_bot == null:
+		_dice_bot = LiarsDiceBot.new()
+	if not screen.is_my_turn():
+		_think_timer = randf_range(BOT_THINK.x, BOT_THINK.y)
+		return
+	_think_timer -= delta
+	if _think_timer > 0.0:
+		return
+	_think_timer = BOT_RETRY
+	_dice_bot.act(screen)
+
+
 func _bot_banter(seats: Array) -> void:
 	# 走真实界面:光标移到下家的头上丢番茄(同 G / 右键的入口,界面按屏幕投影选目标),再按 Q 打开快捷语面板、按数字说出
 	await get_tree().create_timer(BOT_BANTER_DELAY + randf() * 0.5).timeout
@@ -459,7 +478,7 @@ func _on_game_started(seats: Array) -> void:
 	await get_tree().process_frame
 	var screen: Node = app.current_screen()
 	var director = screen.get("director") if screen != null else null
-	if director is TableDirector or director is BombCatDirector:
+	if director is TableDirector or director is BombCatDirector or director is LiarsDiceDirector:
 		director.event_started.connect(_on_director_event)
 	elif director is PokerDirector:
 		director.event_started.connect(_on_poker_event)
@@ -474,6 +493,9 @@ func _on_director_event(ev: Dictionary) -> void:
 	match ev["type"]:
 		"round_started":
 			_capture_once("deal", 3.0)
+			if GameMode.is_liars_dice(Net.game_mode):
+				_capture_once("shake", 0.6)   # 吹牛骰子:全员捧着骰盅摇
+				_capture_once("peek", 1.3)   # 扣下后掀开盅沿偷看
 		"played":
 			_capture_once("played", 0.55)
 		"reveal":
@@ -487,6 +509,14 @@ func _on_director_event(ev: Dictionary) -> void:
 			_capture_once("exploded", 1.6)
 		"defused":
 			_capture_once("defused", 1.2)
+		"bid":
+			_capture_once("bid", 0.6)
+		"revealed":
+			_capture_once("dice_reveal", 1.0)
+		"die_lost":
+			_capture_once("die_lost", 0.35)
+		"player_out":
+			_capture_once("player_out", 1.0)
 		"match_over":
 			_capture_once("victory", 1.5)
 			_capture_once("settlement", 3.3)

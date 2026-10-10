@@ -257,7 +257,7 @@ func test_a_six_player_table_uses_the_big_table_and_survives_a_few_rounds():
 	assert_almost_eq(app.world.table_radius, SeatLayout.POKER_TABLE_RADIUS, 0.001, "6 人换大桌")
 	await wait_until(_idle, MAX_WAIT, "开局发牌")
 	_check_table()
-	assert_eq(screen.cards.held_count(2), 8, "开局每人 8 张")
+	assert_eq(screen.cards.held_count(2), BombCatDeck.HAND_SIZE + 1, "开局每人 5 张(4 张 + 1 张拆弹)")
 	await _play_to_the_end()
 	assert_not_null(screen.settlement())
 

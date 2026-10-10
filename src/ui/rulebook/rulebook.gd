@@ -249,6 +249,9 @@ func _build_header() -> Control:
 	row.add_child(title)
 	var subtitle := UiTheme.label("HOUSE  RULES   ·   游戏说明书", 15, UiTheme.PARCHMENT_DIM, UiTheme.latin_font())
 	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# 五本书的页签放下之后,副标题按剩余宽度缩(放不下就省略),不把整本书撑宽
+	subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	subtitle.clip_text = true
 	subtitle.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(subtitle)
 	row.add_child(_build_tabs())

@@ -1,9 +1,10 @@
 # 骗子酒馆 (Liar's Tavern)
 
-局域网 3D 派对卡牌游戏,四种玩法:
+局域网 3D 派对游戏,五种玩法:
 
 - **骗子酒馆**(2–4 人):轮流盖牌声称是本局目标牌,被抓到说谎或质疑失败,就得拿起左轮对自己扣一次扳机——活到最后的人赢。
 - **炸弹猫**(2–6 人):牌堆里藏着炸弹,轮流出功能牌、最后摸一张;摸到炸弹又没有「拆弹」就被炸飞——最后没被炸飞的人赢。
+- **吹牛骰子**(2–6 人):每人 5 颗骰子扣在骰盅里,轮流往上喊「全场至少有几个几」(1 点万能),不信就「开!」——输的人丢一颗骰子,骰子留到最后的人赢。
 - **斗地主**(正好 3 人):叫分抢地主,地主一个人对两个农民,谁先出完牌谁那边赢;炸弹、王炸、春天翻倍,一手接一手累计分,房主随时散局。
 - **德州扑克**(2–8 人，长牌 / 短牌):无限注现金局。入座领 2000 筹码、盲注 10/20,输光可以再领;开打后新玩家可以中途入座;
   房主随时散局，按盈亏排名结算。
@@ -13,6 +14,9 @@
 - 第三人称越肩视角:你的角色也坐在桌边,手牌举在右肩旁、牌面朝向你;开枪时镜头转到开枪者正面特写
 - 炸弹猫:全部原创的牌面(炸弹猫、剪线钳、甩锅、偷看、讨要、不行!、五种零食);摸到炸弹镜头推近、导火索冒火花、心跳,
   拆弹时手忙脚乱剪线「咔嚓」,炸飞时闪光、烟团、震屏、一脸黑灰 × 眼冒星星、帽子飞走;反应窗口里谁都能拍桌「不行!」
+- 吹牛骰子:每人面前一只物种色的圆胖皮革骰盅(缝线皮带、黄铜星星徽章)和 5 颗奶油色圆角骰子(彩色点,1 点是小星星);
+  每轮全员双手捧盅哗啦哗啦摇、啪地扣下、掀开盅沿偷看(第一人称视线压低凑过去);喊价时头顶冒气泡、桌心浮出那个点数的大骰子;
+  「开!」拍桌大字、所有骰盅一起翻开,算进去的骰子一颗颗跳起来亮金光、计数器一路数上去,真话 / 吹牛判定配表情;输的人的骰子「啵」地弹飞冒星星
 - 斗地主:德州那套动森风牌面,外加两张原创的王(戴大金冠的大熊猫国王、歪戴小金冠的小浣熊王子);定地主时聚光灯打下来,
   地主「啵」地戴上小瓜皮帽、农民戴草帽;炸弹炸出一团卡通烟云、王炸是一枚小火箭冲天放烟花、飞机是一架小纸飞机掠过桌面、
   顺子连对像波浪一样亮起、春天飘下一阵花瓣;只剩一两张牌的人头顶闪红色报警牌
@@ -56,11 +60,11 @@
 
 ## 联机
 
-1. 一位玩家填好名号,在名号旁的头像处挑一个形象,选好玩法(骗子酒馆 / 炸弹猫 / 斗地主 / 德州扑克·长牌 / 德州扑克·短牌),点「开设房间」,进入等待厅。
+1. 一位玩家填好名号,在名号旁的头像处挑一个形象,选好玩法(骗子酒馆 / 炸弹猫 / 吹牛骰子 / 斗地主 / 德州扑克·长牌 / 德州扑克·短牌),点「开设房间」,进入等待厅。
    等待厅会显示房主的局域网地址,可点「复制」。玩法开房后不能改,想换玩法就重新开一桌。
 2. 同一局域网的其他玩家打开游戏,主菜单「局域网房间」列表会自动出现该房间,点「加入」;
    看不到时,在「IP 直连」输入房主地址(`192.168.x.x`,非默认端口时写 `192.168.x.x:端口`)。
-3. 客人点「准备」,全员准备后房主点「开始游戏」(骗子酒馆 2–4 人,炸弹猫 2–6 人,斗地主正好 3 人,德州扑克 2–8 人;炸弹猫 5–6 人时换大桌)。
+3. 客人点「准备」,全员准备后房主点「开始游戏」(骗子酒馆 2–4 人,炸弹猫与吹牛骰子 2–6 人,斗地主正好 3 人,德州扑克 2–8 人;炸弹猫与吹牛骰子 5–6 人时换大桌)。
 
 4. 德州扑克开打后，房间列表里那一桌显示「入座」:新玩家可以直接加入，旁观完当前这一手，下一手开始发牌。
 
@@ -115,6 +119,18 @@
 
 `D` 是探头键,摸牌只用空格;快捷语面板开着时数字键只用来说话。转头、探头、`V`、`T`、`G`、`Q`、`F1`、`Esc` 同上。
 
+吹牛骰子的操作:
+
+| 操作 | 鼠标 | 键盘 |
+|---|---|---|
+| 调个数 | 出价器的「−」「+」 | `↑` `↓` |
+| 选点数(2–6,1 点万能不能喊;不合法的变灰) | 点数按钮 | `2`–`6` |
+| 加注(喊出价器上的那一口,默认是最小合法加注) | 「加注 N 个 X」按钮 | `Enter` |
+| 开!(质疑上一口,本轮有人喊过才亮) | 「开!」按钮 | `C` / `空格` |
+| 偷看自己的骰子(屏幕下方也一直显示) | 鼠标停在自己的骰盅上 | — |
+
+快捷语面板或九宫格开着时数字键只用来说话、不选点数。转头、探头、`V`、`T`、`G`、`Q`、`F1`、`Esc` 同上。
+
 不是自己回合时也可以先预选手牌。视角选择会记住,下次进牌桌沿用;出局观战时按 `V` 只改设置,下次回到座位生效。
 
 **快捷对话**(三种玩法通用,对局中随时可说,观战的人也能说):你好呀! / 打得不错 / 谢谢 / 我很抱歉 / 哇哦! / 哎呀…… /
@@ -153,7 +169,7 @@
 ## 规则
 
 游戏内随时可以翻开说明书「酒馆规矩」:主菜单「游戏规则」、等待厅「规则」、牌桌右上角「规则」,或任意界面按 `F1`。
-说明书分骗子酒馆、炸弹猫、斗地主、德州扑克四本,顶部页签切换;默认翻到当前玩法那本(主菜单上是上次选的玩法),每本记得上次读到哪一章。
+说明书分骗子酒馆、炸弹猫、吹牛骰子、斗地主、德州扑克五本,顶部页签切换;默认翻到当前玩法那本(主菜单上是上次选的玩法),每本记得上次读到哪一章。
 看说明书时对局不会暂停;轮到你时会弹出提示。
 
 ### 骗子酒馆
@@ -171,7 +187,7 @@
 
 ### 炸弹猫(2–6 人)
 
-- 牌堆里藏着 人数 − 1 颗炸弹;开局每人 7 张牌 + 1 张「拆弹」。
+- 牌堆里藏着 人数 − 1 颗炸弹;开局每人 4 张牌 + 1 张「拆弹」。
 - 轮到你时可以先打出任意张功能牌,最后摸一张结束回合;「溜了」「甩锅」可以不摸牌就结束。
 - 功能牌:溜了(不摸牌结束)、甩锅(下家连走两回合,被甩时叠加)、偷看(看牌堆顶 3 张)、洗牌、讨要(对方自己挑一张给你)、
   不行!(取消刚打出的一张牌或一组零食,可以不行掉不行)。零食两张一样的随机抽对方一张,三张一样的点名要一种牌。
@@ -181,6 +197,15 @@
 
 规格与实施记录见 [docs/superpowers/specs/2026-10-09-bomb-cat-design.md](docs/superpowers/specs/2026-10-09-bomb-cat-design.md)。
 
+### 吹牛骰子(2–6 人)
+
+- 每人 5 颗骰子扣在骰盅里,每轮全员重摇,摇完只有自己看得见。
+- 轮到你时二选一:加注(个数更多,或个数相同点数更大;点数只能喊 2–6,个数不超过场上骰子总数),或者「开!」质疑上一口。
+- 1 点万能:开盅数个数时算作被喊的点数。实际个数 ≥ 喊的个数是真话,开的人丢一颗骰子;否则喊的人丢一颗。
+- 骰子丢光出局;输的人先开下一轮。最后还有骰子的人赢。断线视为出局,这一轮作废、全员重摇。
+- 回合限时 30 秒(加上动画时间),超时自动喊最小的合法加注,加不上去就自动「开!」。
+
+规格与实施记录见 [docs/superpowers/specs/2026-10-10-liars-dice-design.md](docs/superpowers/specs/2026-10-10-liars-dice-design.md)。
 ### 斗地主(正好 3 人)
 
 - 54 张牌(含大王、小王),每人 17 张,3 张底牌扣在桌心。从随机一人开始叫 1 / 2 / 3 分或不叫,只能越叫越高;叫 3 分立即当地主,
@@ -218,8 +243,9 @@ $GODOT --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 
 # 联机冒烟:1 房主 + 2 个 bot(一个走局域网发现、一个直连),无头跑完整局;
 # 三人都要鳄鱼(--species=crocodile),检查三端的形象表一致、房主拿到鳄鱼、另外两人各不相同;
-# 之后再跑一局炸弹猫(--mode=bomb_cat),核对三端都打到结束、胜者一致(SKIP_BOMB_CAT=1 跳过);
-# 最后一局斗地主(--mode=dou_dizhu,正好 3 端,房主打 3 手后散局),核对三端结算一致、分数总和为 0(SKIP_DOU_DIZHU=1 跳过)
+# 之后再跑一局炸弹猫(--mode=bomb_cat)和一局吹牛骰子(--mode=liars_dice),核对三端都打到结束、胜者一致
+# (SKIP_BOMB_CAT=1 / SKIP_LIARS_DICE=1 跳过对应的一局);最后一局斗地主(--mode=dou_dizhu,正好 3 端,房主打 3 手后散局),
+# 核对三端结算一致、分数总和为 0(SKIP_DOU_DIZHU=1 跳过)
 tools/lan_smoke.sh
 
 # 德州联机冒烟:1 房主 + 3 个 bot(第 4 个在第 1 手开始后才走局域网发现加入),打 6 手后散局;
@@ -238,6 +264,9 @@ $GODOT --headless --path . -s tools/shot_diff.gd -- --a=/tmp/before --b=/tmp/aft
 $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --bomb-cat-showcase --views=bomb_seat,bomb_close,bomb_overview --hud=window,bomb,exploded
 $GODOT --path . -s tools/bomb_cat_faces_sheet.gd -- --out=/tmp/bomb_faces
 
+# 吹牛骰子展台截图(6 人大桌,机位 dice_seat / dice_overview / dice_fp / dice_close / dice_peek,
+# 状态 bidding / shaking / peek / counting / lost / out / settlement 按位置对应)
+$GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --liars-dice-showcase --views=dice_seat,dice_seat,dice_close,dice_overview --hud=bidding,counting,lost,out
 # 斗地主展台截图(3 人小桌,机位 ddz_seat / ddz_overview / ddz_fp;状态 bidding / landlord / playing / bomb / rocket / plane /
 # spring / settlement,按位置对应)与两张王的牌面验收图
 $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --dou-dizhu-showcase --views=ddz_seat,ddz_seat,ddz_seat,ddz_fp --hud=bidding,landlord,bomb,playing
@@ -250,6 +279,7 @@ $GODOT --path . -s tools/shot.gd -- --out=/tmp/shots --showcase --celebrate --vi
 # 性能(需要窗口):离屏按游戏渲染配置测帧时间、CPU 渲染耗时与可见/阴影 draw call;超出 tools/perf_budget.gd 的预算时退出码为 1
 $GODOT --path . -s tools/perf_probe.gd -- --size=1920x1080 --view=seat,menu,opponent --cases=budget --frames=300 --assert-budget
 $GODOT --path . -s tools/perf_probe.gd -- --showcase=bomb_cat --view=bomb_seat,bomb_fp,bomb_overview --cases=budget --assert-budget
+$GODOT --path . -s tools/perf_probe.gd -- --showcase=liars_dice --dice-state=counting --view=dice_seat,dice_fp,dice_overview --cases=budget --assert-budget
 $GODOT --path . -s tools/perf_probe.gd -- --showcase=dou_dizhu --view=ddz_seat,ddz_fp,ddz_overview --cases=budget --assert-budget
 $GODOT --path . -s tools/perf_probe.gd -- --showcase=poker --celebrate --view=celebrate,celebrate_table --cases=budget --assert-budget
 # 德州真机 8 人截图:1 个有窗口的房主 + 7 个无头直连 bot
@@ -262,8 +292,8 @@ wait
 ```
 
 调试命令行开关(写在 `--` 之后):`--name=甲`、`--species=物种id`(fox / bear / pig / cat / turtle / alpaca / monkey /
-crocodile,只覆盖本次运行、不写设置)、`--autohost[=人数]`、`--mode=玩法`(liars / bomb_cat / dou_dizhu / holdem / short_deck,配合 `--autohost`)、`--hands=N`(德州 / 斗地主房主:第 N 手开始时散局)、`--port=端口`、`--room=房名`、
-`--autojoin=IP[:端口]`、`--discover[=房名]`、`--bot`(德州按合法动作随机下注、输光再领;炸弹猫随机出合法牌;斗地主随机叫分、按提示出牌、偶尔不出)、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`、
+crocodile,只覆盖本次运行、不写设置)、`--autohost[=人数]`、`--mode=玩法`(liars / bomb_cat / liars_dice / dou_dizhu / holdem / short_deck,配合 `--autohost`)、`--hands=N`(德州 / 斗地主房主:第 N 手开始时散局)、`--port=端口`、`--room=房名`、
+`--autojoin=IP[:端口]`、`--discover[=房名]`、`--bot`(德州按合法动作随机下注、输光再领;炸弹猫随机出合法牌;吹牛骰子经出价器喊价或开;斗地主随机叫分、按提示出牌、偶尔不出)、`--fast[=倍率]`、`--quit-after-match`、`--shots=目录`、
 `--update-from=IP:端口`、`--update-url=网址`。
 
 每台机器只有 4 个发现端口 (UDP 47800–47803),同机最多 4 个实例能用局域网发现;更多实例 (如 8 人截图) 用 `--autojoin` 直连。
