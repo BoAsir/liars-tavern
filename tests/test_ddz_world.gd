@@ -179,9 +179,9 @@ func test_row_layout_stays_on_the_felt_and_apart():
 		for n in [1, 5, 12, 20]:
 			var first := DdzLayout.play_slot(angles[pid], mine, 0, n).origin
 			var last := DdzLayout.play_slot(angles[pid], mine, n - 1, n).origin
-			assert_lte(first.distance_to(last), DdzLayout.MAX_ROW + 0.001, "一行不超宽")
+			assert_lte(first.distance_to(last), DdzLayout.max_row(mine) + 0.001, "一行不超宽")
 			for p in [first, last]:
 				assert_lt(Vector2(p.x, p.z).length() + Card3D.WIDTH * DdzLayout.PLAY_SCALE, SeatLayout.FELT_RADIUS, "在桌布里")
 	var a := DdzLayout.row_center(angles[2], false)
 	var b := DdzLayout.row_center(angles[3], false)
-	assert_gt(a.distance_to(b), DdzLayout.MAX_ROW + Card3D.WIDTH * DdzLayout.PLAY_SCALE, "两位对手的行不重叠")
+	assert_gt(a.distance_to(b), DdzLayout.OPP_MAX_ROW + Card3D.WIDTH * DdzLayout.PLAY_SCALE, "两位对手的行不重叠")
