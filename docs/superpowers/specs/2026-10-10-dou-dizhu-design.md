@@ -95,3 +95,185 @@
 ## 5. 约束
 
 - 同吹牛骰子:不改 `project.godot`,其他玩法行为零变化,提交身份用 BoAsir。
+
+## 6. 实施记录(阶段一:规则引擎 + 房主会话 + 网络 + 玩法登记,2026-10-10)
+
+阶段一不含任何表现(牌桌屏幕、HUD、3D、导演、大小王牌面、说明书、机器人、冒烟、展台);阶段二在下面这些接口上搭。
+本节是阶段二的接口契约:事件、视图、意图的字段**只增不改**。
+
+### 6.1 文件
+
+- 规则引擎(纯逻辑,不依赖网络与场景):
+  - `src/core/dou_dizhu/ddz_hand.gd`(class `DdzHand`):牌编号、牌型识别 `analyze` / `classify`、跟牌 `match_lead`、比较 `beats`、
+    能出的组合 `legal_plays(hand, lead)`(提示按钮与托管 / 机器人用)、`smallest_single`、`poker_card`(换德州牌面)、`label(s)`、`type_name`。
+  - `src/core/dou_dizhu/ddz_state.gd`(class `DdzState`):完整状态机。**文件头的注释就是事件字典的权威说明**。
+- 会话与网络:
+  - `src/net/dou_dizhu_session.gd`(class `DouDizhuSession` extends `GameSession`):意图校验(`check_intent` / `validate_intent`)与分派、计时语义、
+    连续多手。`state()` 给测试与机器人只读访问引擎。
+  - `src/net/dou_dizhu_views.gd`(class `DouDizhuViews`):公共 / 私有视图。
+  - `src/net/dou_dizhu_pacing.gd`(class `DouDizhuPacing`):演出预算、`HAND_GAP`、`TRUSTEE_DELAY`。
+- 测试(全部无头):`test_ddz_hand` / `test_ddz_state` / `test_dou_dizhu_session` / `test_net_dou_dizhu` / `test_dou_dizhu_fuzz`,
+  共用 `tests/ddz_helpers.gd`(按点数写牌 `cards("3 3 SJ")`、直接进出牌阶段 `rig_play`、事件 / 视图的键白名单与「只含已公开的牌」检查)。
+  - 牌型:全部牌型表、非法组合表、多读法、比较;另有穷举核对——随机 120 手 6–11 张的手牌 × 9 种上家牌,枚举每个子集的全部读法,
+    断言 `legal_plays` 恰好覆盖每种能压过的「型 + 点数 + 组数」、且每项都能出。
+  - 自对局:250 个固定种子牌局(约 440 手、2.5 万步),随机叫分 / 挑提示出牌 / 不出 / 超时 / 开关托管 / 垃圾意图 / 偶尔散局或断线;
+    每步查 54 张守恒、事件与公共视图不漏没公开的牌、私有视图与引擎一致、被拒不改局面、提示都能出、零和;每个牌局必须结算,
+    并断言每种事件、主要牌型、春天、强制地主、自动托管、手中途断线都走到过。
+
+### 6.2 规则落地时定下的细节
+
+- **牌编号**:0–51 = 点数下标 × 4 + 花色,52 小王、53 大王。点数下标 0 = 3 … 11 = A、12 = 2、13 小王、14 大王;花色同 `PokerCard`(0 ♠ 1 ♥ 2 ♦ 3 ♣)。
+  牌 id 从小到大就是点数从小到大,手牌永远升序存放,**意图里的下标就是私有视图 `cards` 的下标**。`DdzHand.poker_card(c)` 给德州牌面的牌值,王返回 -1。
+- **牌型字典** `{"type", "rank", "length", "count"}`:`type` ∈ `single` `pair` `triple` `triple_single` `triple_pair` `straight` `pair_straight`
+  `airplane` `airplane_single` `airplane_pair` `four_two_single` `four_two_pair` `bomb` `rocket`(中文名 `DdzHand.TYPE_NAMES`);
+  `rank` = 主体那组的点数(顺子 / 连对 / 飞机取最小那组,王炸 14);`length` = 顺子张数 / 连对对数 / 飞机组数,其他 1。
+- **带牌**:三带一的单牌不能和三张同点(那是炸弹);带对的对子点数不同于主体、多个对子点数互不相同(王不成对);
+  飞机带单的翅膀可以同点、也可以是机身某组的第 4 张;四带二的两张可以是一对;**带的单牌不能同时是大小王**。顺子、连对、飞机最高到 A。
+- **多种读法**:如 333444555666 既是 4 连飞机又是 3 连飞机带单。`analyze` 全列出;自由出牌按 `TYPE_PRIORITY`(王炸、炸弹、顺子、连对、飞机、
+  飞机带对、飞机带单、四带两对、四带二、三带一对、三带一、三张、对子、单张)取第一种;跟牌时取能压过上家的读法里点数最大的。
+- **比较**:王炸最大;炸弹压一切非炸弹,炸弹之间比点数;其余必须同型、同张数、同组数且点数更大。
+- **`legal_plays` 的顺序**(提示循环、托管、机器人取第一个):跟牌时同型按点数从小到大,然后炸弹按点数,王炸最后;
+  自由出牌时非炸弹按点数从小到大、同点数张数多的先(四带二排在同点数其他组合之后),然后炸弹、王炸。每种「型 + 点数 + 组数」只给一个代表,
+  带牌挑最不心疼的(先用单出的点数,再拆对子、三张,最后才拆炸弹)。私有视图最多给 `MAX_HINTS` = 40 个。
+- **叫分**:每手开始时房主 RNG 挑 `first_bidder`,重发时**不换人**(所以「连续 3 次都不叫,让第一个人当 1 分地主」没有歧义)。
+  第 3 次发牌(`MAX_DEALS`)还是都不叫:用这一副牌,`first_bidder` 当 1 分地主(`landlord.forced` 为真)。叫 3 立即结束;叫分不能等于之前的最高分。
+- **春天**:地主出完时两个农民出牌次数都是 0;或农民赢而地主只出过 1 次(第一手)。「不出」不算出牌。
+- **计分**:单位 = 底分 × 倍数(炸弹 / 王炸各 ×2、春天 ×2);地主 ±2 单位、农民各 ∓1 单位,三人总和恒为 0。
+- **亮牌**:一手结束时 `hand_over.remaining` 公开三家剩下的牌(这时已不是秘密,结算面板可以摊牌)。
+- **超时**:叫分 → 不叫;出牌 → 有上家就不出,自由出牌就出最小的单张。同一人连续 2 次超时进入托管:那次超时先发 `trustee{auto:true}` 再发代打的动作。
+  托管中轮到他时房主很快代打(`auto: true`,不再计超时):叫分不叫;自由出牌出 `legal_plays` 第一个;上家是队友(两个农民)就不出;
+  否则出最小的能压过的**非炸弹**组合,没有就不出。本人亲自出手清零连续超时;托管跨手保留,开关清零连续超时。托管中本人照样能亲自出手。
+- **散局**:两手之间立即结算;一手进行中先发 `ending`,打完这一手再在同一批里发 `hand_over` + `session_over`。
+- **离开**:任何人断线 → `player_left{hand_voided}` + `session_over{reason: "player_left"}`,进行中的一手作废不计分,按已有累计分排名。
+- **名次**:按累计分从高到低,同分同名次(`place` = 比他高的人数 + 1),同分按座位排。
+
+### 6.3 公共事件(广播全员,不含任何隐藏信息)
+
+所有事件有 `type`。带牌 id 的只有 `landlord.bottom`、`played.cards`、`hand_over.remaining`,都是这时已公开的牌。
+
+| type | 字段 | 说明 |
+|---|---|---|
+| `hand_started` | `hand`, `deal`(1), `seats: [pid]`, `first_bidder`, `hands: [{pid, count}]`, `bottom_count`(3), `scores: [{pid, score}]` | 新的一手,紧跟 `turn` |
+| `redeal` | `hand`, `deal`, `first_bidder`, `hands: [{pid, count}]` | 三人都不叫,重新发牌(`deal` = 第几次发牌) |
+| `turn` | `pid`, `stage: "bid" \| "play"`, `free: bool` | 轮到 `pid`;`free` = 自由出牌(叫分时 false) |
+| `bid` | `pid`, `score`(0 = 不叫), `timed_out`, `auto` | |
+| `landlord` | `pid`, `base`, `bottom: [3 张]`, `forced` | 定地主,底牌亮出并进他手里(20 张),紧跟 `turn{free:true}` |
+| `played` | `pid`, `cards`, `combo`(牌型), `rank`, `length`, `multiplier`(出完之后的倍数), `remaining`(他还剩几张), `timed_out`, `auto` | |
+| `passed` | `pid`, `timed_out`, `auto` | 不出 |
+| `trick_cleared` | `pid` | 两家不出:桌面清掉,`pid` 重新自由出牌 |
+| `trustee` | `pid`, `on`, `auto` | 托管开关;`auto` = 连续超时自动进入 |
+| `hand_over` | `hand`, `winner`, `landlord`, `landlord_won`, `base`, `multiplier`(含春天), `bombs`, `spring`, `deltas: [{pid, delta}]`, `scores: [{pid, score}]`, `remaining: [{pid, cards}]` | 一手结束 |
+| `ending` | — | 房主散局,打完这一手再结算 |
+| `player_left` | `pid`, `hand_voided` | 有人离开,紧跟 `session_over` |
+| `session_over` | `reason: "host" \| "player_left"`, `results: [{pid, name, score, place, left}]` | 牌局结算(`name` 由会话补) |
+
+典型批次(一个意图 / 一次超时 / 一次断线 / 一次开下一手 = 一批):
+开局 / 下一手 `[hand_started, turn]`;叫分 `[bid, turn]` / `[bid, landlord, turn]` / `[bid, redeal, turn]`;
+出牌 `[played, turn]` / `[played, hand_over]` / `[played, hand_over, session_over]`;不出 `[passed, turn]` / `[passed, trick_cleared, turn]`;
+超时进托管 `[trustee, bid|passed|played, …]`;托管开关 `[trustee]`(状态没变时为空批);散局 `[ending]` 或 `[session_over]`;断线 `[player_left, session_over]`。
+
+### 6.4 公共视图(`rpc_state_public`,每批之后)
+
+```
+{
+  "mode": "dou_dizhu", "hand": int(第几手), "phase": "idle" | "bidding" | "playing" | "between" | "over",
+  "deal": int(本手第几次发牌), "first_bidder": pid, "bids": [{pid, score}](本次发牌), "highest_bid": int,
+  "current_pid": pid 或 null, "landlord": pid 或 null, "base": int(定地主前 0), "multiplier": int, "bombs": int,
+  "bottom": [] 或 [3 张],    # 定地主后公开;两手之间仍是上一手的
+  "lead": {} 或 {"pid", "cards", "type", "rank", "length", "count"},   # 本圈要压的牌;自由出牌时 {}
+  "passes": int,
+  "players": [{"pid", "name", "hand_count", "score"(累计), "role": "" | "landlord" | "farmer", "trustee",
+               "table": [本圈他最后出的牌], "passed": bool(本圈他最后是不出), "plays"(本手出牌次数), "left"}],   # 座位顺序
+  "turn_time_left": float,   # 房主计时器剩余(含要先播完的演出);没人行动时 0
+  "ending": bool,            # 房主已点散局
+  "last_hand": {} 或 hand_over 事件去掉 type(上一手的结算摘要,两手之间画结算用),
+  "results": [] 或 [{pid, name, score, place, left}](over 时),
+  "end_reason": "" | "host" | "player_left"
+}
+```
+
+### 6.5 私有视图(`rpc_state_private`,每批之后发给每个没离开的座位)
+
+```
+{
+  "hand": int,                 # 第几手(界面据此判断换了一副牌)
+  "cards": [牌 id](升序),     # 意图 play 的下标就是它
+  "role": "" | "landlord" | "farmer", "trustee": bool, "my_turn": bool,
+  "can_pass": bool,            # 轮到自己出牌且有上家
+  "bid_options": [0, …] 或 [], # 轮到自己叫分时能叫的分(0 = 不叫)
+  "hints": [{"indices": [下标], "type": 牌型}]   # 轮到自己出牌时能出的组合(legal_plays 顺序,最多 40);其他时候 []
+}
+```
+
+### 6.6 意图与错误码
+
+客户端:`Net.submit_session_intent(intent)`(房主本机直接处理;客人发 `rpc_session_intent`)。房主校验顺序:发送者在名单里(否则 `not_seated`)→
+`DouDizhuSession.validate_intent`(字典、≤ 2 个键、kind 认识、字段类型)→ 引擎规则。被拒走现有的 `intent_rejected(code)`。
+
+| 意图 | 字段 | 谁、何时 | `turn_action` |
+|---|---|---|---|
+| `{"kind": "bid", "score": 0..3}` | 0 = 不叫;1–3 要比之前最高的高 | 当前叫分者 | 真 |
+| `{"kind": "play", "cards": [下标…]}` | 1–20 个互不相同的手牌下标 | 当前出牌者 | 真 |
+| `{"kind": "pass"}` | | 当前出牌者,有上家时 | 真 |
+| `{"kind": "trustee", "on": bool}` | | 任何座位,牌局没结束就行(两手之间也行) | 假 |
+
+错误码(`DdzState.ERR_*`,中文提示在 `DdzState.ERROR_MESSAGES`,阶段二 toast 用它):
+`session_over` 牌局已结束 · `not_seated` · `no_hand`(两手之间)· `not_your_turn` · `not_bidding`(出牌阶段叫分)· `not_playing`(叫分阶段出牌 / 不出)·
+`invalid_bid` · `invalid_play`(下标越界 / 重复 / 空)· `invalid_combo`(不成牌型)· `cannot_beat`(压不过上家)· `cannot_pass`(自由出牌不能不出)·
+`invalid_intent`(结构不对、多余的键,或不是斗地主房间)· `invalid_players`(开局不是 3 人,只在引擎层)。
+
+散局:房主调 `Net.end_poker_session()`(名字是德州留下的,实际调 `_session.request_end()`,斗地主同样适用)。
+
+### 6.7 计时语义(沿用 NetworkManager 唯一的回合计时器与两手之间的计时器,不新增计时器)
+
+`has_turn()` = 叫分或出牌阶段且有当前行动者。`turn_timer_after(events, pending, time_left)`(`pending` 含本批演出):
+
+| 情形 | 时长 |
+|---|---|
+| 当前行动者在托管中 | `pending + TRUSTEE_DELAY`(1 秒) |
+| 本批有 `turn`,或计时器没在走,或当前行动者刚取消托管 | `pending + 一个回合`:叫分 `BID_TIMEOUT` 15 秒,出牌 `Protocol.TURN_TIMEOUT` 30 秒 |
+| 其他(旁人开关托管等) | `time_left + 本批演出` |
+
+到点 `on_turn_timeout()` → `DdzState.timeout()`(超时规则或托管打法,见 6.2)。
+两手之间:`next_hand_ready()` 在 `between` 阶段为真,`hand_gap()` = `DouDizhuPacing.HAND_GAP`(5 秒,演完结算再停这么久,不用等谁确认),
+`_on_hand_timer` → `start_next_hand()`。散局或结算后 `next_hand_ready()` 为假,计时器停。
+
+`DouDizhuPacing` 的预算按 §3 先估:发牌 3.0、重发 2.4、叫分 0.6、定地主 2.2、出牌 0.7(顺子 / 连对 1.2、飞机 1.6、炸弹 2.0、王炸 2.5)、
+不出 0.4、清桌 0.4、换人 / 托管 0(并行)、一手结束 3.0(春天另加 1.5)、散局提示 0、断线 0.8、结算 3.0;导演实测后可以收紧,每段演出不得超过预算。
+
+### 6.8 GameMode 与其他按玩法分支的地方
+
+- 吹牛骰子分支已定下 `GameMode.DOU_DIZHU = "dou_dizhu"`、label「斗地主」、`DOU_DIZHU_PLAYERS` 3(`min_players` = `max_players` = 3,`summary`「斗地主 · 3 人」)
+  和 `MENU_ORDER` 里的格子;本分支把它加进 `ALL = [LIARS, BOMB_CAT, LIARS_DICE, DOU_DIZHU, HOLDEM, SHORT_DECK]` 并加 `is_dou_dizhu(mode)`,
+  **主菜单格子随之亮起**(选了会进占位牌桌,见 6.10)。`allows_late_join` 为假。
+- 开局人数:`LobbyModel.can_start(min_players := Protocol.MIN_PLAYERS)` 新增参数,`NetworkManager.can_start()` 传 `GameMode.min_players(game_mode)`;
+  等待厅状态行「至少 N 人才能开局」也按玩法(`lobby.gd`)。上限照旧由 `check_join` 按 `GameMode.max_players` 把关(第 4 人「房间已满(3/3)」)。
+- 桌子:`SeatLayout.table_radius_for` 不用改,斗地主落在默认分支 = 骗子酒馆的桌子(`TABLE_RADIUS`);`main.apply_table_mode` 照常摆烛台、不摆目标牌立牌。
+- 默认房名「X 的斗地主」(吹牛骰子分支已写)。说明书 `RulebookContent.book_for_mode` 暂时回退骗子酒馆那本(阶段二加「斗地主」一本)。
+
+### 6.9 网络
+
+- 开局:`start_game` → `_new_session(game_mode)` → `DouDizhuSession`(分支放在吹牛骰子旁边)。没有新 RPC,意图走现有的 `rpc_session_intent`,
+  `_handle_session_rpc` 通用地调 `_session.validate_intent`(没有按玩法的分支)。
+- 协议号仍为 **v9**(吹牛骰子分支升的,两个新玩法共用;§2 写的 v8 已过时),本分支没动;`project.godot` 没动。
+- 每批之后 `_sync_all` 照旧:公共视图全员、私有视图发给 `viewers()`(没离开的座位)。
+
+### 6.10 临时路由(阶段二要替换)
+
+`main._show_table`:斗地主房间暂时进 `_dou_dizhu_placeholder()`——居中一块「斗地主的牌桌还在布置中」+「离开房间」按钮,不会崩。
+规则与网络照常跑:每步到点由房主代打,连续超时进托管,一手打完 5 秒后自动开下一手,一直打到有人离开(没有散局按钮与结算界面)。
+阶段二把这一分支换成 `DouDizhuScreen.new(self)` 并删掉占位函数(代码里有 `TODO(斗地主阶段二)`)。
+
+### 6.11 阶段二要做的
+
+1. 牌桌屏幕 `DouDizhuScreen`:接 `Net.game_events` / `state_public_updated` / `state_private_updated` / `intent_rejected`(toast `DdzState.ERROR_MESSAGES`),
+   出手一律 `Net.submit_session_intent(...)`,房主「散局」按钮调 `Net.end_poker_session()`;替换 `main._show_table` 的占位分支。
+2. 导演:按 6.3 的事件演出(底牌翻开飞进地主手里、出牌摊在面前、`trick_cleared` 清桌、炸弹 / 王炸 / 飞机 / 顺子连对 / 春天特效、倍数跳动),
+   每段时长不超过 `DouDizhuPacing` 的预算(参照 `test_poker_director_pacing` / `test_bomb_cat_director` 加检查)。
+   私有视图比演出先到:按 `hand` 等演到对应的 `hand_started` / `landlord` 再换手牌。
+3. HUD:手牌条(下标 = 私有视图 `cards`)、点选 / 拖动连选;「出牌」「不出」(`can_pass`)「提示」(循环 `hints`)「重选」;叫分按钮按 `bid_options` 置灰;
+   「托管 / 取消托管」(`trustee` 意图,状态看私有视图 `trustee`);左上底分 `base`、倍数 `multiplier`、底牌 `bottom`、地主 `landlord`、
+   剩 1–2 张报警(`players[].hand_count`);倒计时 `turn_time_left`;两手之间画 `last_hand`,结算画 `results`。快捷键见 §3。
+4. 牌面:52 张用 `DdzHand.poker_card(c)` 换德州牌面,补大王 / 小王两张原创插画;地主帽 / 草帽;说明书「斗地主」一本(牌型名取 `DdzHand.TYPE_NAMES`)。
+5. 机器人(`debug_flags.gd`:叫分随机、出 `hints[0]`,能跟就跟、偶尔不出)与 `tools/lan_smoke.sh` 的斗地主一局(正好 3 端,房主 `--hands=N`,
+   核对三端结算一致、总和为 0);`tools/shot.gd --dou-dizhu-showcase`。挑合法意图可以照抄 `tests/test_dou_dizhu_fuzz.gd` 的 `_step`。
