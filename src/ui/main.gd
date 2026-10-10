@@ -8,6 +8,7 @@ const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
 const PokerScreen := preload("res://src/ui/poker/poker_screen.gd")
 const BombCatScreen := preload("res://src/ui/bomb_cat/bomb_cat_screen.gd")
+const LiarsDiceScreen := preload("res://src/ui/liars_dice/liars_dice_screen.gd")
 const VIEW_RESET_TIME := 0.8   # 切换屏幕时紧张度、闪光染色与镜头焦距回到平静的时长
 
 var tavern: Tavern
@@ -224,9 +225,7 @@ func _show_table(_seats: Array) -> void:
 		_switch_to(BombCatScreen.new(self))
 		return
 	if GameMode.is_liars_dice(Net.game_mode):
-		# TODO(吹牛骰子阶段二):换成吹牛骰子的牌桌屏幕并删掉 _liars_dice_placeholder。在那之前给一块不会崩的占位牌:
-		# 规则与网络照常跑,每步到点由房主代打(一局会自己打完,但没有结算界面)
-		_switch_to(_liars_dice_placeholder())
+		_switch_to(LiarsDiceScreen.new(self))
 		return
 	if GameMode.is_dou_dizhu(Net.game_mode):
 		# TODO(斗地主阶段二):换成 DouDizhuScreen.new(self) 并删掉 _dou_dizhu_placeholder。在那之前给一块不会崩的占位牌:
@@ -234,21 +233,6 @@ func _show_table(_seats: Array) -> void:
 		_switch_to(_dou_dizhu_placeholder())
 		return
 	_switch_to(PokerScreen.new(self) if GameMode.is_poker(Net.game_mode) else TableScreen.new(self))
-
-
-func _liars_dice_placeholder() -> Control:
-	# 临时占位(吹牛骰子阶段二删掉):居中一块说明 + 离开按钮
-	var screen := CenterContainer.new()
-	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	screen.add_child(box)
-	box.add_child(UiTheme.label("吹牛骰子的桌子还在布置中", 28, UiTheme.BRASS_BRIGHT))
-	box.add_child(UiTheme.label("这一局由房主代打,想走随时可以离开", 16, UiTheme.PARCHMENT_DIM))
-	var leave := UiTheme.button("离开房间")
-	leave.pressed.connect(func() -> void: Net.end_session())
-	box.add_child(leave)
-	return screen
 
 
 func _dou_dizhu_placeholder() -> Control:
