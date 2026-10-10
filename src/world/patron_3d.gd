@@ -91,6 +91,10 @@ const SNIP_LEFT := Vector3(-0.08, SeatLayout.TABLE_TOP + 0.24, -0.5)
 const SNIP_RIGHT := Vector3(0.09, SeatLayout.TABLE_TOP + 0.27, -0.48)
 const SNIP_STEP := 0.09
 const SNIP_TIME := 0.9
+const PEEK_GLASS := Vector3(0.15, -0.04, -0.3)    # 炸弹猫「偷看」:右爪举着放大镜凑到脸旁(相对头枢轴,身体坐标)
+const PLEAD_PAWS := Vector3(0.035, -0.2, -0.3)    # 炸弹猫「讨要」:双爪合十抵在下巴下
+const SNEAK_LEAN := 0.36                          # 炸弹猫「溜了」:身子往一侧一缩
+const SNEAK_SHIFT := 0.13
 const NAMEPLATE_HEIGHT := 1.92   # 名牌挂点离座位地面:Q 版大头的帽顶坐直时 ≈1.70 m、欢呼蹦起 ≈1.78 m(之前 1.82)
 
 var species_index := 0
@@ -664,6 +668,74 @@ func snip_wires(duration := SNIP_TIME) -> void:
 		rest_arms()
 
 
+func sneak(duration := 0.6) -> void:
+	# 炸弹猫「溜了」:身子往右一缩、踮脚往外挪一点(偷偷溜走),再弹回原位;只动身体的侧倾与左右位置(待机动画不碰这两个)
+	if not alive:
+		return
+	set_expression("smug")
+	var tween := create_tween()
+	tween.tween_property(body, "rotation:z", -SNEAK_LEAN, duration * 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(body, "position:x", SNEAK_SHIFT, duration * 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(duration * 0.22)
+	tween.tween_property(body, "rotation:z", 0.0, duration * 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(body, "position:x", HIP.x, duration * 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+	if alive:
+		set_expression("neutral")
+
+
+func bonk() -> void:
+	# 炸弹猫「甩锅」:被平底锅当头一敲——头被拍扁再弹回(弹性),蚊香眼晕一下、耳朵炸开
+	if not alive:
+		return
+	var tween := create_tween()
+	tween.tween_property(head, "scale", Vector3(1.2, 0.68, 1.2), 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(head, "scale", Vector3.ONE, 0.55).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_antics.bonked(0.75)
+
+
+func plead(hold := 0.9) -> void:
+	# 炸弹猫「讨要」:双爪合十抵在下巴下、水汪汪的狗狗眼、歪着头;手被别的动作占着时只做表情
+	if not alive:
+		return
+	set_expression("worried")
+	_antics.plead(hold)
+	if _arms_locked:
+		return
+	_arms_locked = true
+	var tween := create_tween().set_parallel()
+	_tween_arm(tween, _arm_l, head.position + _mirror(PLEAD_PAWS, -1.0), 0.16, Tween.TRANS_BACK)
+	_tween_arm(tween, _arm_r, head.position + PLEAD_PAWS, 0.16, Tween.TRANS_BACK)
+	tween.chain().tween_interval(hold)
+	var serial := _arm_serial
+	await tween.finished
+	if alive and serial == _arm_serial:
+		_arms_locked = false
+		set_expression("neutral")
+		rest_arms()
+
+
+func peek_with_glass(hold := COVER_MOUTH_HOLD) -> void:
+	# 炸弹猫「偷看」:右爪举着放大镜(放大镜由 BombCatFx 跟着右手摆)、左爪捂嘴偷乐;手被占着时只换表情
+	if not alive:
+		return
+	set_expression("smug")
+	_antics.giggle(hold)
+	if _arms_locked:
+		return
+	_arms_locked = true
+	var tween := create_tween().set_parallel()
+	_tween_arm(tween, _arm_l, head.position + COVER_MOUTH, 0.16)
+	_tween_arm(tween, _arm_r, head.position + PEEK_GLASS, 0.18, Tween.TRANS_BACK)
+	tween.chain().tween_interval(hold)
+	var serial := _arm_serial
+	await tween.finished
+	if alive and serial == _arm_serial:
+		_arms_locked = false
+		set_expression("neutral")
+		rest_arms()
+
+
 func set_soot(amount: float, duration := 0.0) -> void:
 	# 炸弹猫「爆炸」:头上的部件(脸、耳、吻……)盖上一层斑驳的黑灰(patron.gdshader 的实例参数 soot);0 = 干净
 	var parts := _fade_targets.filter(func(t: GeometryInstance3D) -> bool: return is_instance_valid(t) and head.is_ancestor_of(t))
@@ -880,6 +952,7 @@ func reset_pose() -> void:
 	_steady = false
 	set_head_hidden(false)   # 镜头若仍在第一人称,SeatCamera 下一帧再藏
 	body.position = HIP
+	head.scale = Vector3.ONE   # 炸弹猫被平底锅拍扁的头弹回原样
 	if _fan_alive != null:
 		fan.transform = _fan_alive
 		_fan_alive = null

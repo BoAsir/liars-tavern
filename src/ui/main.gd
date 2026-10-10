@@ -102,6 +102,7 @@ func _exit_tree() -> void:
 	CardFaces.clear()
 	PokerFaces.clear()
 	BombCatFaces.clear()
+	BombCatProps.clear_cache()
 	WorldMaterials.clear_cache()
 	MeshKit.clear_cache()
 	MeshForge.clear_cache()

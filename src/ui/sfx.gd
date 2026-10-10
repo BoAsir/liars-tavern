@@ -20,6 +20,10 @@ const VOLUMES := {
 	# 结算庆祝:礼炮「砰」+ 纸屑沙沙 / 开场的小号「哒哒哒—哒!」/ 一阵掌声
 	"cannon_pop": -5.0, "fanfare": -8.0, "applause": -15.0,
 	"quip": -11.0,                                      # 快捷对话:轻快的两声「啵」
+	# 炸弹猫道具效果(规格 2026-10-10):平底锅「当」/ 弹簧「啵嘤」/ 盖章「砰」/ 洗牌龙卷风 / 叮铃闪光 / 小气泡「啵」/
+	# 溜走的滑哨「嗖」/ 踮脚小碎步 / 松一口气「呼」
+	"bonk": -6.0, "boing": -9.0, "stamp": -3.0, "tornado": -10.0, "sparkle": -14.0, "pop": -12.0, "sneak": -11.0,
+	"tiptoe": -15.0, "sigh": -12.0,
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -188,6 +192,25 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_applause(2.8))
 		"quip":
 			return _wav(_mix([_thump(520.0, 0.05, 0.4), _offset(_bell(1175.0, 0.3), 0.04), _offset(_bell(1568.0, 0.25), 0.1)]))
+		"bonk":
+			return _wav(_mix([_pan_ring(), _thump(170.0, 0.09, 0.8), _metal_click(0.5)]))
+		"boing":
+			return _wav(_boing(0.5))
+		"stamp":
+			return _wav(_mix([_thump(78.0, 0.3, 1.0), _noise_burst(0.05, 0.7, 0.001), _offset(_thump(150.0, 0.08, 0.5), 0.01), _rattle(0.2)]))
+		"tornado":
+			return _wav(_mix([_swirl(1.15), _offset(_riffle(0.45), 0.08), _offset(_riffle(0.4), 0.72)]))
+		"sparkle":
+			return _wav(_mix([_bell(1568.0, 0.35), _offset(_bell(2093.0, 0.35), 0.05), _offset(_bell(2637.0, 0.35), 0.1),
+				_offset(_bell(3136.0, 0.45), 0.15)]))
+		"pop":
+			return _wav(_mix([_blip(520.0, 980.0, 0.07, 0.8), _noise_burst(0.015, 0.6, 0.001)]))
+		"sneak":
+			return _wav(_mix([_blip(520.0, 1500.0, 0.26, 0.45), _whoosh_up(0.22)]))
+		"tiptoe":
+			return _wav(_mix([_thump(880.0, 0.03, 0.35), _offset(_thump(990.0, 0.03, 0.3), 0.11), _offset(_thump(930.0, 0.03, 0.3), 0.22)]))
+		"sigh":
+			return _wav(_sigh(0.55))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -511,6 +534,78 @@ func _splat() -> PackedFloat32Array:
 	for k in 3:
 		layers.append(_offset(_drip(_rng.randf_range(700.0, 1100.0), 0.05, 0.18), 0.07 + k * _rng.randf_range(0.05, 0.08)))
 	return _mix(layers)
+
+
+func _pan_ring() -> PackedFloat32Array:
+	# 平底锅被敲:几组不成谐波的分音(锅是一块厚铁片),低一点的「当~」带一点颤
+	var n := int(0.9 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var partials := [[392.0, 1.0, 5.0], [910.0, 0.55, 7.0], [1665.0, 0.32, 10.0], [2598.0, 0.18, 14.0]]
+	for i in n:
+		var t := float(i) / RATE
+		var v := 0.0
+		for p in partials:
+			v += sin(TAU * p[0] * t * (1.0 + 0.004 * sin(TAU * 6.0 * t))) * p[1] * exp(-t * p[2])
+		out[i] = v * 0.42 * minf(t * 600.0, 1.0)
+	return out
+
+
+func _boing(duration: float) -> PackedFloat32Array:
+	# 弹簧「啵嘤」:音高往上滑、颤音越来越小
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := 190.0 + 330.0 * (1.0 - exp(-t * 6.0)) + 60.0 * sin(TAU * 13.0 * t) * exp(-t * 4.0)
+		phase += TAU * f / RATE
+		out[i] = (sin(phase) * 0.8 + sin(phase * 2.0) * 0.15) * exp(-t * 4.5) * minf(t * 300.0, 1.0) * 0.8
+	return out
+
+
+func _swirl(duration: float) -> PackedFloat32Array:
+	# 龙卷风:风声的亮度一圈圈起伏(像绕着转),中间最响
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / n
+		var cutoff := (0.03 + 0.12 * sin(t * PI)) * (0.65 + 0.35 * sin(TAU * 7.0 * t * (0.6 + t)))
+		y += cutoff * (_rng.randf_range(-1.0, 1.0) - y)
+		out[i] = y * sin(t * PI) * 1.8
+	return out
+
+
+func _blip(from_freq: float, to_freq: float, duration: float, gain: float) -> PackedFloat32Array:
+	# 一声短促的上滑正弦(小气泡、滑哨)
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / n
+		phase += TAU * lerpf(from_freq, to_freq, t * t) / RATE
+		out[i] = sin(phase) * sin(t * PI) * gain
+	return out
+
+
+func _sigh(duration: float) -> PackedFloat32Array:
+	# 松一口气:越来越闷的气声 + 一点往下走的哼声
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / n
+		y += (0.12 - 0.1 * t) * (_rng.randf_range(-1.0, 1.0) - y)
+		phase += TAU * (330.0 - 120.0 * t) / RATE
+		var env := minf(t * 8.0, 1.0) * pow(1.0 - t, 1.5)
+		out[i] = (y * 1.4 + sin(phase) * 0.12) * env
+	return out
 
 
 func _drip(freq: float, duration: float, gain: float) -> PackedFloat32Array:
