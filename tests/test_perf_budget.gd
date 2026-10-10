@@ -57,3 +57,10 @@ func test_liars_dice_views_have_budgets():
 	assert_eq(PerfBudget.LIMITS["dice_overview"]["draw_calls"], 900)
 	assert_eq(PerfBudget.LIMITS["dice_close"]["draw_calls"], 900)
 	assert_eq(PerfBudget.violations("dice_seat", {"draw_calls": 701}).size(), 1)
+
+
+func test_dou_dizhu_views_have_budgets():
+	# 斗地主 3 人小桌:座位与第一人称 ≤ 700 draw call(同越肩),俯视同其余机位
+	assert_eq(PerfBudget.LIMITS["ddz_seat"]["draw_calls"], 700)
+	assert_eq(PerfBudget.LIMITS["ddz_fp"]["draw_calls"], 700)
+	assert_eq(PerfBudget.LIMITS["ddz_overview"]["draw_calls"], 900)

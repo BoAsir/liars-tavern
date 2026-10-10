@@ -16,6 +16,10 @@ extends SceneTree
 # defuse / peek / give / settlement),没写时 bomb_seat、bomb_fp 用 turn,bomb_overview 用 exploded,bomb_close 用 bomb。
 # 全套:--views=bomb_seat,bomb_seat,bomb_close,bomb_overview,bomb_seat,bomb_seat,bomb_fp,bomb_seat,bomb_seat
 #       --hud=turn,window,bomb,exploded,defuse,peek,turn,give,settlement --bomb-cat-showcase
+# --dou-dizhu-showcase 时摆斗地主展台(tools/dou_dizhu_showcase.gd,3 人小桌):机位 ddz_seat / ddz_overview / ddz_fp(第一人称);
+# --hud= 按位置给每个机位一个状态(DouDizhuShowcase.HUD_STATES:bidding / landlord / playing / bomb / rocket / plane / spring /
+# settlement),没写时用 playing。全套:--views=ddz_seat,ddz_seat,ddz_seat,ddz_seat,ddz_overview,ddz_seat,ddz_seat,ddz_seat,ddz_fp
+#       --hud=bidding,landlord,playing,bomb,rocket,plane,spring,settlement,playing --dou-dizhu-showcase
 # --liars-dice-showcase 时摆吹牛骰子展台(tools/liars_dice_showcase.gd,6 人大桌):机位 dice_seat / dice_overview / dice_fp(第一人称)/
 # dice_close(骰盅与骰子特写)/ dice_peek(第一人称偷看时视线压低);--hud= 按位置给每个机位一个状态
 # (LiarsDiceShowcase.HUD_STATES:bidding / peek / counting / lost / out / settlement),没写时 dice_overview 用 out,其余用 bidding。
@@ -61,6 +65,7 @@ var opts := {}
 var _poker_world: TableWorld = null
 var _poker: Node = null
 var _bomb: Node = null
+var _ddz: Node = null
 var _dice: Node = null
 var _showcase: Node = null
 var _ui: Control = null
@@ -126,6 +131,11 @@ func _run() -> void:
 		root.add_child(bomb)
 		await bomb.build(tavern)
 		_bomb = bomb
+	if opts.has("dou-dizhu-showcase"):
+		var ddz: Node = load("res://tools/dou_dizhu_showcase.gd").new()
+		root.add_child(ddz)
+		await ddz.build(tavern)
+		_ddz = ddz
 	if opts.has("liars-dice-showcase"):
 		var dice: Node = load("res://tools/liars_dice_showcase.gd").new()
 		root.add_child(dice)
@@ -158,6 +168,10 @@ func _run() -> void:
 			tavern.camera_rig.snap(xform.origin, xform.origin - xform.basis.z)
 			if hud_state != "":
 				_stage_settlement(tavern)
+		elif view.begins_with("ddz_") and _ddz != null:
+			if hud_state == "" or not DouDizhuShowcase.HUD_STATES.has(hud_state):
+				hud_state = DouDizhuShowcase.STATE_PLAYING
+			await _place_ddz_camera(tavern, view, hud_state)
 		elif view.begins_with("bomb_") and _bomb != null:
 			if hud_state == "" or not BombCatShowcase.HUD_STATES.has(hud_state):
 				hud_state = {"bomb_overview": BombCatShowcase.STATE_EXPLODED, "bomb_close": BombCatShowcase.STATE_BOMB}.get(view,
@@ -395,6 +409,32 @@ func _place_bomb_camera(tavern: Tavern, view: String, state: String) -> void:
 		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		layer.add_child(_ui)
 	_bomb.stage_hud(_ui, state)
+
+
+func _place_ddz_camera(tavern: Tavern, view: String, state: String) -> void:
+	# 斗地主机位:取自展台的牌桌(本机座位 = 1 号);先摆状态的 3D(特效类的停在最好看的那一刻),再上机位与 HUD
+	var world: TableWorld = _ddz.world
+	var rig := tavern.camera_rig
+	await _ddz.stage(state)
+	if view == "ddz_fp":
+		CameraViews.place_first_person(rig, world, DouDizhuShowcase.ME, view)
+	else:
+		CameraViews.leave_first_person(world, DouDizhuShowcase.ME)
+		_ddz.cards.present_my_fan()
+		rig.stop_follow()
+		rig.camera.fov = CameraRig.DEFAULT_FOV
+		rig.fill_light.light_energy = TableWorld.SEAT_FILL_LIGHT if view == "ddz_seat" else 0.0
+		var xform: Transform3D = _ddz.view(view, state)
+		rig.snap(xform.origin, xform.origin - xform.basis.z)
+	if _ui == null:
+		var layer := CanvasLayer.new()
+		root.add_child(layer)
+		_ui = Control.new()
+		_ui.theme = UiTheme.theme()
+		_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(_ui)
+	_ddz.stage_hud(_ui, state)
 
 
 func _place_dice_camera(tavern: Tavern, view: String, state: String) -> void:
