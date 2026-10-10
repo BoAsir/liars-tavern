@@ -310,7 +310,7 @@
 
 - 测试 148 → 155 个脚本、1622 → 1681 个用例全过;新增 `test_liars_dice_screen_state` / `_hud` / `_director` / `_world` / `_screen_flow`、
   `test_rulebook_liars_dice`、`test_sfx_liars_dice`,`test_perf_budget` 加吹牛骰子机位,`test_rulebook_content` 页签改成四本。
-  - 隐藏信息:整局流程里每次喊价 / 开之前桌上别人的骰子节点数都是 0;本地状态开盅前拿不到别人的点数;公共视图过漏点数检查器。
+  - 隐藏信息:整局流程里每次喊价 / 开之前桌上别人的骰子节点数都是 0;本地状态开盅前拿不到别人的点数;公共视图通过漏点数检查器。
   - 按轮次缓存:开盅时屏幕与盅底下是这一轮的点数(下一轮的私有视图已经先到),演到 round_started 才换。
   - 出价器的置灰与 `bid_error` 在 4 种总数 × 5 种上一口 × 每个个数 × 每个点数上逐格一致;默认值等于 `min_raise`。
 - `tools/lan_smoke.sh`:骗子酒馆、炸弹猫、吹牛骰子三局都过,吹牛骰子 3 端打到 MATCH_OVER、胜者一致、快捷对话都收到。

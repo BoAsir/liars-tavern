@@ -19,7 +19,7 @@ const SETTLE := 3.0
 const NAMES := {1: "我", 2: "阿狸", 3: "小熊", 4: "老狐狸", 5: "猪猪侠", 6: "一个名字很长的客人"}
 const DICE := {1: [1, 2, 5, 5, 6], 2: [1, 3, 3, 4, 6], 3: [2, 2, 5, 6, 6], 4: [1, 1, 4, 5, 6], 5: [3, 4], 6: [2, 3, 4, 5, 5]}
 const BID := {"pid": 4, "count": 3, "face": 5}
-const CHALLENGE := {"pid": 2, "target": 4, "count": 9, "face": 5}
+const CHALLENGE := {"pid": 2, "target": 4, "count": 11, "face": 5}   # 实际 10 个(含 1 点):吹牛,老狐狸丢骰子
 const OUT_PID := 5
 const LOSER := 4
 const TURN_LEFT := 21.0
@@ -160,9 +160,10 @@ func stage_hud(ui_root: Control, state: String) -> void:
 		plate.set_info(count, not out, false, pid == current, last)
 		var anchor: Callable = world.nameplate_anchor.bind(pid) if world.is_poker_table() else world.patrons[pid].nameplate_anchor
 		labels.track("plate:%d" % pid, plate, anchor)
-	var bid := BID if state in [STATE_BIDDING, STATE_PEEK, STATE_SHAKING] else CHALLENGE
+	var challenged := {"pid": CHALLENGE["target"], "count": CHALLENGE["count"], "face": CHALLENGE["face"]}
+	var bid := BID if state in [STATE_BIDDING, STATE_PEEK, STATE_SHAKING] else challenged
 	var bids := [{"pid": 3, "count": 2, "face": 5}, BID] if state == STATE_BIDDING else [{"pid": 3, "count": 2, "face": 5}, BID,
-		{"pid": 5, "count": 6, "face": 5}, {"pid": 6, "count": 8, "face": 4}, CHALLENGE]
+		{"pid": 5, "count": 6, "face": 5}, {"pid": 6, "count": 10, "face": 4}, challenged]
 	if state == STATE_PEEK or state == STATE_SHAKING:
 		bid = {}
 		bids = []
@@ -201,11 +202,11 @@ func stage_hud(ui_root: Control, state: String) -> void:
 			hud.log_event("—— 第 4 轮 · 场上 26 颗骰子 ——", UiTheme.BRASS)
 		STATE_COUNTING:
 			hud.set_picker(count, face, face_ok, false, true, false, false, false)
-			hud.announce("开!", UiTheme.LIE, "阿狸 不信 老狐狸 的「9 个 5」", ANNOUNCE_HOLD)
-			hud.log_event("阿狸 开 老狐狸 的「9 个 5」", UiTheme.LIE)
+			hud.announce("开!", UiTheme.LIE, "阿狸 不信 老狐狸 的「11 个 5」", ANNOUNCE_HOLD)
+			hud.log_event("阿狸 开 老狐狸 的「11 个 5」", UiTheme.LIE)
 		STATE_LOST:
 			hud.set_picker(count, face, face_ok, false, true, false, false, false)
-			hud.announce("吹牛!", UiTheme.LIE, LiarsDiceScreenState.verdict_text({"actual": 8, "face": 5, "count": 9}), ANNOUNCE_HOLD,
+			hud.announce("吹牛!", UiTheme.LIE, LiarsDiceScreenState.verdict_text({"actual": 10, "face": 5, "count": 11}), ANNOUNCE_HOLD,
 				LiarsDiceHud.ANNOUNCE_Y_LOW)
 			hud.log_event("老狐狸 丢了一颗骰子(还剩 4 颗)", UiTheme.LIE)
 		STATE_OUT:
