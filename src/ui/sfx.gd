@@ -24,6 +24,8 @@ const VOLUMES := {
 	# 溜走的滑哨「嗖」/ 踮脚小碎步 / 松一口气「呼」
 	"bonk": -6.0, "boing": -9.0, "stamp": -3.0, "tornado": -10.0, "sparkle": -14.0, "pop": -12.0, "sneak": -11.0,
 	"tiptoe": -15.0, "sigh": -12.0,
+	# 吹牛骰子:骰盅里哗啦哗啦 / 扣盅「啪」/ 开盅骰子磕碰 / 丢骰子「啵」/ 计数「叮」/ 掀盅沿偷看
+	"dice_shake": -8.0, "cup_slam": -4.0, "dice_clack": -9.0, "die_pop": -8.0, "count_tick": -13.0, "dice_peek": -16.0,
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -211,6 +213,18 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_mix([_thump(880.0, 0.03, 0.35), _offset(_thump(990.0, 0.03, 0.3), 0.11), _offset(_thump(930.0, 0.03, 0.3), 0.22)]))
 		"sigh":
 			return _wav(_sigh(0.55))
+		"dice_shake":
+			return _wav(_dice_rattle(0.85, 6.5))
+		"cup_slam":
+			return _wav(_mix([_thump(88.0, 0.26, 1.0), _noise_burst(0.07, 0.35, 0.001), _offset(_dice_clicks(4, 0.16, 0.5), 0.02)]))
+		"dice_clack":
+			return _wav(_mix([_dice_clicks(9, 0.34, 0.75), _noise_burst(0.12, 0.15, 0.01)]))
+		"die_pop":
+			return _wav(_mix([_blip(380.0, 1250.0, 0.11, 0.85), _offset(_dice_clicks(1, 0.04, 0.6), 0.0)]))
+		"count_tick":
+			return _wav(_mix([_bell(1320.0, 0.22), _thump(660.0, 0.03, 0.25)]))
+		"dice_peek":
+			return _wav(_mix([_noise_burst(0.14, 0.08, 0.04), _offset(_dice_clicks(2, 0.08, 0.3), 0.03)]))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -605,6 +619,44 @@ func _sigh(duration: float) -> PackedFloat32Array:
 		phase += TAU * (330.0 - 120.0 * t) / RATE
 		var env := minf(t * 8.0, 1.0) * pow(1.0 - t, 1.5)
 		out[i] = (y * 1.4 + sin(phase) * 0.12) * env
+	return out
+
+
+func _dice_clicks(count: int, duration: float, gain: float) -> PackedFloat32Array:
+	# 骰子磕碰:几声短促的木 / 塑料「嗒」(两个泛音,很快衰减),时间与音高带随机,越往后越轻
+	var out := PackedFloat32Array()
+	out.resize(int(duration * RATE) + int(0.03 * RATE))
+	for k in count:
+		var at := _rng.randf_range(0.0, duration) if count > 1 else 0.0
+		var start := int(at * RATE)
+		var freq := _rng.randf_range(1700.0, 3300.0)
+		var g := gain * _rng.randf_range(0.5, 1.0) * (1.0 - 0.5 * at / maxf(duration, 0.001))
+		for i in int(0.03 * RATE):
+			if start + i < out.size():
+				var t := float(i) / RATE
+				out[start + i] += (sin(TAU * freq * t) * 0.55 + sin(TAU * freq * 2.3 * t) * 0.25 + _rng.randf_range(-1, 1) * 0.2) \
+					* exp(-t * 220.0) * g
+	return out
+
+
+func _dice_rattle(duration: float, hz: float) -> PackedFloat32Array:
+	# 摇骰盅:皮盅里五颗骰子哗啦哗啦。每甩一下(hz)一阵密集的磕碰,外加一层闷闷的皮革摩擦声跟着节奏起伏
+	var n := int(duration * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var swing := absf(sin(PI * hz * t))
+		y += 0.06 * (_rng.randf_range(-1.0, 1.0) - y)
+		out[i] = y * swing * 0.9 * minf(t * 20.0, 1.0) * minf((duration - t) * 12.0, 1.0)
+	var beats := int(duration * hz)
+	for b in beats:
+		var clicks := _dice_clicks(5, 0.07, 0.42)
+		var start := int((float(b) + 0.15) / hz * RATE)
+		for i in clicks.size():
+			if start + i < n:
+				out[start + i] += clicks[i]
 	return out
 
 
