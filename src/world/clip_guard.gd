@@ -48,6 +48,8 @@ func _init(p_world: Node3D) -> void:
 # —— 道具登记(新玩法用) ——
 
 func set_prop(id: StringName, shape: Dictionary) -> void:
+	shape = shape.duplicate()
+	shape["tied"] = shape.get("node") != null   # 登记时就记下是不是跟节点绑着(节点释放后取出来的值不可靠)
 	_props[id] = shape
 	_frame = -1
 
@@ -131,14 +133,22 @@ func shapes() -> Array:
 		return _shapes
 	_frame = frame
 	_shapes = []
+	var gone := []
 	for id in _props:
 		var shape: Dictionary = _props[id]
-		var node = shape.get("node")
-		if node != null and (not is_instance_valid(node) or not node.is_visible_in_tree()):
-			continue
+		if shape.get("tied", false):
+			# 跟节点绑着的:节点已释放就收走登记(已释放的对象和 null 比较也是相等的,得用 is_instance_valid 判断),隐藏时这一帧不算
+			var node = shape["node"]
+			if not is_instance_valid(node):
+				gone.append(id)
+				continue
+			if not (node as Node3D).is_visible_in_tree():
+				continue
 		if shape.has("follow"):
 			shape = _followed(shape)
 		_shapes.append(shape)
+	for id in gone:
+		_props.erase(id)
 	var patrons: Dictionary = world.get("patrons") if world.get("patrons") != null else {}
 	for pid in patrons:
 		var p: Patron = patrons[pid]
