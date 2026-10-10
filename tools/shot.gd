@@ -22,6 +22,12 @@ extends SceneTree
 # 胜者跳舞、旁人鼓掌、出局的倒着、桌沿礼炮放彩纸),等这么多秒(默认 2.6)再拍;机位 celebrate(胜者特写环绕的起点)、
 # celebrate_table(整桌环绕的起点)。例:--showcase --celebrate --views=celebrate,celebrate_table;--celebrate=5 拍第二炮;
 # 再加 --celebrate-hud 叠上该玩法的结算面板(文件名带 _settlement);--celebrate-winners=1,2,… 换胜者(德州全员平局:1,2,3,4,5,6,7,8)。
+# --preview=<目标>[,<目标>…] 按位置给每个机位一个悬停目标,强制显示悬停大图(CardPreview)并画一个光标小箭头再拍,
+# 文件名带 _preview_<目标>;目标写法见 tools/preview_stage.gd:骗子酒馆 hand:N / reveal:N,德州 hand:N / board:N /
+# shown:PID:N / boardstrip:N / mystrip:N / showdown:R:N,炸弹猫 strip:N / hand:N / discard,任何机位 at:X:Y(视口比例)/ none。
+# 例:--showcase --views=seat,fp,seat --preview=hand:2,hand:0,reveal:0 --freeze;
+#     --poker-showcase --views=poker_seat,poker_seat,poker_fp --hud=bet,showdown,bet --preview=hand:1,showdown:0:1,board:2;
+#     --bomb-cat-showcase --views=bomb_seat,bomb_seat,bomb_fp --preview=strip:2,discard,strip:4(4:3 再加 --resolution 1280x960)。
 # 要做前后像素对比(tools/shot_diff.gd)时加 --freeze 与引擎参数 --fixed-fps 60:搭好展台后暂停场景树(呼吸、眨眼、补间、粒子都停下),
 # 每帧时长与随机数种子也固定,两次截图可比。
 
@@ -29,6 +35,7 @@ extends SceneTree
 const CameraViews := preload("res://tools/camera_views.gd")
 const CelebrateStage := preload("res://tools/celebrate_stage.gd")
 const ImageStats := preload("res://tools/image_stats.gd")
+const PreviewStage := preload("res://tools/preview_stage.gd")
 const WARMUP_FRAMES := 45
 const SETTLE_DRAWS := 8   # 截图前连续强制绘制的帧数(体积雾的时域累积要几帧才收敛;同 DebugFlags)
 const POKER_ME := 1
@@ -53,6 +60,8 @@ var _showcase: Node = null
 var _ui: Control = null
 var _celebrate_world: TableWorld = null   # --celebrate:开演庆祝的那张牌桌
 var _celebrate_kind := ""
+var _preview: CardPreview = null   # --preview:悬停大图(单独一层,压在 HUD 之上)
+var _cursor: Control = null        # --preview:光标小箭头
 
 
 func _initialize() -> void:
@@ -171,10 +180,60 @@ func _run() -> void:
 			await create_timer(0.6).timeout
 			_save(out_dir, view.replace("flash", "smoke"))
 			continue
-		var image := _save(out_dir, view if hud_state == "" else view + "_" + hud_state)
+		var suffix := ""
+		if opts.has("preview"):
+			suffix = await _stage_preview(tavern, view, index)
+		var image := _save(out_dir, (view if hud_state == "" else view + "_" + hud_state) + suffix)
 		if opts.has("stats"):
 			_print_stats(view, image)
 	quit()
+
+
+func _stage_preview(tavern: Tavern, view: String, index: int) -> String:
+	# --preview:按位置取这个机位的悬停目标,光标停到那张牌露出来的地方,立刻显示大图(不淡入,冻结的场景树里也看得到)
+	var targets: PackedStringArray = opts["preview"].split(",")
+	var target: String = targets[mini(index, targets.size() - 1)]
+	if _preview == null:
+		var layer := CanvasLayer.new()
+		layer.layer = 30
+		root.add_child(layer)
+		var host := Control.new()
+		host.theme = UiTheme.theme()
+		host.set_anchors_preset(Control.PRESET_FULL_RECT)
+		host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(host)
+		_preview = CardPreview.new()
+		host.add_child(_preview)
+		_cursor = Control.new()
+		_cursor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_cursor.draw.connect(_draw_cursor)
+		host.add_child(_cursor)
+	var kind := PreviewStage.kind_of(view)
+	var stage: Node = {"liars": _showcase, "poker": _poker, "bomb_cat": _bomb}[kind]
+	_cursor.visible = false
+	if target == "none" or target == "" or stage == null:
+		_preview.hide_preview()
+		return ""
+	var camera := tavern.camera_rig.camera
+	_preview.source = func(point: Vector2) -> Array: return PreviewStage.candidates(kind, stage, camera, point)
+	var point := PreviewStage.point_for(kind, stage, camera, target, _preview.size)
+	_preview.hover_at(point)
+	_cursor.position = point
+	_cursor.visible = point.x >= 0.0
+	if not _preview.is_showing():
+		push_warning("--preview: %s 上的 %s 没有弹出大图" % [view, target])
+	for i in 3:
+		await process_frame
+	return "_preview_" + target.replace(":", "-")
+
+
+func _draw_cursor() -> void:
+	# 截图里看不到系统光标:画一个白底黑边的小箭头标出悬停的位置
+	var arrow := PackedVector2Array([Vector2(0, 0), Vector2(0, 19), Vector2(5, 14), Vector2(9, 22), Vector2(12, 21),
+		Vector2(8, 13), Vector2(14, 13)])
+	_cursor.draw_colored_polygon(arrow, Color.WHITE)
+	arrow.append(arrow[0])
+	_cursor.draw_polyline(arrow, Color.BLACK, 1.5, true)
 
 
 func _stretch_necks(spec: String) -> void:
