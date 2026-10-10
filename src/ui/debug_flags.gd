@@ -453,6 +453,9 @@ func _on_director_event(ev: Dictionary) -> void:
 	match ev["type"]:
 		"round_started":
 			_capture_once("deal", 3.0)
+			if GameMode.is_liars_dice(Net.game_mode):
+				_capture_once("shake", 0.6)   # 吹牛骰子:全员捧着骰盅摇
+				_capture_once("peek", 1.55)   # 扣下后掀开盅沿偷看
 		"played":
 			_capture_once("played", 0.55)
 		"reveal":
