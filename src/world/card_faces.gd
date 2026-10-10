@@ -56,6 +56,7 @@ static var _foil_array: Texture2DArray = null
 static var _fallback_faces: Texture2DArray = null
 static var _fallback_foil: Texture2DArray = null
 static var _building := false
+static var _bleed_shader: Shader = null
 
 
 static func chamber_points(center: Vector2, radius: float) -> PackedVector2Array:
@@ -106,6 +107,7 @@ static func foil_array() -> Texture2DArray:
 
 
 static func clear() -> void:
+	_bleed_shader = null
 	_textures = {}
 	_face_array = null
 	_foil_array = null
@@ -139,6 +141,8 @@ static func build(host: Node) -> void:
 			vp.transparent_bg = not foil
 			vp.msaa_2d = VIEWPORT_MSAA
 			vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+			if not foil:
+				vp.add_child(bleed_backdrop(Vector2(SIZE)))
 			var painter := CardPainter.new()
 			painter.kind = kind
 			painter.foil = foil
@@ -176,6 +180,23 @@ static func build(host: Node) -> void:
 		_face_array = _array(faces)
 		_foil_array = _array(foils)
 	_building = false
+
+
+static func bleed_backdrop(rect_size: Vector2, edge := CUT_LINE) -> ColorRect:
+	# 透明视口的「底色」:把牌外圆角处的透明像素的 RGB 写成牌边色(透明度仍是 0,不混合直接覆盖)。
+	# 否则透明处是黑色,生成 mipmap 时黑色渗进牌边,远处与 2D 小牌的边缘会发脏、发暗,像一圈锯齿
+	if _bleed_shader == null:
+		_bleed_shader = Shader.new()
+		_bleed_shader.code = "shader_type canvas_item;\nrender_mode blend_disabled;\n" \
+			+ "uniform vec3 edge : source_color;\nvoid fragment() { COLOR = vec4(edge, 0.0); }\n"
+	var mat := ShaderMaterial.new()
+	mat.shader = _bleed_shader
+	mat.set_shader_parameter("edge", edge)
+	var rect := ColorRect.new()
+	rect.size = rect_size
+	rect.material = mat
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
 
 
 static func _array(images: Array[Image]) -> Texture2DArray:

@@ -60,6 +60,8 @@ func _build_target_panel() -> void:
 	_target_tex.custom_minimum_size = Vector2(54, 78)
 	_target_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_target_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# 360×520 的牌面缩到 54×78:没有 mipmap 的线性过滤只取几个像素,笔画一缩就成锯齿(这里原来漏设了)
+	_target_tex.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_target_tex.texture = CardFaces.texture(CardFaces.BACK)
 	_center_pivot(_target_tex)
 	row.add_child(_target_tex)

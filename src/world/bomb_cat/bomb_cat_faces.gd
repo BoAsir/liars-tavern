@@ -240,6 +240,8 @@ static func _render(tree: SceneTree, foil: bool) -> Array:
 		vp.transparent_bg = not foil   # 圆角外透明(遮罩是黑底)
 		vp.msaa_2d = VIEWPORT_MSAA
 		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		if not foil:
+			vp.add_child(CardFaces.bleed_backdrop(Vector2(SIZE)))   # 圆角外透明像素的 RGB 写成牌边色,mipmap 不发黑
 		var painter := BombCatFacePainter.new(id, foil)
 		vp.add_child(painter)
 		holder.add_child(vp)
