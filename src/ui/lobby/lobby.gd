@@ -219,8 +219,9 @@ func _refresh(players: Array) -> void:
 	_fit_list()
 	var ready_count := players.filter(func(p): return p["ready"]).size()
 	_status.text = "%d/%d 人 · %d 人已准备" % [players.size(), Net.max_players(), ready_count]
-	if players.size() < Protocol.MIN_PLAYERS:
-		_status.text += " · 至少 %d 人才能开局" % Protocol.MIN_PLAYERS
+	var min_players := GameMode.min_players(Net.game_mode)   # 斗地主要 3 人
+	if players.size() < min_players:
+		_status.text += " · 至少 %d 人才能开局" % min_players
 	elif Net.is_host and not Net.can_start():
 		_status.text += " · 等待全员准备"
 	if _start_button != null:
