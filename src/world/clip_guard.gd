@@ -157,7 +157,7 @@ func shapes() -> Array:
 		var seat := p.transform.orthonormalized()
 		var forward := -seat.basis.z
 		var head := world.to_local(p.head_position())
-		var m := p.head_metrics()
+		var m := p.guard_metrics()
 		_shapes.append({"kind": "head", "c": Vector2(head.x, head.z), "fwd": Vector2(forward.x, forward.z).normalized(),
 			"rx": m["rx"], "front": m["front"], "back": m["back"], "top": head.y + m["above"], "bottom": head.y - m["below"],
 			"mode": BLOCK, "owner": pid})

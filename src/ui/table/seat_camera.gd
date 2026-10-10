@@ -14,6 +14,7 @@ signal mode_changed(first_person: bool)
 
 const HEAD_CLEAR := 0.45   # 镜头离眼睛这么近才藏头:回座过渡刚开始时镜头还在远处,头照常看得见
 const HEAD_INSIDE := 0.42  # 镜头离自己的头心这么近就算钻进头里(大头半径约 0.3,加上耳朵、帽檐与胡须),不论视角都藏头
+const FP_COMFORT := 0.25   # 第一人称坐在座位上时自己的头在探头软碰撞里多算这么大一圈(Patron.guard_extra,只在本机)
 const TOAST_FIRST := "第一人称视角"
 const TOAST_THIRD := "越肩视角"
 const TOGGLE_MOVE := 0.35  # 在座位上切换视角的过渡时长(秒)
@@ -126,9 +127,11 @@ func update_head() -> void:
 	if want and not me.is_head_hidden():
 		me.set_head_hidden(true)
 		_hidden = me
-	# 镜头离开座位(特写、翻牌、观战)时自己举着的牌扇收到桌面上空,不挡镜头;回座再举起来(穿模修复 2026-10-10)
+	# 镜头离开座位(特写、翻牌、观战)时自己举着的牌扇收到桌面上空,不挡镜头;回座再举起来。
+	# 第一人称时自己的头在软碰撞里多算一圈,别人的头不贴到镜头上(穿模修复 2026-10-10)
 	if me != null and is_instance_valid(me):
 		me.set_fan_stowed(not _seated or (first_person and stow_fan_in_first_person))
+		me.guard_extra = FP_COMFORT if _seated and first_person else 0.0
 
 
 func _show_head() -> void:

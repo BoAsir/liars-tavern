@@ -317,6 +317,25 @@ static func _cards_cross(a: Node3D, b: Node3D) -> bool:
 	return false
 
 
+func test_first_person_comfort_keeps_neighbours_off_the_camera():
+	# 第一人称时自己的头在软碰撞里多算一圈(Patron.guard_extra,只在本机):邻座把头探向自己时停得更远
+	var dist := []
+	for extra in [0.0, 0.25]:
+		_world([0, 1, 2, 3])
+		await wait_seconds(SETTLE)
+		var me: Patron = world.patrons[1]
+		var other: Patron = world.patrons[2]
+		for pid in world.patrons:
+			Probe.freeze(world.patrons[pid])
+			Probe.pose(world.patrons[pid])
+		me.guard_extra = extra
+		var toward := other.transform.affine_inverse().basis * (me.head_position() - other.head_position())
+		Probe.pose(other, Vector3.ZERO, Vector3(toward.x, 0.0, minf(toward.z, 0.0)))
+		dist.append(other.head_position().distance_to(me.eye_position()))
+		world.queue_free()
+	assert_gt(dist[1], dist[0] + 0.15, "留白让邻座的头离镜头更远:%s" % [dist])
+
+
 # —— 第一人称 ——
 
 func test_first_person_fan_pulls_in_without_changing_the_picture():

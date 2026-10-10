@@ -186,6 +186,9 @@ var guard_id := -1                 # 在牌桌上的 pid:查询形状时跳过�
 var _blockers: Array = []          # 这一帧要躲的「挡」形状(_guard_target 取)
 var _guard_fwd := Vector2(0, -1)   # 座位朝向(牌桌坐标的水平方向)
 var _neck_goal := Vector3.ZERO     # 软碰撞时弹簧追的目标(截短后的探头目标,限速 NECK_GOAL_SPEED 滑过去)
+# 第一人称的观感留白(只在本机,SeatCamera 设):自己的头在软碰撞里按这么大一圈算(别人的头也离自己的镜头这么远),
+# 一桌人都往桌心探头时邻座的大头不会贴在镜头上挡掉半个画面(试玩挑错 2026-10-10)
+var guard_extra := 0.0
 var _head_metrics := {}            # 头的解析尺寸(head_metrics),头上挂的东西变了才重量
 var _metrics_key := -1
 
@@ -446,7 +449,7 @@ func _guard_target(target: Vector3) -> Vector3:
 	var home := seat * base
 	var fwd3 := -seat.basis.z
 	_guard_fwd = Vector2(fwd3.x, fwd3.z).normalized()
-	var m := head_metrics()
+	var m := guard_metrics()
 	_blockers = guard.blockers_for(guard_id, Vector2(home.x, home.z), _guard_fwd, m)
 	var to := seat * (base + Vector3(target.x, 0.0, target.z))
 	var t := ClipGuard.ray_clamp(_blockers, Vector2(home.x, home.z), Vector2(to.x, to.z), _guard_fwd, m)
@@ -457,7 +460,7 @@ func _guard_neck() -> void:
 	# 把头推出「挡」形状:位置投影到形状外面,速度去掉往里的分量(贴着边滑,不弹)
 	var seat := _seat_frame()
 	var c := seat * (_head_base() + _neck_offset)
-	var m := head_metrics()
+	var m := guard_metrics()
 	var res := ClipGuard.push_out(_blockers, Vector2(c.x, c.z), _guard_fwd, m, c.y - m["below"])
 	var h: Vector2 = res[0]
 	if h.is_equal_approx(Vector2(c.x, c.z)):
@@ -509,6 +512,17 @@ func head_metrics() -> Dictionary:
 		"above": box.end.y - c.y, "below": c.y - face.position.y, "mx": maxf(-face.position.x, face.end.x),
 	}
 	return _head_metrics
+
+
+func guard_metrics() -> Dictionary:
+	# 软碰撞里水平方向用的头部尺寸:head_metrics 再加第一人称的观感留白 guard_extra(只在本机)
+	var m := head_metrics()
+	if guard_extra <= 0.0:
+		return m
+	var out := m.duplicate()
+	for key in ["rx", "front", "back"]:
+		out[key] = m[key] + guard_extra
+	return out
 
 
 static func _visible_under(node: Node3D, root: Node3D) -> bool:
