@@ -302,7 +302,7 @@
   - `card_faces.gd` / `card_3d.gd`:认得两张王的牌面值。
   - `table_world.gd`:新增 `third_person_override`(见 7.3),`clear_poker` 复原。
   - `debug_flags.gd`:斗地主机器人、截图标记、`--hands`、`DDZ_HAND_OVER` / `DDZ_RESULTS` 日志行。
-  - `tools/lan_smoke.sh`:斗地主一局。`sfx.gd`:8 个音效。`rulebook_content.gd`:第四本书。
+  - `tools/lan_smoke.sh`:斗地主一局。`sfx.gd`:8 个音效。`rulebook_content.gd`:斗地主那本(合并吹牛骰子阶段二后是第五本;页签放不下时标题旁的英文副标题省略)。
 
 ### 7.2 两张王
 
