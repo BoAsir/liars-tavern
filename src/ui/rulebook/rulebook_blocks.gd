@@ -63,6 +63,7 @@ static func _card_face(card: int, card_size: Vector2) -> TextureRect:
 	face.custom_minimum_size = card_size
 	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 从大纹理缩小很多倍:不用 mipmap 会出锯齿
 	return face
 
 
@@ -334,8 +335,7 @@ static func _hand_row(item: Dictionary) -> Control:
 	var cards := HBoxContainer.new()
 	cards.add_theme_constant_override("separation", HAND_CARD_GAP)
 	for card in item["cards"]:
-		var face := _card_face(card, HAND_CARD_SIZE)
-		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # 从大纹理缩小很多倍(规格 §5.3)
+		var face := _card_face(card, HAND_CARD_SIZE)   # 过滤方式在 _card_face 里统一设(规格 §5.3)
 		# 铺满牌位:牌面生成前的占位纹理是正方形,按比例居中会画成方块,换上真牌面时大小一跳
 		face.stretch_mode = TextureRect.STRETCH_SCALE
 		cards.add_child(face)

@@ -262,6 +262,20 @@ func _corner_panel(preset: int, offset: Vector2) -> PanelContainer:
 
 # —— 更新 ——
 
+func preview_candidates() -> Array:
+	# 悬停大图的 2D 候选:左上公共牌条、左下自己的两张、右侧摊牌面板里每人亮的牌;大图让开牌所在的整块面板
+	var out := board_strip.preview_candidates(_screen_rect(header_panel))
+	out.append_array(my_strip.preview_candidates(_screen_rect(my_panel)))
+	var showdown_rect := _screen_rect(showdown)
+	for strip: CardStrip in showdown.strips():
+		out.append_array(strip.preview_candidates(showdown_rect))
+	return out
+
+
+static func _screen_rect(control: Control) -> Rect2:
+	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+
+
 func set_header(mode: String, blinds: Array, hand: int) -> void:
 	_title.text = title_text(mode, blinds, hand)
 

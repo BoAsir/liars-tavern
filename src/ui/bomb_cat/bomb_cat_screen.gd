@@ -30,6 +30,7 @@ var my_pid := 0
 var hud: BombCatHud
 var director: BombCatDirector
 var quips: QuipController
+var preview: CardPreview
 var world: TableWorld
 var cards: BombCatCards
 var state := BombCatScreenState.new()
@@ -79,6 +80,8 @@ func _ready() -> void:
 	quips = _make_quips()
 	add_child(quips)
 	hud.quip_pressed.connect(quips.toggle)
+	preview = _make_preview()
+	add_child(preview)   # 压在 HUD 与九宫格之上;只显示,不接鼠标
 	director = BombCatDirector.new(self, app, hud)
 	add_child(director)
 	_build_nameplates()
@@ -707,6 +710,23 @@ func _make_quips() -> QuipController:
 	quip.log_line = hud.log_event
 	quip.bubble_offset = Vector2(0, BombCatDirector.BUBBLE_ABOVE_PLATE + QUIP_ABOVE_CLAIM)
 	return quip
+
+
+func _make_preview() -> CardPreview:
+	# 悬停大图(带牌名与说明):底部 2D 手牌条、3D 牌扇里自己的牌、弃牌堆顶上摊开的几张(牌背不算);
+	# 镜头去拍特写、快捷语面板或九宫格开着、说明书或确认框盖着、结算时藏起
+	var card_preview := CardPreview.new()
+	card_preview.source = func(point: Vector2) -> Array:
+		var out: Array = hud.strip.preview_candidates() if hud != null else []
+		var tavern = app.get("tavern")
+		if cards != null and tavern != null:
+			out.append_array(CardPreview.world_candidates(tavern.camera_rig.camera, point, cards.hoverable_cards()))
+		return out
+	card_preview.gate = func() -> Dictionary:
+		return {"camera_at_rest": director != null and director.is_camera_at_rest(),
+			"panel_open": _banter_panel_open() or (quips != null and quips.menu.is_open()),
+			"modal_open": app.is_modal_open(), "settlement": _settlement != null}
+	return card_preview
 
 
 func _banter_panel_open() -> bool:
