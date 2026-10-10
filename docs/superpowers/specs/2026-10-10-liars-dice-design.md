@@ -231,3 +231,94 @@
    「开!」按钮亮起条件 = 轮到自己且 `bid` 非空;默认值可以取 `LiarsDiceState.min_raise`。快捷键见 §3。
 4. 3D 骰盅与骰子(网格缓存 / MultiMesh,静态缓存在 `main._exit_tree` 释放)、说明书「吹牛骰子」一本。
 5. 机器人(`debug_flags.gd`)与 `tools/lan_smoke.sh` 的吹牛骰子一局;`tools/shot.gd --liars-dice-showcase`。挑合法意图可以照抄 `tests/test_liars_dice_fuzz.gd` 的 `_random_step`。
+
+## 7. 实施记录(阶段二:牌桌、HUD、导演、3D 骰盅与骰子、音效、说明书、机器人、冒烟与展台,2026-10-10)
+
+阶段一的事件 / 视图 / 意图契约(§6)一个字段没改,协议仍是 v9;`project.godot` 没动;其他玩法的行为不变
+(共享文件只做了局部追加:`main._show_table` 的路由、`Patron` 两个新动作、`Sfx` 六个新音效、`debug_flags` 的机器人与截图标记、
+`lan_smoke.sh` 一局、说明书页签、`shot.gd` / `perf_probe.gd` / `perf_budget.gd` / `camera_views.gd` 的吹牛骰子入口)。
+
+### 7.1 文件
+
+- 界面 `src/ui/liars_dice/`:
+  - `liars_dice_screen.gd`(牌桌控制器,`main._show_table` 进它,占位屏已删):接 `Net.game_events` / `state_public_updated` /
+    `state_private_updated` / `intent_rejected`(toast `LiarsDiceState.ERROR_MESSAGES`),事件排队交给导演,演完按视图对账;
+    进牌桌时按本局人数 `SeatLayout.table_radius_for(mode, n)` 摆桌(烛台照常、不摆立牌);铭牌、视线与 WASD(SeatGaze)、
+    V 视角(SeatCamera)、九宫格快捷对话、丢番茄与快捷语、Esc 离开确认、出局转观战、结算面板 + 结算庆祝都同其他牌桌。
+    按钮、快捷键、机器人共用一套入口:`nudge_count` / `pick_face` / `set_pick` / `submit_bid` / `submit_challenge`。
+  - `liars_dice_screen_state.gd`(纯逻辑本地状态):影子行按事件推进;**自己的骰子按轮次缓存**——私有视图来了只记
+    `_dice_by_round[round]`,导演演到那一轮的 `round_started` 才 `take_round_dice` 换到屏幕上;开盅一律用 `revealed.dice`;
+    别人的点数只在 `last_reveal` 里出现。另有计数顺序 `count_order`、判定文案、结算名次 `ranking_rows`(fate:winner / out / left)。
+  - `liars_dice_picker.gd`(出价器的选择,纯逻辑):置灰逐格问 `LiarsDiceState.bid_error(count, face, 视图的 bid, total_dice)`,
+    默认值 `min_raise`(加不上去时停在当前这一口);调个数时选着的点数不合法就换成这个个数下最小的合法点数,选点数时个数不够自动抬。
+  - `liars_dice_hud.gd`:左上(场上骰子总数、当前这一口 + 小骰子图标、本轮出价记录、轮到谁、自己的状态)、右上「对话」「规则」、
+    底部自己的 5 颗 2D 骰子 + 出价器(个数 −/+、点数 2–6 六个骰子按钮、「加注 N 个 X」「开!」)、回合横幅与环形倒计时、
+    开盅面板(画面上方:每人的名字和点数,算进去的随 3D 计数一颗颗亮)、日志、大字宣告、观战横幅。按钮全部 `FOCUS_NONE`。
+  - `dice_icon.gd`(2D 骰子面,HUD / 出价器 / 结算 / 说明书共用)、`liars_dice_nameplate.gd`(名字 + 一排小骰子 + 这一轮最后喊的一口)、
+    `liars_dice_settlement.gd`(「骰子留到最后的人」,第 1 名写还剩几颗)、`liars_dice_bot.gd`、`liars_dice_director.gd`。
+- 3D `src/world/liars_dice/`:
+  - `liars_dice_props.gd`:骰盅(鼓肚子的车削皮盅,口沿深色皮带缝奶油针脚、肩上一圈装饰缝线、顶上小皮扣、侧面黄铜星星徽章,
+    盅里深棕;皮色 = 物种主色往暖皮革色里调 38%,每个物种一份网格)与骰子(奶油色圆角立方体,彩色小圆点,1 点是一颗胖星星;
+    计数高亮用同形的发光网格)。全部 `MeshForge.cached`、共用 `WorldMaterials.prop()`、一个 surface;**没有新的静态缓存**
+    (`MeshForge.clear_cache` 已在 `main._exit_tree` 里),也没有运行时读网格数组、没有复制 ShaderMaterial。
+  - `liars_dice_layout.gd`:骰盅摆在主人右手边(越肩镜头从右肩后面正好看到;离烛台不够远时换到左手边;大桌再往右挪),
+    盅底下 2×2 平铺 + 第五颗叠在中间上面,开盅后翻过来口朝上放回主人那边、骰子往桌心排成一行;摇盅点在下巴前下方
+    (再高会戳进动森式大头);偷看 / 特写机位。
+  - `liars_dice_cups.gd`(挂 `poker_root`,拆台时一并释放):骰盅状态 down / open / tipped / held;**别人的骰子在开盅之前根本不建**;
+    动作:`gather`(上一轮的骰子蹦回盅里)、`shake`(双手捧盅哗啦哗啦摇,`Patron.hold_paws` 每帧扶着盅,翻过来扣下)、`peek`、
+    鼠标悬停偷看 `set_hover_peek`、`reveal`(全体翻盅、骰子滑出排成一行)、`hop`(计数跳一下 + 金色光圈)、`pop_die`、`tip`。
+  - `liars_dice_fx.gd`(继承 `BombCatFx`,复用它的漫画字 / 星星 / 冲击波 / 闪光):桌心出价标记(那个点数朝着镜头的大骰子 +「×N」,
+    浮着慢慢晃,下一口顶掉它)、开盅计数器「数到 n / 喊了 m」、「开!」大字、真话 / 吹牛判定字、丢骰子的「啵!」与星星。
+- 共享:`Patron.hold_paws / release_paws`;`Sfx` 新增 `dice_shake`(皮盅里五颗骰子随甩动一阵阵磕碰 + 皮革摩擦)、`cup_slam`、
+  `dice_clack`、`die_pop`、`count_tick`、`dice_peek`;说明书 `RulebookLiarsDice`(怎么赢、一轮怎么走、喊价与加注、1 点万能、开!、
+  丢骰子与出局、操作)+ 新块类型 `dice`(开盅示例),`book_for_mode` 接上。
+- 工具:`tools/liars_dice_showcase.gd`(`shot.gd --liars-dice-showcase`,机位 dice_seat / dice_overview / dice_fp / dice_close /
+  dice_peek,状态 bidding / shaking / peek / counting / lost / out / settlement);`perf_probe --showcase=liars_dice [--dice-state=counting]`;
+  `perf_budget` 加 dice_seat / dice_fp ≤ 700、dice_overview / dice_close ≤ 900;`lan_smoke.sh` 加一局吹牛骰子(`SKIP_LIARS_DICE=1` 跳过)。
+
+### 7.2 表现上定下的细节
+
+- 新一轮:上一轮排开的骰子蹦回各自口朝上的盅 → 全员捧起骰盅摇(摇的同时等自己的私有骰子,不额外占时间)→ 翻过来啪地扣下
+  (自己的骰盅底下换成新点数,2D 骰子一颗颗弹一下)→ 每人掀开盅沿偷看、捂嘴偷乐;第一人称时自己的视线压低凑到盅沿(MODE_PEEK,马上回座)。
+- 喊价:头顶气泡「3 个 5」、伸手、桌心大骰子 +「×3」弹出来(冲击波一圈、「啵」);喊得很大时表情得意。
+- 「开!」:开的人拍桌,砸到桌面那一刻桌心大字「开!」+ 冲击波 + 星星、镜头一震、吊灯一晃、其余人吓一跳;被开的人担心脸。
+  开盅:全体翻盅、骰子排开,按座位、每人从左到右,等于 X 的和 1 点一颗颗跳起来换发光网格、底下一圈金光,桌心计数器与开盅面板同步数;
+  数完判定字「真话!」/「吹牛!」(配宣告与日志),赢的一方得意捂嘴笑、输的一方吓一跳。
+- 丢骰子:输家一行最右边的一颗弹飞、打着转缩没,「啵!」+ 一圈星星,输家头被敲扁一下(`Patron.bonk`);自己丢时宣告还剩几颗。
+- 出局:骰盅歪倒,酒客 `die()`(蚊香眼转几圈定格成 × 、头顶星星——PatronAntics);自己出局后转观战俯视。断线同样歪倒、清掉出价标记。
+- 胜利:同其他玩法的结算庆祝(胜者跳舞、旁人鼓掌、出局的倒着、礼炮彩纸,`hash(["liars_dice", winner, ranking])` 挑舞),环绕胜者,结算面板在右边。
+- 快捷键:`↑` `↓` 个数(按住连发)、`2`–`6` 点数、`Enter` 加注、`C` / `空格` 开;快捷语面板或九宫格开着时数字键归面板;
+  `T` / `Q` / `G` / `V` / `WASD` / `Esc` / `F1` 一个都不占。鼠标停在自己扣着的骰盅上掀开盅沿看一眼(只在本机)。
+
+### 7.3 演出预算(`LiarsDicePacing` 的数没改,导演实测都在预算里,`test_liars_dice_director` 核对)
+
+| 事件 | 预算 | 导演实测(不含帧余量) |
+|---|---|---|
+| round_started | 2.2 | 收骰子 0.25 + 摇盅 1.1 + 偷看 0.48 + 0.05 = 1.88 |
+| bid | 1.0 | 0.72 |
+| turn_passed | 0.2 | 0(不等) |
+| challenged | 1.2 | 拍桌 0.28 + 0.78 = 1.06 |
+| revealed | 1.6 + 0.25 × 实际个数 | 翻盅排开 0.41 + 0.1 + 0.2 × 实际个数 + 判定 0.78 |
+| die_lost | 1.2 | 0.85 |
+| player_out | 1.8 | 1.35 |
+| player_left | 0.8 | 0.7 |
+| match_over | 3.0 | 2.2 |
+
+另有一条实速测试:真的演一批「开!」(challenged、revealed、die_lost、player_out、round_started),每段从开始到下一段开始都不超过预算。
+
+### 7.4 验证
+
+- 测试 148 → 155 个脚本、1622 → 1681 个用例全过;新增 `test_liars_dice_screen_state` / `_hud` / `_director` / `_world` / `_screen_flow`、
+  `test_rulebook_liars_dice`、`test_sfx_liars_dice`,`test_perf_budget` 加吹牛骰子机位,`test_rulebook_content` 页签改成四本。
+  - 隐藏信息:整局流程里每次喊价 / 开之前桌上别人的骰子节点数都是 0;本地状态开盅前拿不到别人的点数;公共视图过漏点数检查器。
+  - 按轮次缓存:开盅时屏幕与盅底下是这一轮的点数(下一轮的私有视图已经先到),演到 round_started 才换。
+  - 出价器的置灰与 `bid_error` 在 4 种总数 × 5 种上一口 × 每个个数 × 每个点数上逐格一致;默认值等于 `min_raise`。
+- `tools/lan_smoke.sh`:骗子酒馆、炸弹猫、吹牛骰子三局都过,吹牛骰子 3 端打到 MATCH_OVER、胜者一致、快捷对话都收到。
+- 性能(M3、1920×1080、游戏渲染配置):dice_seat 382 draw call(开盅计数 27 颗骰子排开时 391)、dice_fp 362 / 371、
+  dice_overview 394、dice_close 278,预算 700 / 900 内;帧时间 8.8 ms 左右(炸弹猫展台 bomb_seat 378 作对照)。
+
+### 7.5 已知问题与后续
+
+- 机器人的 WASD 小动作(`--bot` 的 fidget,其他玩法同样有)会把头探出去很远,真机截图里自己的大头常挡住桌心;展台截图不受影响。
+- 大桌越肩机位离对面的骰子行较远,单看 3D 骰子不容易数清,所以开盅时另有画面上方的开盅面板同步计数。
+- 第一人称下自己的骰盅在画面最下方、被出价器挡住大半,偷看靠新一轮的视线压低和底部的 2D 骰子。
