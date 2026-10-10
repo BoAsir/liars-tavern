@@ -124,3 +124,28 @@ func test_bubbles_clamped_to_the_top_edge_move_apart_but_plates_stay():
 	assert_false(quip_rect.intersects(plate_rect))
 	var center_x := layer.size.x * 0.5
 	assert_almost_eq(plate_rect.get_center().x, center_x, 1.0, "铭牌不让位,还在挂点正上方")
+
+
+func test_bubbles_keep_out_of_hud_corner_panels():
+	# 左上信息面板在 KEEP_OUT_GROUP 里:被收到画面左上角的气泡挪到它右边,不盖住目标牌 / 底池
+	var camera := Camera3D.new()
+	add_child_autofree(camera)
+	camera.position = Vector3(0, 0, 3)
+	var layer := WorldLabels.new(camera)
+	add_child_autofree(layer)
+	var hud := Panel.new()
+	hud.position = Vector2(20, 16)
+	hud.size = Vector2(300, 120)
+	hud.add_to_group(WorldLabels.KEEP_OUT_GROUP)
+	add_child_autofree(hud)
+	await wait_process_frames(1)
+	var corner := camera.project_position(Vector2(60.0, 60.0), 3.0)
+	var bubble := Label.new()
+	bubble.custom_minimum_size = Vector2(120, 44)
+	layer.track("bubble", bubble, func(): return corner, Vector2(0, -20), true)
+	await wait_process_frames(2)
+	var rect := Rect2(bubble.position, bubble.size)
+	assert_false(rect.intersects(Rect2(hud.position, hud.size)), "气泡 %s 让开 HUD 面板" % rect)
+	hud.visible = false
+	await wait_process_frames(2)
+	assert_lt(bubble.position.x, 60.0, "面板藏起来以后不再让")

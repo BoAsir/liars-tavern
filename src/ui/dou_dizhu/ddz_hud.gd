@@ -158,6 +158,7 @@ func _build_info() -> void:
 	panel.add_theme_stylebox_override("panel", style)
 	panel.position = Vector2(20, 16)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_to_group(WorldLabels.KEEP_OUT_GROUP)   # 对话气泡让开左上信息
 	add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 4)
@@ -202,6 +203,7 @@ func _build_top_right() -> void:
 	add_child(row)
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	row.add_to_group(WorldLabels.KEEP_OUT_GROUP)
 	end_button = _top_button(END_TEXT, end_pressed)
 	end_button.visible = false
 	row.add_child(end_button)

@@ -4,12 +4,14 @@ extends Control
 # 锚点在相机背后或屏幕外时隐藏。
 # 登记时 avoid = true 的控件(各种对话气泡)摆好之后再让位:和铭牌、先登记的气泡重叠时左右挪开
 # (对面的人铭牌贴着画面上缘时,声称气泡、九宫格气泡都被收进画面、叠在同一处;邻座的气泡也会撞在一起)。
+# 牌桌 HUD 的角落面板(左上信息、右上按钮、摊牌面板)加进 KEEP_OUT_GROUP,气泡同样让开它们,不盖住目标牌、底池。
 # 条目里的控件可能已自行释放(气泡淡出后 queue_free):取出时先用无类型变量判有效,
 # 已释放的实例赋给 Control 类型变量或作为 Control 返回值本身就是脚本错误。
 
 
 const EDGE_MARGIN := 4.0   # 控件离屏幕边缘的最小距离
 const AVOID_GAP := 4.0     # 让位时和别的控件之间留的空隙
+const KEEP_OUT_GROUP := "world_label_keep_out"   # 这一组里看得见的控件也是让位的障碍(HUD 的角落面板)
 
 var camera: Camera3D
 var _entries := {}   # key -> {"node": Control, "anchor": Callable, "offset": Vector2 或返回 Vector2 的 Callable, "avoid": bool}
@@ -83,6 +85,10 @@ func _separate() -> void:
 	# 两边都没有空处就留在原处。每帧从 _place 的原位重新算,不累积
 	var placed: Array[Rect2] = []
 	var movers: Array = []
+	var to_local := get_global_transform_with_canvas().affine_inverse()
+	for hud in get_tree().get_nodes_in_group(KEEP_OUT_GROUP):
+		if hud is Control and hud.is_visible_in_tree():
+			placed.append(to_local * hud.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, hud.size))
 	for dependent in [false, true]:
 		for key in _entries:
 			var entry: Dictionary = _entries[key]
