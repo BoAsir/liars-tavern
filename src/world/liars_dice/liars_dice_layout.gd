@@ -157,8 +157,9 @@ static func peek_view(world: TableWorld, pid: int) -> Transform3D:
 	# 第一人称偷看:视线压低、凑到掀开的盅沿上往里看
 	var angle := world.seat_angle_now(pid)
 	var spot := cup_spot(angle, world.table_radius)
-	var pos := spot + direction(angle) * 0.1 + Vector3(0, 0.36, 0)
-	var target := spot - direction(angle) * 0.03 + Vector3(0, 0.02, 0)
+	# 从主人这边、偏身体中线(右爪搭在盅旁边会挡住)低低地看进掀开的盅沿
+	var pos := spot + direction(angle) * 0.23 - right_of(angle) * 0.08 + Vector3(0, 0.28, 0)
+	var target := spot + Vector3(0, 0.025, 0)
 	return Transform3D(Basis.looking_at(target - pos, Vector3.UP), pos)
 
 
