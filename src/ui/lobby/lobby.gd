@@ -246,6 +246,9 @@ func _apply_table_mode() -> void:
 		PokerFaces.build(self)
 	if GameMode.is_bomb_cat(_table_mode) and is_inside_tree():
 		BombCatFaces.build(self)   # 炸弹猫牌面同理(一批画完,约两帧)
+	if GameMode.is_dou_dizhu(_table_mode) and is_inside_tree():
+		PokerFaces.build(self)     # 斗地主:德州的 52 张牌面 + 两张王
+		DdzJokerFaces.build(self)
 	app.tavern.camera_rig.move_to(app.world.lobby_view(), CAMERA_MOVE_TIME)
 
 

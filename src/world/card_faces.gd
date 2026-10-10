@@ -72,6 +72,8 @@ static func texture(kind: int) -> Texture2D:
 	# 德州牌(取值 8–59)另有缓存与生成时机,转给 PokerFaces;-1 牌背与 0–3 骗子酒馆的牌仍在这里
 	if PokerCard.is_card(kind):
 		return PokerFaces.texture(kind)
+	if DdzJokerFaces.is_kind(kind):
+		return DdzJokerFaces.texture(kind)   # 斗地主的大王 / 小王(德州牌面那一家)
 	if _textures.has(kind):
 		return _textures[kind]
 	return _fallback(kind)

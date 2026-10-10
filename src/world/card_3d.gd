@@ -13,7 +13,7 @@ const CORNER_STEPS := 8         # 圆角加大后每角多两段:轮廓 36 点,�
 const CARD_SHADER := preload("res://src/world/shaders/card.gdshader")
 
 static var _shared: ShaderMaterial = null   # 骗子酒馆的 5 种牌共用
-static var _poker := {}                     # 德州牌:牌值 -> 材质(正面是单张贴图)
+static var _poker := {}                     # 德州牌(与斗地主的两张王):牌值 -> 材质(正面是单张贴图)
 static var _poker_back: ShaderMaterial = null   # 德州的背面朝上的牌:两面都是德州牌背
 
 var kind := CardFaces.BACK     # 正面牌型;BACK 表示未知(他人的牌)
@@ -22,8 +22,8 @@ var _glow_tween: Tween = null
 
 
 static func material_for(face_kind: int) -> ShaderMaterial:
-	# 德州牌每张一份材质(正面贴图不同);骗子酒馆的牌都用共享材质,牌型走实例参数 face
-	if PokerCard.is_card(face_kind):
+	# 德州牌(含斗地主的大王 / 小王)每张一份材质(正面贴图不同);骗子酒馆的牌都用共享材质,牌型走实例参数 face
+	if PokerCard.is_card(face_kind) or DdzJokerFaces.is_kind(face_kind):
 		if not _poker.has(face_kind):
 			var mat := _new_material()
 			mat.set_shader_parameter("single_face", true)

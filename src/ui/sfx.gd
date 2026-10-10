@@ -26,6 +26,9 @@ const VOLUMES := {
 	"tiptoe": -15.0, "sigh": -12.0,
 	# 吹牛骰子:骰盅里哗啦哗啦 / 扣盅「啪」/ 开盅骰子磕碰 / 丢骰子「啵」/ 计数「叮」/ 掀盅沿偷看
 	"dice_shake": -8.0, "cup_slam": -4.0, "dice_clack": -9.0, "die_pop": -8.0, "count_tick": -13.0, "dice_peek": -16.0,
+	# 斗地主:牌拍在桌上「啪」/ 不出时敲桌两下 / 叫分的木鱼「笃」/ 小火箭升空的「咻——」/ 烟花「砰啪」/ 纸飞机滑翔 /
+	# 春天的风铃 / 只剩一两张时的「叮叮」报警(炸弹沿用炸弹猫的 boom)
+	"card_slap": -5.0, "knock": -8.0, "bid": -9.0, "rocket": -9.0, "firework": -8.0, "plane": -12.0, "chime": -9.0, "alarm": -12.0,
 }
 const CHIP_CLATTER_COUNT := 4         # 一次下注落下几枚筹码的碰撞声
 const CHIP_PUSH_COUNT := 14           # 全下推一整摞
@@ -225,6 +228,24 @@ func _synth(sound: String) -> AudioStreamWAV:
 			return _wav(_mix([_bell(1320.0, 0.22), _thump(660.0, 0.03, 0.25)]))
 		"dice_peek":
 			return _wav(_mix([_noise_burst(0.14, 0.08, 0.04), _offset(_dice_clicks(2, 0.08, 0.3), 0.03)]))
+		"card_slap":
+			return _wav(_mix([_noise_burst(0.04, 0.65, 0.0008), _thump(160.0, 0.07, 0.8), _offset(_noise_burst(0.03, 0.3, 0.002), 0.012)]))
+		"knock":
+			return _wav(_mix([_thump(210.0, 0.07, 0.9), _noise_burst(0.02, 0.4, 0.001),
+				_offset(_mix([_thump(190.0, 0.07, 0.8), _noise_burst(0.02, 0.4, 0.001)]), 0.14)]))
+		"bid":
+			return _wav(_mix([_thump(620.0, 0.09, 0.7), _offset(_bell(1240.0, 0.25), 0.005)]))
+		"rocket":
+			return _wav(_mix([_whoosh_up(0.6), _blip(400.0, 1800.0, 0.6, 0.25)]))
+		"firework":
+			return _wav(_firework())
+		"plane":
+			return _wav(_mix([_whoosh(0.9), _blip(700.0, 520.0, 0.9, 0.12)]))
+		"chime":
+			return _wav(_mix([_bell(1047.0, 1.0), _offset(_bell(1319.0, 1.0), 0.12), _offset(_bell(1568.0, 1.0), 0.24),
+				_offset(_bell(2093.0, 1.2), 0.36), _offset(_bell(1568.0, 0.9), 0.5)]))
+		"alarm":
+			return _wav(_mix([_bell(1760.0, 0.18), _offset(_bell(1397.0, 0.18), 0.16), _offset(_bell(1760.0, 0.2), 0.32)]))
 		"ambience":
 			return _ambience_stream()
 	push_warning("未知音效:" + sound)
@@ -504,6 +525,16 @@ func _applause(duration: float) -> PackedFloat32Array:
 				out[start + i] += (clap[i] * 0.4 + hp * 1.8) * gain
 		t += _rng.randf_range(0.3, 1.7) / density
 	return out
+
+
+func _firework() -> PackedFloat32Array:
+	# 烟花:一声闷「砰」+ 一串细碎的噼啪(随机的短噪声点,越来越稀)
+	var layers := [_thump(90.0, 0.25, 1.0), _noise_burst(0.12, 0.5, 0.001)]
+	var t := 0.08
+	for k in 14:
+		layers.append(_offset(_noise_burst(0.012, 0.85, 0.0005), t))
+		t += _rng.randf_range(0.02, 0.07) * (1.0 + k * 0.12)
+	return _mix(layers)
 
 
 func _whoosh(duration: float) -> PackedFloat32Array:
