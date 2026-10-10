@@ -166,7 +166,14 @@ static func _v_half(y: float) -> float:
 static func _front(shapes: Array, x: float, y: float, lift: float) -> Vector3:
 	var from := Vector3(0, y, 1.5)
 	var d := (Vector3(x, y, -0.2) - from).normalized()
-	return MeshForge.blob_surface(from, d, shapes, PatronBuilder.BLOB_K) + d * lift
+	var p := MeshForge.blob_surface(from, d, shapes, PatronBuilder.BLOB_K)
+	if p.z > 0.0:
+		# 射线从背后擦过躯干外面(一个椭球都没碰到)时 blob_surface 返回起点 (0, y, 1.5):
+		# 翻领、腹鳞的边角会拉出一条 1.7 米长、穿过椅背的细条(穿模修复 2026-10-10 实测)。改从躯干里面往外找胸前表面
+		from = Vector3(0, y, 0.0)
+		d = (Vector3(x, y, -0.2) - from).normalized()
+		p = MeshForge.blob_surface(from, d, shapes, PatronBuilder.BLOB_K)
+	return p + d * lift
 
 
 static func _open_shirt(f: MeshForge, pal: Dictionary, shapes: Array) -> void:
