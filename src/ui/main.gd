@@ -8,6 +8,7 @@ const LobbyScreen := preload("res://src/ui/lobby/lobby.gd")
 const TableScreen := preload("res://src/ui/table/table_screen.gd")
 const PokerScreen := preload("res://src/ui/poker/poker_screen.gd")
 const BombCatScreen := preload("res://src/ui/bomb_cat/bomb_cat_screen.gd")
+const DouDizhuScreen := preload("res://src/ui/dou_dizhu/dou_dizhu_screen.gd")
 const VIEW_RESET_TIME := 0.8   # 切换屏幕时紧张度、闪光染色与镜头焦距回到平静的时长
 
 var tavern: Tavern
@@ -103,6 +104,8 @@ func _exit_tree() -> void:
 	PokerFaces.clear()
 	BombCatFaces.clear()
 	BombCatProps.clear_cache()
+	DdzJokerFaces.clear()
+	DdzProps.clear_cache()
 	WorldMaterials.clear_cache()
 	MeshKit.clear_cache()
 	MeshForge.clear_cache()
@@ -165,6 +168,14 @@ func _on_book_shown(book: String) -> void:
 		if not bomb_built.is_connected(_rulebook.refresh_card_faces):
 			bomb_built.connect(_rulebook.refresh_card_faces)
 		BombCatFaces.build(_rulebook)
+		return
+	if book == RulebookContent.BOOK_DOU_DIZHU and not DdzJokerFaces.faces_ready() and is_instance_valid(_rulebook):
+		# 斗地主那本的牌型小图:德州 52 张 + 两张王,后台生成完让当前页重新取纹理
+		for sig in [PokerFaces.built_signal(), DdzJokerFaces.built_signal()]:
+			if not sig.is_connected(_rulebook.refresh_card_faces):
+				sig.connect(_rulebook.refresh_card_faces)
+		PokerFaces.build(_rulebook)
+		DdzJokerFaces.build(_rulebook)
 		return
 	if book != RulebookContent.BOOK_POKER or PokerFaces.is_built() or not is_instance_valid(_rulebook):
 		return
@@ -229,9 +240,7 @@ func _show_table(_seats: Array) -> void:
 		_switch_to(_liars_dice_placeholder())
 		return
 	if GameMode.is_dou_dizhu(Net.game_mode):
-		# TODO(斗地主阶段二):换成 DouDizhuScreen.new(self) 并删掉 _dou_dizhu_placeholder。在那之前给一块不会崩的占位牌:
-		# 规则与网络照常跑,每步到点由房主代打(连续超时进托管,一手手自己打下去),但没有牌桌与结算界面
-		_switch_to(_dou_dizhu_placeholder())
+		_switch_to(DouDizhuScreen.new(self))
 		return
 	_switch_to(PokerScreen.new(self) if GameMode.is_poker(Net.game_mode) else TableScreen.new(self))
 
@@ -244,21 +253,6 @@ func _liars_dice_placeholder() -> Control:
 	box.add_theme_constant_override("separation", 14)
 	screen.add_child(box)
 	box.add_child(UiTheme.label("吹牛骰子的桌子还在布置中", 28, UiTheme.BRASS_BRIGHT))
-	box.add_child(UiTheme.label("这一局由房主代打,想走随时可以离开", 16, UiTheme.PARCHMENT_DIM))
-	var leave := UiTheme.button("离开房间")
-	leave.pressed.connect(func() -> void: Net.end_session())
-	box.add_child(leave)
-	return screen
-
-
-func _dou_dizhu_placeholder() -> Control:
-	# 临时占位(斗地主阶段二删掉):居中一块说明 + 离开按钮
-	var screen := CenterContainer.new()
-	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	screen.add_child(box)
-	box.add_child(UiTheme.label("斗地主的牌桌还在布置中", 28, UiTheme.BRASS_BRIGHT))
 	box.add_child(UiTheme.label("这一局由房主代打,想走随时可以离开", 16, UiTheme.PARCHMENT_DIM))
 	var leave := UiTheme.button("离开房间")
 	leave.pressed.connect(func() -> void: Net.end_session())
