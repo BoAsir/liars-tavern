@@ -69,9 +69,10 @@ func kick_lamp(strength: float) -> void:
 
 
 func set_table_radius(radius: float) -> void:
-	# 德州放大 / 骗子酒馆复原:桌面、包边、铜嵌条与毡面按半径换网格(桌高、桌柱与腿不变),吊灯聚光跟着放宽
+	# 德州放大 / 骗子酒馆复原:桌面、包边、铜嵌条与毡面按半径换网格(桌高、桌柱与腿不变),吊灯聚光跟着放宽,主毯跟着放大
 	TableProp.set_radius(_table, radius)
 	LampProp.fit_spot(_lamp_pivot, radius)
+	RoomProps.fit_rug(radius)
 
 
 func set_table_decor_visible(shown: bool) -> void:
