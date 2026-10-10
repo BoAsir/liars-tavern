@@ -233,6 +233,7 @@ func _build_ending() -> void:
 	_ending_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ending_panel.add_child(UiTheme.label(ENDING_TEXT, 16, UiTheme.PARCHMENT, UiTheme.display_font()))
 	_ending_panel.visible = false
+	_ending_panel.add_to_group(WorldLabels.KEEP_OUT_GROUP)   # 「房主已散局」横条:铭牌与气泡让开
 	add_child(_ending_panel)
 
 

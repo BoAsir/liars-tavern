@@ -390,6 +390,7 @@ func _build_reveal() -> void:
 	_reveal_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_reveal_panel.position.y = 14
 	_reveal_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reveal_panel.add_to_group(WorldLabels.KEEP_OUT_GROUP)   # 开盅时上缘的铭牌与气泡挪到面板下面,不被盖住
 	add_child(_reveal_panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
