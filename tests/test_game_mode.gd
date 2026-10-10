@@ -1,5 +1,5 @@
 extends GutTest
-# 玩法常量:id 校验(来自不可信报文)、德州 / 炸弹猫判定、人数上限、中途加入、桌子尺寸、主菜单顺序。
+# 玩法常量:id 校验(来自不可信报文)、德州 / 炸弹猫 / 斗地主判定、人数上限、中途加入、桌子尺寸、主菜单顺序。
 
 
 func test_known_modes_are_valid():
@@ -37,11 +37,28 @@ func test_bomb_cat_mode():
 
 
 func test_mode_order_puts_bomb_cat_before_the_two_poker_modes():
-	assert_eq(GameMode.ALL, [GameMode.LIARS, GameMode.BOMB_CAT, GameMode.HOLDEM, GameMode.SHORT_DECK])
-	if GameMode.BOMB_CAT_ENABLED:
-		assert_eq(GameMode.menu_modes(), GameMode.ALL)
-	else:
-		assert_false(GameMode.menu_modes().has(GameMode.BOMB_CAT))
+	assert_eq(GameMode.ALL, [GameMode.LIARS, GameMode.BOMB_CAT, GameMode.DOU_DIZHU, GameMode.HOLDEM, GameMode.SHORT_DECK])
+	var expected := GameMode.ALL.filter(func(mode: String) -> bool:
+		return (mode != GameMode.BOMB_CAT or GameMode.BOMB_CAT_ENABLED)
+			and (mode != GameMode.DOU_DIZHU or GameMode.DOU_DIZHU_ENABLED))
+	assert_eq(GameMode.menu_modes(), expected, "两个开关只管开房菜单,顺序照 ALL")
+
+
+func test_dou_dizhu_mode():
+	assert_true(GameMode.is_valid(GameMode.DOU_DIZHU))
+	assert_eq(GameMode.DOU_DIZHU, "dou_dizhu")
+	assert_true(GameMode.is_dou_dizhu(GameMode.DOU_DIZHU))
+	assert_false(GameMode.is_dou_dizhu(GameMode.LIARS))
+	assert_false(GameMode.is_poker(GameMode.DOU_DIZHU))
+	assert_false(GameMode.is_bomb_cat(GameMode.DOU_DIZHU))
+	assert_eq(GameMode.label(GameMode.DOU_DIZHU), "斗地主")
+	assert_eq(GameMode.short_label(GameMode.DOU_DIZHU), "斗地主")
+	assert_eq([GameMode.min_players(GameMode.DOU_DIZHU), GameMode.max_players(GameMode.DOU_DIZHU)], [3, 3], "正好 3 人")
+	assert_eq(GameMode.max_players(GameMode.DOU_DIZHU), DdzState.PLAYERS)
+	assert_eq(GameMode.summary(GameMode.DOU_DIZHU), "斗地主 · 3–3 人")
+	assert_false(GameMode.allows_late_join(GameMode.DOU_DIZHU), "不收中途加入")
+	assert_eq(SeatLayout.table_radius_for(GameMode.DOU_DIZHU), SeatLayout.TABLE_RADIUS, "用骗子酒馆的桌子")
+	assert_eq(SeatLayout.table_radius_for(GameMode.DOU_DIZHU, 3), SeatLayout.TABLE_RADIUS)
 
 
 func test_player_caps_per_mode():
@@ -49,8 +66,9 @@ func test_player_caps_per_mode():
 	assert_eq(GameMode.max_players(GameMode.BOMB_CAT), 6)
 	assert_eq(GameMode.max_players(GameMode.HOLDEM), 8)
 	assert_eq(GameMode.max_players(GameMode.SHORT_DECK), 8)
+	assert_eq(GameMode.max_players(GameMode.DOU_DIZHU), 3)
 	for mode in GameMode.ALL:
-		assert_eq(GameMode.min_players(mode), 2)
+		assert_eq(GameMode.min_players(mode), 3 if mode == GameMode.DOU_DIZHU else 2, mode)
 
 
 func test_liars_deck_fits_the_liars_cap():
