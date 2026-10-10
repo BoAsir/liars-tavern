@@ -97,6 +97,8 @@ const PALETTE := {
 	"candy_pink": [Color(0.80, 0.40, 0.52), 0.55, 0.0, Vector2.ZERO],    # 糖果粉(握把、枪口帽、击锤钮)
 	"candy_cream": [Color(0.80, 0.75, 0.62), 0.6, 0.0, Vector2.ZERO],    # 奶油色(徽章、准星珠,不自发光)
 	"brass_soft": [Color(0.80, 0.67, 0.40), 0.6, 0.35, Vector2.ZERO],   # 缎面柔黄铜:桌面嵌线、小道具的金边(比 brass 哑、暖)
+	"wax_pink": [Color(0.80, 0.62, 0.62), 0.62, 0.0, Vector2(0.0, 0.18)],    # 粉彩蜡烛:淡粉
+	"wax_butter": [Color(0.80, 0.71, 0.48), 0.62, 0.0, Vector2(0.0, 0.18)],  # 粉彩蜡烛:奶黄
 }
 
 static var _cache := {}
