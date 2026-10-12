@@ -5,6 +5,7 @@ extends Node
 # 这里只管连接、等待厅、RPC 收发与计时器,玩法逻辑都在会话里。
 # UI 层只使用本类的公开方法、只读属性与信号,不直接触碰 multiplayer API。
 # 点对点的 RPC 一律经 _send_to 发出:对方没连着就不发(离线测试里对未知 peer 调 rpc_id 会报引擎错误)。
+# 德州机器人是名单里 pid 为负数的成员(没有连接,_send_to 自然跳过它们),由子节点 PokerBots 替它们出手。
 
 
 signal lobby_updated(players: Array)
@@ -53,6 +54,8 @@ var _anim_left := 0.0              # 仅房主:客户端还要演多久(按 Paci
 var _species_asked_at := {}        # 仅房主:peer_id -> 上次换形象请求的时刻(毫秒),冷却用
 var _species_wanted := Species.UNASSIGNED   # 仅客户端:等待房主确认的换形象请求
 var banter: Banter = null          # 丢番茄与快捷语(子节点 /root/Net/Banter,RPC 在它身上,本类的 RPC 表不变)
+var bots: PokerBots = null         # 仅房主用:德州机器人(子节点 /root/Net/PokerBots,没有 RPC)
+var _next_bot_id := -1             # 仅房主:下一个机器人的 pid(-1、-2…,只减不增,请走后不复用)
 
 
 func _ready() -> void:
@@ -67,6 +70,9 @@ func _ready() -> void:
 	banter = Banter.new()
 	banter.name = "Banter"
 	add_child(banter)
+	bots = PokerBots.new()
+	bots.name = "PokerBots"
+	add_child(bots)
 
 
 func _process(delta: float) -> void:
@@ -160,6 +166,7 @@ func leave() -> void:
 	_anim_left = 0.0
 	_species_asked_at = {}
 	_species_wanted = Species.UNASSIGNED
+	bots.reset()
 	var peer := multiplayer.multiplayer_peer
 	if peer is ENetMultiplayerPeer:
 		peer.close()
@@ -399,7 +406,12 @@ func rpc_lobby_ready(ready: bool) -> void:
 
 
 func kick(id: int) -> void:
+	# 机器人没有连接:从名单拿掉就好
+	var bot := is_bot(id)
 	if not is_host or in_game or not _lobby.remove(id):
+		return
+	if bot:
+		_broadcast_lobby()
 		return
 	_send_to(id, "rpc_kicked")
 	_disconnect_peer_later(id)
@@ -468,6 +480,7 @@ func _lobby_meta() -> Dictionary:
 		"addresses": Lan.local_private_ipv4s(),
 		"port": _port,
 		"mode": game_mode,
+		"bot_ai": bots.ai_active() and not _lobby.bot_ids().is_empty(),   # 机器人由 AI 接管(名单行据此标「AI」)
 	}
 
 
@@ -517,6 +530,60 @@ func patron_entries(pids: Array) -> Array:
 	return pids.map(func(pid) -> Dictionary: return {"pid": pid, "species": species_of(pid)})
 
 
+# —— 德州机器人(仅房主) ——
+
+func can_add_bot() -> bool:
+	return is_host and _session_active and not in_game and _lobby != null and GameMode.is_poker(game_mode) \
+		and _lobby.size() < max_players()
+
+
+func add_bot() -> bool:
+	# 在等待厅添一个机器人:准备好的、形象随机;请走用 kick(和真人一样)
+	if not can_add_bot():
+		return false
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	_lobby.add_bot(_next_bot_id, PokerBots.bot_name(_next_bot_id), rng)
+	_next_bot_id -= 1
+	_broadcast_lobby()
+	return true
+
+
+func is_bot(pid: int) -> bool:
+	return is_host and _lobby != null and _lobby.is_bot(pid)
+
+
+func refresh_bot_meta() -> void:
+	# AI 设置改了:名单 meta 里的「AI 接管」跟着变
+	if is_host and _lobby != null:
+		_broadcast_lobby()
+
+
+func anim_left() -> float:
+	# 客户端还要演多久:机器人等演完再出手
+	return _anim_left
+
+
+func bot_private_view(pid: int) -> Dictionary:
+	return _session.private_view(pid) if in_game and _session != null and is_bot(pid) else {}
+
+
+func bot_intent(pid: int, intent: Dictionary) -> bool:
+	# 机器人出手:和真人意图同一套会话校验;被拒返回 false(不发拒绝消息,机器人没有连接)
+	if not in_game or _session == null or not is_bot(pid):
+		return false
+	var result: Dictionary = _session.handle_intent(pid, intent)
+	if not result["ok"]:
+		return false
+	_after_action(result["events"], result["turn_action"])
+	return true
+
+
+func bot_quip(pid: int, index: int) -> void:
+	if is_bot(pid):
+		_handle_quip(pid, index)
+
+
 func _disconnect_peer_later(id: int) -> void:
 	# 给对方留时间收到拒绝/踢出原因;对方通常会先自行断开
 	await get_tree().create_timer(DISCONNECT_GRACE).timeout
@@ -561,6 +628,7 @@ func start_game() -> void:
 	_session = _new_session(game_mode)
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
+	bots.reset()
 	var events := _session.start(order, _lobby.names(), rng)
 	_send_to_members("rpc_game_started", [seats, {"mode": game_mode, "late": false}])
 	game_started.emit(seats)
@@ -800,6 +868,8 @@ func _after_action(events: Array, turn_action := false) -> void:
 	game_events.emit(events)
 	_send_to_members("rpc_game_events", [events])
 	_sync_all()
+	if GameMode.is_poker(game_mode):
+		bots.on_events(events)
 
 
 func _schedule_hand_timer() -> void:
@@ -926,6 +996,7 @@ func request_rematch_lobby() -> void:
 	_turn_timer.stop()
 	_hand_timer.stop()
 	_anim_left = 0.0
+	bots.reset()
 	_lobby.reset_ready()
 	_send_to_members("rpc_returned_to_lobby", [])
 	returned_to_lobby.emit()

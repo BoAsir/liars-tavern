@@ -1,6 +1,7 @@
 class_name LobbyModel
 # 等待厅名单(仅房主持有):加入校验、准备状态、形象分配、开局条件。座位顺序 = 加入顺序。
 # 形象(物种下标)先到先得、同桌不撞脸:想要的空着就给,被占时没有形象的分第一个空着的、已有的保持不变。
+# 机器人(德州)也是名单成员:房主添加,pid 为负数(不会和 ENet 的对端编号撞),永远是准备好的,形象随机挑空着的。
 
 
 const HOST_ID := 1
@@ -9,7 +10,7 @@ const IN_GAME_REASON := "游戏已开始,请等这一局结束"
 const WINDING_DOWN_REASON := "牌局正在散局,请稍后再来"
 
 var _order: Array = []
-var _members := {}  # peer_id -> {"name": String, "ready": bool, "species": int}
+var _members := {}  # peer_id -> {"name": String, "ready": bool, "species": int, "bot": bool}
 
 
 func add_host(host_name: String, species := Species.UNASSIGNED) -> void:
@@ -39,6 +40,24 @@ func add_member(id: int, raw_name: String) -> void:
 	_insert(id, raw_name, false)
 
 
+func add_bot(id: int, raw_name: String, rng: RandomNumberGenerator) -> void:
+	# 机器人:加入即准备好,形象在空着的里随机挑一个(都占了就不给,开局前 assign_unassigned 兜底)
+	_insert(id, raw_name, true)
+	_members[id]["bot"] = true
+	var taken := _taken_except(id)
+	var free := range(Species.count()).filter(func(s: int) -> bool: return not taken.has(s))
+	if not free.is_empty():
+		_members[id]["species"] = free[rng.randi_range(0, free.size() - 1)]
+
+
+func is_bot(id: int) -> bool:
+	return _members.has(id) and _members[id]["bot"]
+
+
+func bot_ids() -> Array:
+	return _order.filter(func(id: int) -> bool: return _members[id]["bot"])
+
+
 func remove(id: int) -> bool:
 	# 只释放离开者的形象,别人的都不变(撞车拿到候补形象的人不会自动换回首选)
 	if id == HOST_ID or not _members.has(id):
@@ -66,7 +85,7 @@ func set_ready(id: int, ready: bool) -> bool:
 func reset_ready() -> void:
 	# 不碰形象:再来一局时形象不变
 	for id in _members:
-		_members[id]["ready"] = id == HOST_ID
+		_members[id]["ready"] = id == HOST_ID or _members[id]["bot"]
 
 
 func can_start(min_players := Protocol.MIN_PLAYERS) -> bool:
@@ -130,12 +149,13 @@ func view() -> Array:
 			"ready": _members[id]["ready"],
 			"is_host": id == HOST_ID,
 			"species": _members[id]["species"],
+			"bot": _members[id]["bot"],
 		})
 	return out
 
 
 func _insert(id: int, raw_name: String, ready: bool) -> void:
-	_members[id] = {"name": _unique_name(raw_name), "ready": ready, "species": Species.UNASSIGNED}
+	_members[id] = {"name": _unique_name(raw_name), "ready": ready, "species": Species.UNASSIGNED, "bot": false}
 	_order.append(id)
 
 

@@ -4,6 +4,7 @@ extends Control
 # 房主的局域网广播发不出去时,面板里用红字提示大家改用 IP 直连。
 # 名单每行有房主分配的形象头像;点自己那一行的头像弹出挑选面板(贴在面板左边),被占的格子写占用者名字。
 # 换形象发给房主,收到下一份名单时结算:拿到了存进本机设置,被别人抢先了提示一句。
+# 德州房主还有一行机器人操作:「添加机器人」与「AI 设置」(填大模型接口后机器人由 AI 接管);机器人那一行标「机器人」或「AI」。
 
 
 const PANEL_WIDTH := 440.0
@@ -53,6 +54,8 @@ var _my_species := Species.UNASSIGNED
 var _pending := Species.UNASSIGNED    # 已发给房主、还没结算的换形象请求
 var _pending_deadline := 0
 var _pick_locked_until := 0
+var _bot_button: Button = null        # 德州房主才有
+var _bot_mode_label: Label = null
 
 
 func _init(p_app: Node) -> void:
@@ -127,6 +130,8 @@ func _build() -> void:
 	_list_scroll.add_child(_list)
 	_status = UiTheme.label("", 15, UiTheme.PARCHMENT_DIM)
 	box.add_child(_status)
+	if Net.is_host and GameMode.is_poker(Net.game_mode):
+		box.add_child(_build_bot_row())
 	box.add_child(_build_buttons())
 	# 挑选面板铺满屏幕当遮罩、面板贴在侧栏左边:不进侧栏,德州 8 人时面板也不会超过 672 像素
 	_picker = SpeciesPicker.new()
@@ -172,6 +177,30 @@ func _build_buttons() -> HBoxContainer:
 		_ready_button.pressed.connect(_on_ready_toggled)
 		buttons.add_child(_ready_button)
 	return buttons
+
+
+func _build_bot_row() -> HBoxContainer:
+	# 德州房主:添加机器人(满员时变灰)、AI 设置,右边一行小字说明机器人现在由谁来打
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	_bot_button = row_button("添加机器人")
+	_bot_button.pressed.connect(_on_add_bot_pressed)
+	row.add_child(_bot_button)
+	var ai := row_button("AI 设置")
+	ai.pressed.connect(_open_ai_settings)
+	row.add_child(ai)
+	_bot_mode_label = UiTheme.label("", 14, UiTheme.MUTED)
+	_bot_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bot_mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_bot_mode_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(_bot_mode_label)
+	return row
+
+
+static func bot_mode_text(config: Dictionary) -> String:
+	if AiSettings.is_active(config):
+		return "机器人由 AI 接管 · %s" % config[AiSettings.KEY_MODEL]
+	return "机器人用内置策略"
 
 
 func _address_row() -> Control:
@@ -226,6 +255,9 @@ func _refresh(players: Array) -> void:
 		_status.text += " · 等待全员准备"
 	if _start_button != null:
 		_start_button.disabled = not Net.can_start()
+	if _bot_button != null:
+		_bot_button.disabled = not Net.can_add_bot()
+		_bot_mode_label.text = bot_mode_text(Net.bots.config)
 	if _picker.is_open():
 		# 面板开着时别人换了形象:灰掉的格子跟着变
 		_picker.update_taken(SpeciesPicker.taken_map(players, Net.my_pid()))
@@ -327,10 +359,19 @@ func _player_row(player: Dictionary, _index: int) -> Control:
 	row.add_child(name_label)
 	if player["is_host"]:
 		row.add_child(UiTheme.label("房主", 15, UiTheme.BRASS))
-	var badge := UiTheme.label("已准备" if player["ready"] else "未准备", 15,
-		UiTheme.TRUTH if player["ready"] else UiTheme.MUTED)
-	row.add_child(badge)
-	if Net.is_host and not player["is_host"]:
+	var is_bot: bool = player.get("bot", false) == true
+	if is_bot:
+		# 机器人永远是准备好的:不显示准备状态,标出由谁来打
+		row.add_child(UiTheme.label("AI" if Net.lobby_meta.get("bot_ai", false) == true else "机器人", 15, UiTheme.BRASS))
+	else:
+		var badge := UiTheme.label("已准备" if player["ready"] else "未准备", 15,
+			UiTheme.TRUTH if player["ready"] else UiTheme.MUTED)
+		row.add_child(badge)
+	if Net.is_host and is_bot:
+		var dismiss := row_button("请走")
+		dismiss.pressed.connect(Net.kick.bind(player["pid"]))
+		row.add_child(dismiss)
+	elif Net.is_host and not player["is_host"]:
 		var kick := row_button("请出")
 		kick.pressed.connect(func():
 			var overlay: ConfirmOverlay = app.confirm("把 %s 请出酒馆?" % player["name"], "请出")
@@ -445,6 +486,24 @@ static func nameplate(pname: String, ready: bool) -> PanelContainer:
 
 
 # —— 操作 ——
+
+func _on_add_bot_pressed() -> void:
+	Sfx.play("ui_click")
+	Net.add_bot()
+
+
+func _open_ai_settings() -> void:
+	Sfx.play("ui_click")
+	var path = app.get("settings_path")
+	var settings_path: String = path if path is String else Settings.PATH
+	var dialog := AiSettingsDialog.new(Net.bots.config)
+	dialog.saved.connect(func(values: Dictionary) -> void:
+		AiSettings.save_config(values, settings_path)
+		Net.bots.set_config(values)
+		Net.refresh_bot_meta()
+		app.toast(bot_mode_text(Net.bots.config), UiTheme.BRASS_BRIGHT))
+	add_child(dialog)
+
 
 func _on_start_pressed() -> void:
 	Sfx.play("ui_click")
